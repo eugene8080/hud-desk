@@ -89,7 +89,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     './filters': filterExports,
     './fine-text': fineExports,
     // The phone page is DOM-only and checked in a browser preview; the glasses tests see a no-op.
-    './phone': { createPhone: deps => { phoneDeps = deps; return { connection: c => phoneCalls.push(['connection', c.state]), load() {}, render: () => phoneCalls.push(['render']), retranslate: () => phoneCalls.push(['retranslate']) }; } },
+    './phone': { createPhone: deps => { phoneDeps = deps; return { connection: c => phoneCalls.push(['connection', c.state]), load() {}, render: () => phoneCalls.push(['render']), retranslate: () => phoneCalls.push(['retranslate']), refreshLabels() {} }; } },
   };
   const source = ts.transpileModule(readFileSync(new URL('../app/src/main.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInNewContext(source, {
@@ -172,7 +172,7 @@ test('row zero debounces module loads, wraps over offered modules, and restores 
   assert.match(h.upgrades.at(-1).content.split('\n')[0], /^>/);
   await h.tap();
   assert.match(h.upgrades.at(-1).content, /^Email\s+Orca-glass/);
-  assert.equal([...h.timeouts.values()][0].delay, 600);
+  assert.equal([...h.timeouts.values()][0].delay, 400);
   assert.equal(requests.length, 0);
   await h.tap(); await h.debounce();
   assert.equal(requests.length, 0);
@@ -199,6 +199,97 @@ test('missing capability modules fall back to Coding even with Email saved', asy
   await h.tap(); await h.debounce();
   assert.equal(h.pages.at(-1), page);
   assert.equal(h.timeouts.size, 0);
+});
+
+test('phone and glasses use the same module and label selection in both directions', async () => {
+  const { fixture, requests } = mailFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] }, mail: fixture });
+  const phone = h.phone();
+  assert.deepEqual([...phone.modules().offered], ['coding', 'email']);
+  await phone.setModule('email'); await h.flush();
+  assert.equal(h.timeouts.size, 0);
+  assert.match(container(h, 'head').content, /^Email/);
+  assert.equal(h.storage.get('module'), 'email');
+  assert.equal(phone.selectedMailLabels().has('work:INBOX'), true);
+  await phone.toggleMailLabel('work:Label_1');
+  assert.match(container(h, 'menu-right').content, /Inbox \+1/);
+  assert.deepEqual(requests.at(-1).filter, ['work:INBOX', 'work:Label_1']);
+  await h.pickRow(1);
+  assert.match(container(h, 'body').content, /\[x\] Bulletins/);
+  await phone.toggleMailLabel('work:INBOX');
+  assert.match(container(h, 'body').content, /\[ \] Inbox/);
+  await h.pickRow(2);
+  assert.equal(phone.selectedMailLabels().has('work:INBOX'), true);
+  assert.equal(h.storage.get('mail-labels'), '["work:Label_1","work:INBOX"]');
+  await h.back(); await h.scroll('up'); await h.tap();
+  assert.equal(phone.modules().selected, 'coding');
+  await h.debounce();
+  assert.match(container(h, 'head').content, /^Coding/);
+  assert.equal(h.storage.get('module'), 'coding');
+});
+
+test('a cached module paints before its delayed refresh and applies new rows without moving the cursor', async () => {
+  const { fixture } = mailFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] }, mail: fixture });
+  await h.tap(); await h.debounce();
+  let complete;
+  h.api.threads = () => new Promise(resolve => { complete = resolve; });
+  await h.tap(); await h.debounce();
+  assert.equal(typeof complete, 'function');
+  assert.match(container(h, 'head').content, /^Coding/);
+  assert.match(container(h, 'body').content, /Session 0/);
+  const page = h.pages.at(-1);
+  await h.scroll('down'); await h.scroll('down');
+  assert.match(h.upgrades.at(-1).content.split('\n')[2], /^>/);
+  const upgradeCount = h.upgrades.length;
+  complete(h.threads.map((thread, i) => i === 0 ? { ...thread, title: 'Updated session' } : thread));
+  await h.flush();
+  assert.equal(h.pages.at(-1), page);
+  const refresh = h.upgrades.slice(upgradeCount);
+  assert.match(refresh.find(write => write.containerName === 'body').content, /Updated session/);
+  assert.equal(refresh.some(write => write.containerName === 'menu-cursor'), false);
+  h.api.threads = async () => h.threads;
+  await h.tap();
+  assert.match(container(h, 'body').content, /All workspaces/);
+});
+
+test('label search ignores case, numbering and punctuation and requires every word', () => {
+  const { matchesMailLabel } = mailModule({});
+  assert.equal(matchesMailLabel('6. FIELD—NOTES / Updates', 'notes, FIELD!'), true);
+  assert.equal(matchesMailLabel('06. FIELD—NOTES / Updates', 'field updates'), true);
+  assert.equal(matchesMailLabel('6. Field Notes', 'six field'), true);
+  assert.equal(matchesMailLabel('20. Field Notes', 'twenty notes'), true);
+  assert.equal(matchesMailLabel('12. Field Notes', 'two notes'), false);
+  assert.equal(matchesMailLabel('6. Field Notes', 'six travel'), false);
+  assert.equal(matchesMailLabel('Field Notes', 'field notes travel'), false);
+});
+
+test('label picker applies voice search on release, replaces and clears queries, and can toggle results', async () => {
+  const { fixture } = mailFixture();
+  fixture.labels = async () => [{ id: 'INBOX', name: 'Inbox', unread: 1 }, { id: 'Label_1', name: '6. Field Notes', unread: 2 }, { id: 'Label_2', name: '12. Field Notes', unread: 3 }];
+  const h = await moduleHarness({ capabilities: { voice: true, modules: ['coding', 'email'] }, storage: { module: 'email' }, mail: fixture });
+  await h.pickRow(1);
+  const search = async query => {
+    h.api.transcribe = async () => ({ text: query });
+    h.press(); await h.flush();
+    assert.match(container(h, 'voice-hint').content, /Listening/);
+    h.audio(); h.release(); await h.flush();
+  };
+  await search('six field');
+  assert.match(container(h, 'body').content, /^> Done\nSearch: six field\nW\n  \[ \] 6\. Field Notes \(2\)$/);
+  await h.scroll('down'); await h.tap();
+  assert.match(container(h, 'body').content, /> \[x\] 6\. Field Notes/);
+  await search('twenty field');
+  assert.match(container(h, 'body').content, /^> Done\nSearch: twenty field\nNo labels match$/);
+  await h.back();
+  assert.match(container(h, 'body').content, /12\. Field Notes/);
+  await h.back();
+  assert.match(container(h, 'head').content, /^Email/);
+  assert.equal(h.sends.length, 0);
+  const noVoice = await moduleHarness({ capabilities: { voice: false, modules: ['coding', 'email'] }, storage: { module: 'email' }, mail: fixture });
+  await noVoice.pickRow(1); noVoice.press(); noVoice.release(); await noVoice.flush();
+  assert.equal(noVoice.mic.length, 0);
+  assert.match(container(noVoice, 'body').content, /Field Notes/);
 });
 
 test('mail list dates use the local day, and filter summaries show first label and extras', () => {

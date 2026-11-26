@@ -35,6 +35,10 @@
       .seg { display: flex; background: #222; border-radius: 6px; padding: 2px; }
       .seg-item { margin: 0; padding: 4px 8px; font-size: 13px; background: transparent; color: #aaa; }
       .seg-item.on { background: #3a7; color: #fff; }
+      #module-switch { margin-bottom: 10px; flex-wrap: wrap; }
+      #module-switch .seg-item { flex: 1; min-height: 38px; font-size: 15px; }
+      #mail-label-search { margin: 8px 0; }
+      #mail-label-list .section { margin-bottom: 2px; }
       .provider { margin-top: 12px; }
       .provider-name { font-weight: 600; }
       .limit { margin-top: 4px; }
@@ -55,6 +59,7 @@
       </nav>
     </header>
     <main id="page-home">
+      <div class="seg" id="module-switch" role="group" aria-label="Module" data-i18n-aria="moduleSelect" hidden></div>
       <section class="card">
         <button type="button" id="conn-toggle" class="status"><span id="conn-dot" class="dot"></span><span id="conn-text" data-i18n="connConnecting">Connecting…</span><span id="conn-chevron">▾</span></button>
         <div id="conn-body" hidden>
@@ -65,6 +70,13 @@
             <button type="button" id="demo" data-i18n="tryDemo" style="background:#555"></button>
           </form>
         </div>
+      </section>
+      <section class="card" id="mail-filters-card" hidden>
+        <section aria-labelledby="mail-label-title">
+          <h4 id="mail-label-title" data-i18n="mailFilterLabel">Filter by Label</h4>
+          <input id="mail-label-search" type="search" aria-label="Search labels" data-i18n-aria="mailSearchLabel" autocomplete="off" />
+          <div id="mail-label-list"></div>
+        </section>
       </section>
       <section class="card" id="filters-card" hidden>
         <h4 data-i18n="filtersTitle">Filters</h4>

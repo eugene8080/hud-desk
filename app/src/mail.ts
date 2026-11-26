@@ -41,36 +41,59 @@ export function mailReaderText(conversation: MailConversation): ReaderContent {
 
 function singleLine(text: string): string { return text.replace(/\s+/g, ' ').trim(); }
 
-type AccountLabels = { account: MailAccount; labels: MailLabel[] };
+export type AccountLabels = { account: MailAccount; labels: MailLabel[] };
 export type LabelPickerRow = { text: string; key?: string; heading?: true };
 
-export function labelPickerPages(accounts: AccountLabels[], selected: Set<string>): LabelPickerRow[][] {
+const numberWords = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven',
+  'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+function labelTokens(text: string): string[] {
+  return (text.normalize('NFKC').toLowerCase().match(/\p{L}+|\p{N}+/gu) ?? []).map(word => {
+    const number = numberWords.indexOf(word);
+    return number < 0 ? word : String(number + 1);
+  });
+}
+
+export function matchesMailLabel(label: string, query: string): boolean {
+  const tokens = labelTokens(label);
+  const joined = tokens.join(' ');
+  // A leading label ordinal does not obstruct a name search, but can still be
+  // requested explicitly ("six projects" matches "6. Projects").
+  return labelTokens(query).every(word => /^\d+$/.test(word) ? tokens.includes(word) : joined.includes(word));
+}
+
+export function labelPickerPages(accounts: AccountLabels[], selected: Set<string>, search = ''): LabelPickerRow[][] {
   const flat: LabelPickerRow[] = [];
   for (const { account, labels } of accounts) {
+    const visible = search ? labels.filter(label => matchesMailLabel(label.name, search)) : labels;
+    if (search && !visible.length) continue;
     flat.push({ text: singleLine(account.short), heading: true });
     if (!account.ok) flat.push({ text: t('mailUnavailable'), heading: true });
-    for (const label of labels) {
+    for (const label of visible) {
       const key = `${account.id}:${label.id}`;
       flat.push({ key, text: `[${selected.has(key) ? 'x' : ' '}] ${singleLine(label.name)} (${label.unread})` });
     }
   }
   const known = new Set(flat.map(row => row.key));
   const missing = [...selected].filter(key => !known.has(key));
-  if (missing.length) {
+  if (!search && missing.length) {
     flat.push({ text: t('unavailableSection'), heading: true });
     for (const key of missing) flat.push({ key, text: `[x] ${singleLine(key)}` });
   }
+  if (search && !flat.length) flat.push({ text: t('mailNoMatches'), heading: true });
   const pages: LabelPickerRow[][] = [];
   for (let i = 0; i < flat.length || !pages.length;) {
     const above = pages.length > 0;
-    const capacity = above ? 8 : 9; // Done and, on later pages, the upper cue.
+    const first: LabelPickerRow[] = [{ text: t('done') }];
+    if (search) first.push({ text: t('mailSearchResult', singleLine(search)), heading: true });
+    if (above) first.push({ text: t('moreAbove'), heading: true });
+    const capacity = 10 - first.length;
     let take = Math.min(flat.length - i, capacity);
     if (i + take < flat.length) {
       take--;
       // Keep the account heading with its first label or availability row.
       if (flat[i + take - 1]?.heading && !flat[i + take - 2]?.heading) take--;
     }
-    pages.push([{ text: t('done') }, ...(above ? [{ text: t('moreAbove'), heading: true as const }] : []),
+    pages.push([...first,
       ...flat.slice(i, i + take), ...(i + take < flat.length ? [{ text: t('moreBelow'), heading: true as const }] : [])]);
     i += take;
   }
@@ -101,7 +124,7 @@ export class Mail {
     } catch { /* A missing or invalid preference uses Inbox. */ }
   }
 
-  private async loadCatalog(refresh = false) {
+  async labelGroups(refresh = false) {
     if (refresh || !this.catalog) {
       const request = api.mail.accounts().then(accounts => Promise.all(accounts.map(async account => {
         if (!account.ok) return { account, labels: [] };
@@ -119,15 +142,17 @@ export class Mail {
     return catalog;
   }
 
+  selectedLabels(): ReadonlySet<string> { return this.selected ?? new Set(); }
+
   async list(page: number) {
-    await this.loadCatalog();
+    await this.labelGroups();
     const selected = this.selected!;
     const result = selected.size ? await api.mail.threads([...selected], page) : { items: [], hasMore: false, unread: 0 };
     return { ...result, items: [...result.items].sort((a, b) => b.date - a.date), filterColumn: mailFilterColumn(mailFilterSummary(selected, this.names), Math.max(0, selected.size - 1)) };
   }
 
-  async picker(refresh = false) {
-    return labelPickerPages(await this.loadCatalog(refresh), this.selected!);
+  async picker(refresh = false, search = '') {
+    return labelPickerPages(await this.labelGroups(refresh), this.selected!, search);
   }
 
   toggle(key: string): string {

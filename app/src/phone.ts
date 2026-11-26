@@ -6,6 +6,8 @@ import { api, type Thread, type Usage, type UsageLimit, type Workspace } from '.
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary } from './filters';
 import { formatReset, RESET_MODES, type ResetMode } from './usage-reset';
 import { t as tr, type Key } from './i18n';
+import { matchesMailLabel, type AccountLabels } from './mail';
+import { moduleLabel, type GlassModule } from './session-list';
 
 export type Connection =
   | { state: 'connected'; ms: number }
@@ -15,6 +17,11 @@ export type Connection =
   | { state: 'connecting' };
 
 export type PhoneDeps = {
+  modules(): { offered: readonly GlassModule[]; selected: GlassModule };
+  setModule(module: GlassModule): Promise<void>;
+  mailLabels(): Promise<AccountLabels[]>;
+  selectedMailLabels(): ReadonlySet<string>;
+  toggleMailLabel(key: string): Promise<void>;
   // The glasses own these values; the phone reads and writes them through main.ts
   // so both screens stay in step (main re-renders the glasses after a phone change).
   filters(): { provider: string; orca: Set<string> | null; hermes: Set<string> | null };
@@ -47,6 +54,10 @@ export function createPhone(deps: PhoneDeps) {
   let loading: Promise<void> | null = null;
   let workspacesOpen = false;
   let lastConnection: Connection = { state: 'connecting' };
+  let mailGroups: AccountLabels[] | null = null;
+  let mailError = false;
+  let mailRequest = 0;
+  let mailLoading = false;
   const names = new Map<string, string>();
 
   // Tabs: Home (status, filters, usage, composer) and Settings (setup and log).
@@ -61,6 +72,7 @@ export function createPhone(deps: PhoneDeps) {
   byId('conn-toggle').addEventListener('click', () => setConnOpen(byId('conn-body').hidden));
   byId('ws-toggle').addEventListener('click', () => { workspacesOpen = !workspacesOpen; renderFilters(); });
   byId('usage-refresh').addEventListener('click', () => { void load(); });
+  byId('mail-label-search').addEventListener('input', renderMail);
   byId<HTMLSelectElement>('agent-filter').addEventListener('change', async ev => {
     const id = (ev.target as HTMLSelectElement).value;
     await deps.setProvider(id);
@@ -86,11 +98,12 @@ export function createPhone(deps: PhoneDeps) {
     dot.className = `dot ${c.state === 'connected' || c.state === 'demo' ? 'ok' : c.state === 'offline' ? 'bad' : ''}`;
     byId('conn-text').textContent = connectionText(c);
     const usable = c.state === 'connected' || c.state === 'demo';
-    // Like a first run: without a connection, only pairing is shown.
-    byId('filters-card').hidden = !usable;
-    byId('usage-card').hidden = !usable;
+    mailRequest++;
+    mailGroups = null;
+    mailLoading = mailError = false;
     if (c.state === 'unpaired' || c.state === 'offline') setConnOpen(true);
-    if (usable) { setConnOpen(false); void load(); }
+    if (usable) { setConnOpen(false); if (deps.modules().selected === 'coding') void load(); }
+    render();
   }
 
   function connectionText(c: Connection) {
@@ -127,9 +140,69 @@ export function createPhone(deps: PhoneDeps) {
   }
 
   function render() {
-    if (!loaded) return;
-    renderFilters();
-    renderUsage();
+    const usable = lastConnection.state === 'connected' || lastConnection.state === 'demo';
+    const { offered, selected } = deps.modules();
+    byId<HTMLInputElement>('mail-label-search').placeholder = tr('mailSearchLabel');
+    const switcher = byId('module-switch');
+    switcher.hidden = !usable;
+    switcher.replaceChildren(...offered.map(module => {
+      const button = el('button', `seg-item${module === selected ? ' on' : ''}`, moduleLabel(module));
+      button.type = 'button';
+      button.setAttribute('aria-pressed', String(module === selected));
+      button.addEventListener('click', () => { void deps.setModule(module); });
+      return button;
+    }));
+    const email = usable && selected === 'email';
+    byId('mail-filters-card').hidden = !email;
+    byId('filters-card').hidden = byId('usage-card').hidden = !usable || email;
+    if (email) {
+      renderMail();
+      if (mailGroups === null && !mailLoading) void refreshLabels();
+    } else if (usable) {
+      if (!loaded && !loading) void load();
+      renderFilters();
+      renderUsage();
+    }
+  }
+
+  async function refreshLabels() {
+    if (deps.modules().selected !== 'email') return;
+    const request = ++mailRequest;
+    mailLoading = true;
+    try {
+      const groups = await deps.mailLabels();
+      if (request === mailRequest) { mailGroups = groups; mailError = false; }
+    } catch {
+      if (request === mailRequest) { mailGroups = []; mailError = true; }
+    } finally {
+      if (request === mailRequest) { mailLoading = false; renderMail(); }
+    }
+  }
+
+  function checkbox(label: string, checked: boolean, onChange: () => Promise<void>) {
+    const wrap = el('label', 'check');
+    const box = el('input');
+    box.type = 'checkbox';
+    box.checked = checked;
+    box.addEventListener('change', () => { void onChange(); });
+    wrap.append(box, el('span', '', label));
+    return wrap;
+  }
+
+  function renderMail() {
+    const list = byId('mail-label-list');
+    const query = byId<HTMLInputElement>('mail-label-search').value.trim();
+    const chosen = deps.selectedMailLabels();
+    const rows = (mailGroups ?? []).flatMap(({ account, labels }) => {
+      const visible = labels.filter(label => matchesMailLabel(label.name, query));
+      if (query && !visible.length) return [];
+      return [el('h5', 'section', account.short), ...(!account.ok ? [el('p', 'muted', tr('mailUnavailable'))] : []),
+        ...visible.map(label => {
+          const key = `${account.id}:${label.id}`;
+          return checkbox(`${label.name} (${label.unread})`, chosen.has(key), async () => { await deps.toggleMailLabel(key); });
+        })];
+    });
+    list.replaceChildren(...(rows.length ? rows : [el('p', 'muted', mailError ? tr('mailUnavailable') : mailGroups ? tr('mailNoMatches') : tr('refreshing'))]));
   }
 
   function renderFilters() {
@@ -156,21 +229,12 @@ export function createPhone(deps: PhoneDeps) {
     list.hidden = !workspacesOpen;
     if (!workspacesOpen) return;
     const save = (value: Set<string> | null) => async () => { await deps.setWorkspaces(hermes, value); renderFilters(); };
-    const row = (label: string, checked: boolean, onChange: () => Promise<void>) => {
-      const wrap = el('label', 'check');
-      const box = el('input');
-      box.type = 'checkbox';
-      box.checked = checked;
-      box.addEventListener('change', () => { void onChange(); });
-      wrap.append(box, el('span', '', label));
-      return wrap;
-    };
     const sections = workspaceSections(threads, catalog, hermes, chosen, names);
     list.replaceChildren(
-      row(tr('allWorkspaces'), chosen === null, save(null)),
+      checkbox(tr('allWorkspaces'), chosen === null, save(null)),
       ...sections.flatMap(section => [
         ...(section.title ? [el('div', 'section', section.title)] : []),
-        ...section.rows.map(([id, name]) => row(name, !!chosen?.has(id), () => save(toggleWorkspace(deps.filters()[hermes ? 'hermes' : 'orca'], id))())),
+        ...section.rows.map(([id, name]) => checkbox(name, !!chosen?.has(id), () => save(toggleWorkspace(deps.filters()[hermes ? 'hermes' : 'orca'], id))())),
       ]),
     );
   }
@@ -207,5 +271,5 @@ export function createPhone(deps: PhoneDeps) {
   // Absolute (time remaining) changes every minute; nothing else needs a timer.
   setInterval(() => { if (deps.resetMode() === 'absolute') renderUsage(); }, 60000);
 
-  return { connection, load, render, retranslate };
+  return { connection, load, render, retranslate, refreshLabels };
 }

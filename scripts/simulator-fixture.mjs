@@ -3,6 +3,7 @@ import { createServer } from '../app/node_modules/vite/dist/node/index.js';
 import { fileURLToPath } from 'node:url';
 
 const port = Number(process.env.ORCA_GLASS_SIM_PORT || 8791);
+const moduleDelay = Number(process.env.ORCA_GLASS_SIM_MODULE_DELAY || 0);
 const limit = (usedPercent, minutes) => {
   const resetsAt = Date.now() + minutes * 60000;
   return { usedPercent, resetsAt, resetDescription: '', computerResetDescription: new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Hong_Kong', weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).format(resetsAt).replace(',', '') };
@@ -28,7 +29,9 @@ const hermesScenario = process.env.ORCA_GLASS_SIM_SCENARIO === 'hermes'
   ? await (await import('./hermes-fixture.mjs')).createHermesFixture() : null;
 if (hermesScenario) Object.assign(fixture, hermesScenario);
 const api = `
-const request=async()=>{const r=await fetch('/__fixture');return r.json();};
+const timing=(module,phase)=>{if(${moduleDelay > 0})console.log('Module timing '+JSON.stringify({module,phase,at:performance.now()}));};
+const timed=async(module,load)=>{timing(module,'fetch start');try{return await load();}finally{timing(module,'fetch end');}};
+const request=async(query='')=>{const r=await fetch('/__fixture'+query);return r.json();};
 const read=async(handle)=>{const r=await fetch('/__fixture/read?handle='+encodeURIComponent(handle));const data=await r.json();if(!r.ok)throw new Error(data.error);return data;};
 const mailRequest=async(path,params,body)=>{
  const r=await fetch(path+(params?'?'+new URLSearchParams(params):''),body?{method:'POST',body:JSON.stringify(body)}:undefined);
@@ -37,14 +40,14 @@ const mailRequest=async(path,params,body)=>{
 export const setDemo=()=>{},setApiLang=()=>{},setConnection=()=>{};
 export const currentBase=()=> 'isolated simulator';
 export const api={
-  threads:async()=>(await request()).threads,workspaces:async()=>(await request()).workspaces,
+  threads:async()=>timed('Coding',async()=>(await request('?module=coding')).threads),workspaces:async()=>(await request()).workspaces,
   thread:read,history:read,
   activity:async(handle)=>{const r=await fetch('/__fixture/activity?handle='+encodeURIComponent(handle));return r.json();},
   health:async()=>({ok:true}),capabilities:()=>mailRequest('/api/capabilities', new URLSearchParams(location.search).has('legacyModules')?{legacyModules:'1'}:undefined),
   mail:{
    accounts:()=>mailRequest('/api/mail/accounts'),
    labels:(account)=>mailRequest('/api/mail/labels',{account}),
-   threads:(filter,page)=>mailRequest('/api/mail/threads',{filter:filter.join(','),page,size:'8'}),
+   threads:(filter,page)=>timed('Email',()=>mailRequest('/api/mail/threads',{filter:filter.join(','),page,size:'8'})),
    thread:(account,id)=>mailRequest('/api/mail/thread',{account,id}),
    read:(account,threadId)=>mailRequest('/api/mail/read',null,{account,threadId}),
   },
@@ -65,7 +68,13 @@ const timer=setInterval(()=>{
    if(JSON.stringify(p.data).includes('true'))setTimeout(()=>window.dispatchEvent(new CustomEvent('evenHubEvent',{detail:{audioEvent:{audioPcm:Array(32000).fill(0)}}})),100);
    return true;
   }
-  return original(name,...args);
+  const content=p?.method==='rebuildPageContainer'?p.data.textObject?.find(c=>c.containerName==='head')?.content:p?.data?.containerName==='head'?p.data.content:'';
+  const module=/^(Coding|Email) /.exec(content||'')?.[1];
+  const timing=phase=>{if(${moduleDelay > 0}&&module)console.log('Module timing '+JSON.stringify({module,phase,at:performance.now()}));};
+  timing(p?.method==='rebuildPageContainer'?'render start':'head');
+  const result=await original(name,...args);
+  if(p?.method==='rebuildPageContainer')timing('render end');
+  return result;
  };
 },10);
 </script>`;
@@ -83,6 +92,9 @@ const server = await createServer({
         if (!req.url?.startsWith('/__fixture') && !req.url?.startsWith('/api/')) return next();
         try {
           const url = new URL(req.url, 'http://127.0.0.1');
+          if (moduleDelay > 0 && (url.pathname === '/api/mail/threads' || url.searchParams.get('module') === 'coding')) {
+            await new Promise(resolve => setTimeout(resolve, moduleDelay));
+          }
           if (url.pathname.startsWith('/api/')) {
             let body;
             if (req.method === 'POST') {

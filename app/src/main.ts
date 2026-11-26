@@ -24,7 +24,7 @@ import { readerStatus, statusPixels, SPINNER, workingLabels } from './reader-sta
 import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
-import { createPhone } from './phone';
+import { createPhone, type Connection } from './phone';
 import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, inkByte, nativeTextColor, parseInk, type FineFont, type FineStatus } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, type ReaderContent, type ReaderSource } from './mail';
@@ -62,7 +62,7 @@ const TEXT_BYTES = 999;
 const POLL_MS = 1000;
 
 type Screen =
-  | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void }
+  | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
   | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: string[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; pattern?: boolean; pendingPattern?: boolean; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
@@ -83,6 +83,10 @@ let moduleTimer: ReturnType<typeof setTimeout> | undefined;
 let moduleRevision = 0;
 let modulePending = false;
 let mail: Mail;
+let voiceAvailable = false;
+let moduleStorageWrites = Promise.resolve();
+let mailStorageWrites = Promise.resolve();
+let mailFilterRevision = 0;
 let selectedThread: Thread | null = null;
 let sending = false;
 let holding = false;
@@ -102,7 +106,10 @@ let viewWorkspaces: Set<string> | null = null;
 let viewHermesWorkspaces: Set<string> | null = null;
 const hermesView = () => viewProvider === 'hermes';
 const activeWorkspaces = () => hermesView() ? viewHermesWorkspaces : viewWorkspaces;
-function setActiveWorkspaces(value: Set<string> | null) { if (hermesView()) viewHermesWorkspaces = value; else viewWorkspaces = value; }
+function setActiveWorkspaces(value: Set<string> | null) {
+  moduleCache.delete('coding');
+  if (hermesView()) viewHermesWorkspaces = value; else viewWorkspaces = value;
+}
 const saveWorkspaces = (hermes: boolean, value: Set<string> | null) =>
   bridge.setLocalStorage(hermes ? 'view-hermes-workspaces' : 'view-workspaces', value === null ? 'all' : JSON.stringify([...value]));
 // A glasses change also redraws the phone page's filters.
@@ -111,9 +118,11 @@ let phone: ReturnType<typeof createPhone> | null = null;
 
 // A phone change redraws whichever filter-dependent glasses page is showing.
 function refreshGlasses() {
+  moduleCache.delete('coding');
+  positions.coding.page = 0;
   const s = current;
   if (s?.kind === 'list' && s.module === 'coding' && !modulePending) void home(0, 0);
-  else if (s?.kind === 'list' && s.workspacePicker) void workspaceOptions();
+  else if (s?.kind === 'list' && s.workspacePicker && !s.mailPicker) void workspaceOptions();
   else if (s?.kind === 'list' && s.agentPicker) void viewOptions();
 }
 const providerFilterLabel = () => viewProvider === 'all' ? tr('allOrcaSessions') : agentLabel(viewProvider);
@@ -630,6 +639,8 @@ async function guard(title: string, f: () => Promise<void>, back: () => void) {
 
 
 type SessionMenuScreen = Extract<Screen, { kind: 'list' }>;
+type ModuleListContent = Omit<SessionMenuScreen, 'kind' | 'title' | 'module' | 'selected'>;
+const moduleCache = new Map<GlassModule, { page: number; content: ModuleListContent }>();
 function compatibilityMenu(screen: SessionMenuScreen, menu: object) {
   // The workspace picker has no title row: its ten 27px rows start at the top.
   const picker = !!screen.workspacePicker || !!screen.agentPicker || !!screen.textPicker; // no title row: ten rows
@@ -702,48 +713,127 @@ function cancelModuleSwitch() {
   moduleRevision++;
 }
 
-function showModule() { return activeModule === 'email' ? mailHome() : home(); }
+function showModule(mounted?: SessionMenuScreen) { return activeModule === 'email' ? mailHome(undefined, undefined, mounted) : home(undefined, undefined, mounted); }
 
-function cycleModule(screen: SessionMenuScreen) {
-  const next = nextModule(modules, activeModule);
-  if (next === activeModule) return;
+function selectModule(next: GlassModule) {
+  cancelModuleSwitch();
   activeModule = next;
   modulePending = true;
-  const revision = ++moduleRevision;
-  if (moduleTimer !== undefined) clearTimeout(moduleTimer);
-  moduleTimer = setTimeout(() => {
-    moduleTimer = undefined;
-    void sessionCursorWrites.then(async () => {
-      if (current !== screen || revision !== moduleRevision) return;
-      // A complete cycle back to the mounted module needs no load.
-      try { if (screen.module !== activeModule) await showModule(); }
-      finally { if (revision === moduleRevision) modulePending = false; }
-    }).catch(e => diag((e as Error).message));
-  }, 600);
+  moduleStorageWrites = moduleStorageWrites.then(async () => { await bridge.setLocalStorage('module', next); }).catch(e => diag((e as Error).message));
+  phone?.render();
+  return moduleRevision;
+}
+
+function paintModuleHeading(screen: SessionMenuScreen, revision: number) {
   sessionCursorWrites = sessionCursorWrites.then(async () => {
     if (current !== screen || revision !== moduleRevision) return;
     const container = screen.compat ? BODY : HEAD;
     await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: container.containerID, containerName: container.containerName,
-      content: screen.compat ? compatibilityText(screen) : moduleHeading(moduleLabel(next)) }));
-    await bridge.setLocalStorage('module', next);
+      content: screen.compat ? compatibilityText(screen) : moduleHeading(moduleLabel(activeModule)) }));
   }).catch(e => diag((e as Error).message));
 }
 
-function showModuleList(module: GlassModule, page: number, selected: number, screen: Omit<SessionMenuScreen, 'kind' | 'title' | 'module' | 'selected'>) {
+async function finishModuleSwitch(owner: Screen | null, revision: number) {
+  await sessionCursorWrites;
+  if (current !== owner || revision !== moduleRevision) return;
+  try {
+    const { page, cursor } = positions[activeModule];
+    const cached = moduleCache.get(activeModule);
+    if (cached?.page === page) {
+      const mounted = await showModuleList(activeModule, page, cursor, cached.content);
+      if (current !== mounted || revision !== moduleRevision) return;
+      modulePending = false;
+      await showModule(mounted);
+    } else await showModule();
+  } finally {
+    if (revision === moduleRevision) modulePending = false;
+  }
+}
+
+async function choosePhoneModule(next: GlassModule) {
+  if (!modules.includes(next) || (next === activeModule && !modulePending)) return;
+  cancelCapture?.();
+  holding = false;
+  const owner = current;
+  const revision = selectModule(next);
+  if (owner?.kind === 'list' && owner.module) paintModuleHeading(owner, revision);
+  await finishModuleSwitch(owner, revision).catch(e => diag((e as Error).message));
+}
+
+function cycleModule(screen: SessionMenuScreen) {
+  const next = nextModule(modules, activeModule);
+  if (next === activeModule) return;
+  const revision = selectModule(next);
+  paintModuleHeading(screen, revision);
+  moduleTimer = setTimeout(() => {
+    moduleTimer = undefined;
+    if (screen.module === activeModule && moduleCache.has(activeModule)) { modulePending = false; return; }
+    void finishModuleSwitch(screen, revision).catch(e => diag((e as Error).message));
+  }, 400);
+}
+
+async function showModuleList(module: GlassModule, page: number, selected: number, screen: ModuleListContent, mounted?: SessionMenuScreen) {
   const items = [moduleLabel(module), ...screen.items];
-  const cursor = selected < 0 ? items.length - 1 : Math.min(selected, items.length - 1);
+  const index = mounted?.selected ?? selected;
+  const cursor = index < 0 ? items.length - 1 : Math.min(index, items.length - 1);
   const list: SessionMenuScreen = { ...screen, kind: 'list', title: sessionHeading(), module, items, selected: cursor, paintedSelection: cursor,
     onPick: (i) => { if (i === 0) cycleModule(list); else if (!modulePending) screen.onPick(i - 1); } };
   positions[module] = { page, cursor };
-  return show(list);
+  if (screen.count !== undefined) moduleCache.set(module, { page, content: screen });
+  if (mounted) { await refreshModuleRows(mounted, list, screen.onPick); return mounted; }
+  await show(list);
+  return list;
 }
 
-function home(page = positions.coding.page, selected = positions.coding.cursor) {
+function refreshModuleRows(mounted: SessionMenuScreen, fresh: SessionMenuScreen, pick: ModuleListContent['onPick']) {
+  const revision = moduleRevision;
+  const write = sessionCursorWrites.then(async () => {
+    if (current !== mounted || revision !== moduleRevision || mounted.paging) return;
+    const cursor = Math.min(mounted.selected ?? 0, fresh.items.length - 1);
+    const before = moduleRowText(mounted);
+    const after = moduleRowText({ ...fresh, selected: cursor, compat: mounted.compat, menuFrame: mounted.menuFrame });
+    mounted.paging = true;
+    try {
+      for (const [containerID, containerName, content] of after) {
+        if (current !== mounted || revision !== moduleRevision) return;
+        if (before.find(row => row[0] === containerID)?.[2] === content) continue;
+        if (!await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID, containerName, content }))) throw new Error(tr('screenRejected'));
+      }
+      if (current !== mounted || revision !== moduleRevision) return;
+      Object.assign(mounted, { ...fresh, selected: cursor, paintedSelection: cursor, compat: mounted.compat, menuFrame: mounted.menuFrame,
+        paintedCursor: menuCursorText(fresh.columns!, cursor, mounted.menuFrame),
+        onPick: (i: number) => { if (i === 0) cycleModule(mounted); else if (!modulePending) pick(i - 1); } });
+      positions[mounted.module!].cursor = cursor;
+    } catch (error) {
+      if (current !== mounted || revision !== moduleRevision) return;
+      // A rejected update can leave only one column refreshed. Rebuild the
+      // complete list before using the new rows' click handlers.
+      diag((error as Error).message);
+      fresh.selected = fresh.paintedSelection = positions[mounted.module!].cursor = cursor;
+      await show(fresh);
+    } finally { mounted.paging = false; }
+  });
+  sessionCursorWrites = write.catch(e => diag((e as Error).message));
+  return sessionCursorWrites;
+}
+
+function moduleRowText(list: SessionMenuScreen): [number, string, string][] {
+  if (list.compat) return [[BODY.containerID, BODY.containerName, compatibilityText(list)]];
+  return [
+    [MENU_LEFT.containerID, MENU_LEFT.containerName, menuNativeText(list.columns!)],
+    [6, 'menu-right', list.columns!.map(row => nativeRight(row.right, MENU_RIGHT.width)).join('\n')],
+    [MENU_COUNT.containerID, MENU_COUNT.containerName, nativeRight(list.count ?? '', MENU_COUNT.width)],
+    [MENU_CURSOR.containerID, MENU_CURSOR.containerName, menuCursorText(list.columns!, list.selected ?? 0, list.menuFrame)],
+  ];
+}
+
+function home(page = positions.coding.page, selected = positions.coding.cursor, mounted?: SessionMenuScreen) {
   selectThread(null);
   return guard('Orca-glass', async () => {
     const owner = current;
     const revision = moduleRevision;
-    const allThreads = await api.threads();
+    const allThreads = await api.threads().catch(e => { if (mounted || current !== owner || revision !== moduleRevision) return null; throw e; });
+    if (!allThreads) return; // The cached rows remain usable during a refresh failure.
     if (current !== owner || revision !== moduleRevision) return;
     // Hermes Agent lists only Hermes sessions; All Orca sessions and each Orca agent
     // exclude Hermes. Each side applies its own workspace selection.
@@ -777,19 +867,21 @@ function home(page = positions.coding.page, selected = positions.coding.cursor) 
         { id: 1003, label: tr('menuUsage'), run: usage },
       ],
       items: actions.map(a => a.label),
-      onPick: i => { actions[i]?.run(); } });
+      onPick: i => { actions[i]?.run(); } }, mounted);
   }, home);
 }
 
-async function mailHome(page = positions.email.page, selected = positions.email.cursor) {
+async function mailHome(page = positions.email.page, selected = positions.email.cursor, mounted?: SessionMenuScreen) {
   selectThread(null);
   const owner = current;
   const revision = moduleRevision;
+  const filterRevision = mailFilterRevision;
+  const active = () => current === owner && revision === moduleRevision && filterRevision === mailFilterRevision;
   try {
     let result = await mail.list(page);
     // A changed filter or external mailbox activity can remove the last page.
-    while (page > 0 && !result.items.length && !result.hasMore && current === owner && revision === moduleRevision) result = await mail.list(--page);
-    if (current !== owner || revision !== moduleRevision) return;
+    while (page > 0 && !result.items.length && !result.hasMore && active()) result = await mail.list(--page);
+    if (!active()) return;
     const columns = [{ marker: '*', title: tr('mailFilter'), right: result.filterColumn }, ...result.items.map(mailColumns)];
     await showModuleList('email', page, selected, { columns, count: tr('mailUnread', result.unread),
       items: columns.map(row => `${row.marker || ' '} ${row.title} ${row.right}`),
@@ -797,9 +889,10 @@ async function mailHome(page = positions.email.page, selected = positions.email.
       onNextPage: result.hasMore ? () => mailHome(page + 1, 1) : undefined,
       menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
       onPick: i => { if (i === 0) void mailLabels(0, 0, true); else if (result.items[i - 1]) void openMail(result.items[i - 1]); },
-    });
+    }, mounted);
   } catch {
-    if (current === owner && revision === moduleRevision) await showModuleList('email', page, 0, {
+    if (mounted) return;
+    if (active()) await showModuleList('email', page, 0, {
       columns: [{ marker: '*', title: tr('mailFilter'), right: '' }, { marker: '', title: tr('mailUnavailable'), right: '' }],
       items: [tr('mailFilter'), tr('mailUnavailable')],
       headings: [2],
@@ -809,29 +902,49 @@ async function mailHome(page = positions.email.page, selected = positions.email.
   }
 }
 
-async function mailLabels(page: number, selected: number, refresh = false) {
+async function toggleMailLabel(key: string, fromPhone = false) {
+  const stored = mail.toggle(key);
+  const revision = ++mailFilterRevision;
+  moduleCache.delete('email');
+  positions.email.page = 0;
+  phone?.render();
+  const owner = current;
+  mailStorageWrites = mailStorageWrites.then(async () => { await bridge.setLocalStorage('mail-labels', stored); }).catch(e => diag((e as Error).message));
+  await mailStorageWrites;
+  if (fromPhone && current === owner && revision === mailFilterRevision && activeModule === 'email') {
+    if (owner?.kind === 'list' && owner.mailPicker) await mailLabels(owner.mailPicker.page, owner.selected ?? 0, false, owner.mailPicker.search);
+    else if (owner?.kind === 'list' && owner.module === 'email') await mailHome(0);
+    else if (modulePending) await finishModuleSwitch(owner, moduleRevision);
+  }
+}
+
+async function mailLabels(page: number, selected: number, refresh = false, search = '') {
   const owner = current;
   const revision = moduleRevision;
   try {
-    const pages = await mail.picker(refresh);
+    const pages = await mail.picker(refresh, search);
     if (current !== owner || revision !== moduleRevision) return;
+    page = Math.min(page, pages.length - 1);
     const rows = pages[page];
     const headings = rows.flatMap((row, i) => row.heading ? [i] : []);
     let cursor = selected < 0 ? rows.length - 1 : Math.min(selected, rows.length - 1);
-    while (headings.includes(cursor)) cursor += selected >= 0 ? 1 : -1;
+    while (headings.includes(cursor)) cursor--;
     const done = () => mailHome(positions.email.page, 1);
-    await show({ kind: 'list', workspacePicker: true, title: ' ', items: rows.map(row => row.text), headings, selected: cursor,
-      onPreviousPage: page > 0 ? () => mailLabels(page - 1, -1) : undefined,
-      onNextPage: page + 1 < pages.length ? () => mailLabels(page + 1, 2) : undefined,
+    await show({ kind: 'list', workspacePicker: true, mailPicker: { page, search }, title: ' ', items: rows.map(row => row.text), headings, selected: cursor,
+      onPreviousPage: page > 0 ? () => mailLabels(page - 1, -1, false, search) : undefined,
+      onNextPage: page + 1 < pages.length ? () => {
+        const next = pages[page + 1].findIndex((row, index) => index > 0 && !row.heading);
+        return mailLabels(page + 1, Math.max(next, 0), false, search);
+      } : undefined,
       onPick: async i => {
         const row = rows[i];
         if (i === 0) { await done(); return; }
         if (!row?.key) return;
         const picker = current;
-        positions.email.page = 0;
-        await bridge.setLocalStorage('mail-labels', mail.toggle(row.key));
-        if (current === picker) await mailLabels(page, i);
-      }, onBack: done,
+        await toggleMailLabel(row.key);
+        if (current === picker) await mailLabels(page, i, false, search);
+      }, onBack: search ? () => mailLabels(0, 0) : done,
+      onHold: voiceAvailable ? () => { void record({ search: text => mailLabels(0, 0, false, text) }, true); } : undefined,
     });
   } catch {
     if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('email'), text: tr('mailUnavailable'), onBack: mailHome, onClick: mailHome });
@@ -857,6 +970,7 @@ function viewOptions(page?: number, selected?: number) {
     const choose = (id: string) => async () => {
       await bridge.setLocalStorage('view-provider', id);
       viewProvider = id;
+      moduleCache.delete('coding');
       phone?.render();
       await home(0, 0);
     };
@@ -953,7 +1067,7 @@ function thread(t: Thread, note = '') {
     const text = readerContent(conversationText, snapshot.menu, snapshot.progress, t.agent === 'claude' && state.state === 'working');
     return { text, conversationText, choiceMenu: snapshot.menu, model: (useSaved ? saved!.model : undefined) || snapshot.model, activityState: state.state, reportedSeconds: state.state === 'working' ? state.elapsedSeconds ?? null : null, activityLabel: activityLabel(state.state), savedHistory: useSaved };
   };
-  const source = { title: `${t.title}${note ? `  ${note}` : ''}`, load, coding: t, hold: () => { void record(t, true); } };
+  const source = { title: `${t.title}${note ? `  ${note}` : ''}`, load, coding: t, hold: () => { void record({ thread: t }, true); } };
   return guard(t.title, async () => {
     await openReader(source, home, () => { if (current?.kind === 'text' && current.choiceMenu) void replies(t); });
   }, home);
@@ -981,7 +1095,11 @@ async function openMail(thread: MailThread) {
   const owner = current;
   const revision = moduleRevision;
   const back = () => mailHome();
-  try { await openReader(mail.reader(thread), back); }
+  const unread = thread.unread;
+  try {
+    await openReader(mail.reader(thread), back);
+    if (unread && !thread.unread) void phone?.refreshLabels();
+  }
   catch {
     if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('email'), text: tr('mailUnavailable'), onBack: back, onClick: back });
   }
@@ -1077,7 +1195,7 @@ function history(t: Thread) {
     if (current !== previous) return;
     const title = ['codex-transcript', 'claude-transcript', 'cursor-transcript', 'opencode-transcript', 'pi-transcript', 'hermes-transcript'].includes(r.source || '') ? tr('conversationHistory') : tr('terminalOnly');
     const text = r.text || r.reason || tr('noOlderOutput');
-    await show({ kind: 'text', title, text, tail: true, reader: { title, load: async () => ({ text }), coding: t, hold: () => { void record(t, true); } },
+    await show({ kind: 'text', title, text, tail: true, reader: { title, load: async () => ({ text }), coding: t, hold: () => { void record({ thread: t }, true); } },
       onBack: () => thread(t) });
   }, () => thread(t));
 }
@@ -1121,21 +1239,24 @@ let cancelCapture: (() => void) | null = null;
 const MAX_REC_SEC = 60;
 
 // Voice hints on the full-screen voice page's instruction row.
-const voiceListening = () => tr('voiceListening');
 const voiceReview = () => tr('voiceReview');
 const voiceReturn = () => tr('voiceReturn');
 
-async function record(t: Thread, hold = false) {
+type VoiceTarget = { thread: Thread } | { search: (text: string) => Promise<void> };
+async function record(target: VoiceTarget, hold = false) {
   if ((hold && !holding) || recording !== null || cancelCapture) return;
   diag('Hold received. Opening voice screen…');
   const background = current;
-  if (background?.kind !== 'text' || !background.reader) return;
-  await readerWrites;
+  const search = 'search' in target ? target.search : undefined;
+  const voiceListening = () => tr(search ? 'voiceSearchListening' : 'voiceListening');
+  if (search ? background?.kind !== 'list' || !background.mailPicker : background?.kind !== 'text' || !background.reader) return;
+  if (!background) return;
+  await (background.kind === 'text' ? readerWrites : sessionCursorWrites);
   if (current !== background || (hold && !holding)) return;
-  const choiceMenu = background.choiceMenu;
+  const choiceMenu = background.kind === 'text' ? background.choiceMenu : undefined;
   // Hold opens a full-screen voice page that is already listening. Send or
   // cancel rebuilds the chat at its newest (bottom) page.
-  background.reading = true;
+  if (background.kind === 'text') background.reading = true;
   clearInterval(poll);
   clearInterval(statusAnimation);
   let overlayActive = true;
@@ -1164,7 +1285,7 @@ async function record(t: Thread, hold = false) {
     if (!overlayActive) return;
     overlayActive = false;
     await voiceWrites;
-    Object.assign(background, { reading: false, tail: true, offset: undefined, openAtResponse: false, pageTarget: undefined, pageWriting: false });
+    if (background.kind === 'text') Object.assign(background, { reading: false, tail: true, offset: undefined, openAtResponse: false, pageTarget: undefined, pageWriting: false });
     try { await show(background); }
     catch (e) { diag((e as Error).message); void home(); }
   };
@@ -1196,7 +1317,7 @@ async function record(t: Thread, hold = false) {
   cancelCapture = cancel;
   const back = () => { cancel(); void closeVoice(); };
   const sendText = async (text: string, shown: string) => {
-    if (cancelled || submitted || sending) return;
+    if (cancelled || submitted || sending || !('thread' in target)) return;
     submitted = true;
     sending = true;
     cancelCapture = null;
@@ -1205,8 +1326,8 @@ async function record(t: Thread, hold = false) {
       if (choiceMenu) {
         const value = choiceNumber(text);
         if (!value || !choiceMenu.options.some(o => o.value === value)) throw new Error(tr('sayOptionNumber'));
-        await api.choice(t.handle, choiceMenu.id, value);
-      } else await api.say(t.handle, text);
+        await api.choice(target.thread.handle, choiceMenu.id, value);
+      } else await api.say(target.thread.handle, text);
       await closeVoice();
     } catch (e) {
       await voiceShow((e as Error).message, voiceReturn(), { onBack: () => { void closeVoice(); }, onClick: () => { void closeVoice(); } }).catch(e => diag((e as Error).message));
@@ -1228,6 +1349,9 @@ async function record(t: Thread, hold = false) {
       cancelCapture = null;
       if (!text) {
         await voiceShow(tr('notHeard'), voiceReturn(), { onClick: () => { void closeVoice(); }, onBack: () => { void closeVoice(); } });
+      } else if (search) {
+        if (current === voiceScreen) await search(text);
+        overlayActive = false;
       } else {
         cancelCapture = cancel;
         const choice = choiceMenu?.options.find(o => o.value === choiceNumber(text));
@@ -1248,8 +1372,7 @@ async function record(t: Thread, hold = false) {
     cancel();
     overlayActive = false;
     current = background;
-    background.reading = false;
-    startReaderUpdates(background);
+    if (background.kind === 'text') { background.reading = false; startReaderUpdates(background); }
     diag((e as Error).message);
     return;
   }
@@ -1472,6 +1595,7 @@ function onEvent(e: EvenHubEvent) {
     if (!holding) {
       holding = true;
       if (s.kind === 'text') s.reader?.hold?.();
+      else s.onHold?.();
     }
     return;
   }
@@ -1510,6 +1634,7 @@ function diag(line: string) {
 
 async function connect() {
   cancelModuleSwitch();
+  moduleCache.clear();
   const code = await bridge.getLocalStorage('code');
   const pairing = parseCode(code);
   $('code').value = code;
@@ -1517,8 +1642,7 @@ async function connect() {
   setDemo(code === 'demo');
   if (code === 'demo') {
     diag(tr('diagOk', 0, tr('viaDemo'), '-', 3));
-    phone?.connection({ state: 'demo' });
-    return openSavedOrHome();
+    return openSavedOrHome({ state: 'demo' });
   }
   if (!pairing) {
     diag(tr('notPairedDiag'));
@@ -1534,8 +1658,7 @@ async function connect() {
     const threads = await api.threads();
     const ms = Date.now() - t0;
     diag(tr('diagOk', ms, tr('viaCode'), currentBase(), threads.length));
-    phone?.connection({ state: 'connected', ms });
-    return openSavedOrHome(threads);
+    return openSavedOrHome({ state: 'connected', ms }, threads);
   } catch (e) {
     diag(tr('diagNg', (e as Error).message, tr('viaCode'), currentBase()));
     phone?.connection({ state: 'offline', error: (e as Error).message });
@@ -1550,12 +1673,14 @@ async function connect() {
 
 // Workout Glass keeps its countdown across screen-off by restoring the saved run
 // when Even recreates the page. Do the same for the chat that was open.
-async function openSavedOrHome(known?: Thread[]) {
+async function openSavedOrHome(connection: Connection, known?: Thread[]) {
   const capabilities = await api.capabilities().catch(() => null);
+  voiceAvailable = capabilities?.voice === true;
   modules = offeredModules(capabilities?.modules);
   const stored = await bridge.getLocalStorage('module') as GlassModule;
   activeModule = modules.includes(stored) ? stored : 'coding';
   mail = new Mail(await bridge.getLocalStorage('mail-labels'));
+  phone?.connection(connection);
   if (activeModule === 'email') return mailHome();
   const handle = await bridge.getLocalStorage('open-thread');
   if (handle) {
@@ -1577,9 +1702,11 @@ function useLang(pref: string) {
 // Phone Settings language change: redraw the glasses screen that shows
 // dictionary text. Voice pages and one-off messages keep their text until closed.
 function redrawForLanguage() {
+  moduleCache.clear();
   const s = current;
   if (!s) return;
   if (s.kind === 'list' && s.module) { if (!modulePending) void showModule(); return; }
+  if (s.kind === 'list' && s.mailPicker) { void mailLabels(s.mailPicker.page, s.selected ?? 0, false, s.mailPicker.search); return; }
   if (s.kind === 'list' && (s.workspacePicker || s.agentPicker)) { refreshGlasses(); return; }
   if (s.kind === 'text' && s.usageMode) { void usage(); return; }
   if (s.kind === 'text' && s.reader && !s.voice) {
@@ -1616,6 +1743,11 @@ async function main() {
   }
   useLang(pref);
   phone = createPhone({
+    modules: () => ({ offered: modules, selected: activeModule }),
+    setModule: choosePhoneModule,
+    mailLabels: () => mail?.labelGroups(true) ?? Promise.resolve([]),
+    selectedMailLabels: () => mail?.selectedLabels() ?? new Set(),
+    toggleMailLabel: key => toggleMailLabel(key, true),
     filters: () => ({ provider: viewProvider, orca: viewWorkspaces, hermes: viewHermesWorkspaces }),
     setProvider: async id => { await bridge.setLocalStorage('view-provider', id); viewProvider = id; refreshGlasses(); },
     setWorkspaces: async (hermes, value) => {

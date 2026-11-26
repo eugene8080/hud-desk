@@ -70,11 +70,20 @@ Mail response caching is disabled for HTTP clients. Bridge logs record the fixed
 
 ## Glasses UI
 
-2026-11-26, unreleased. When the bridge offers Email, select row 0, click and
-wait for the list to load. The right edge shows the unread thread count for the
+When the bridge offers Email, select row 0 and click to switch modules. The
+name changes immediately. After 400 ms without another click, a previously
+shown list appears from its cached rows and refreshes in place, keeping the
+cursor on the same row while it exists. The right edge shows the unread thread count for the
 selected labels. The next row opens the label picker. It defaults to Inbox,
 shows each account with the unread counts for its labels, and saves multiple
-selections. Done and double-click return to the list.
+selections. Done returns to the list.
+
+When voice is available, hold in the label picker and speak. The voice page
+shows a live caption. Release to apply the search and return to the picker.
+Every spoken word must match the label name. Case and punctuation are ignored,
+numbered labels can be found by name alone, and number words one through
+twenty match the corresponding digits. Hold again to replace the search.
+Double-click clears an active search or returns to the list from the full picker.
 
 Each page holds up to eight threads, newest first. An asterisk marks an unread
 thread. Dates use the phone's local clock and show the time for today's mail.
@@ -92,5 +101,45 @@ On 2026-11-26, the official Even simulator used the synthetic fixture on port
 label picker, newest message at the top of the opening page, swipes to pages
 1 and 2, the two reader menu items, and a synthetic unread count dropping by
 one. The PNG captures under `.local/super-app-ui/` returned solid green. The
-same directory holds the automation call logs. 168 tests passed and the app
-build succeeded. Live mailbox and physical G2 verification remain pending.
+same directory holds the automation call logs. Eugene confirmed the beta
+1.0.60 layout and live mark-read on the G2 on 2026-11-26.
+
+The 2026-11-26 follow-up passed 185 tests and the app build. Synthetic Even
+simulator automation exercised hold, live caption, release, search replacement,
+no matches and clearing the search. The glasses PNG returned solid green.
+Physical G2 verification of the follow-up is pending.
+
+The switch timings below use the simulator WebView's monotonic clock and a
+fixture configured to wait 200 ms on each module list request. The render
+column measures the native rebuild request through its acknowledgement. The
+visible column runs from the row-0 name update through that acknowledgement.
+
+| Warm switch | Settle | Fetch | Render | Visible |
+| --- | ---: | ---: | ---: | ---: |
+| Coding before | 611–612 ms | 218–219 ms | 1–2 ms | 831–834 ms |
+| Coding after | 408–415 ms | 214–217 ms after render | 2–4 ms | 411–418 ms |
+| Email before | 609 ms | 205 ms | 2 ms | 819 ms |
+| Email after | 406 ms | 220 ms after render | 2 ms | 409 ms |
+
+An uncached Email switch after the change measured 402 ms to start the fetch,
+217 ms fetching, 2 ms rendering and 623 ms from name update to acknowledgement.
+Unchanged refreshed rows required no native text update. Regression tests
+exercise changed rows and verify that their text updates without a rebuild or
+cursor move. Raw timings are in `.local/super-app-ui/module-before.json` and
+`.local/super-app-ui/module-after.json`.
+
+## Phone page
+
+Home in the Even app has a module switch populated from bridge capabilities.
+Switching on the phone redraws the glasses without the row-0 settle delay.
+Switching on the glasses updates the phone selection. Both use the same saved
+module.
+
+In Email, **Filter by Label** shows account headings, unread counts and label
+checkboxes. Type in **Search labels** to narrow the list, then check or clear
+labels. The phone and glasses share the same picks. Coding shows its agent,
+workspace and usage controls.
+
+On 2026-11-26, the isolated phone preview at port 8806 showed both modules,
+shared checkbox persistence, and label search at a 390 px viewport. The
+preview screenshot is `.local/super-app-ui/phone-email-labels.png`.
