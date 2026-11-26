@@ -1,4 +1,29 @@
 # Session list
+
+## Module selector (2026-11-26, unreleased)
+
+Row 0 selects the module. The module name is at the left, `Orca-glass <version>`
+is centered using measured native text widths, and the active module's count
+is at the right. The aligned page uses six text containers. Coding's two
+filter rows and seven session slots start at row 1.
+
+Click row 0 to cycle through modules offered by the bridge. The name updates
+immediately and the list loads after 600 ms without another click. Bridges
+with no `modules` field offer Coding. The last module is stored on the phone.
+Each module retains its page, cursor and filters when switching. Swipe up from
+row 1 to row 0, then swipe up again to reach the previous page if there is one.
+Double-click from the list closes the app. Coding's firmware menu offers
+Refresh sessions, New Session and Usage.
+
+On 2026-11-26, 168 tests and the app build passed. The isolated Even simulator
+automation confirmed the six-container Coding home, cursor at row 0, and
+Coding-only behavior with a legacy capabilities response. The simulator's
+glasses screenshot endpoint returned solid green, so the layout was checked
+from container positions and content in the automation log. Physical G2
+verification is pending.
+
+## Earlier changes
+
 Updated: 2026-11-03
 
 Unreleased1.0.17: first menu row starts y28 directly after28px header. Cursor,

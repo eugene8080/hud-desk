@@ -12,8 +12,23 @@ export function sessionRow(title: string, handle: string, agent: string, state: 
   return prefix + clipBytes(title, budget) + suffix;
 }
 
-export type SessionColumns = { marker: string; title: string; right: string; busy?: boolean; handle?: string };
+export type SessionColumns = { marker: string; title: string; right: string; busy?: boolean; handle?: string; preserveSuffix?: boolean };
 export const sessionHeading = () => `Orca-glass ${__APP_VERSION__}`;
+export type GlassModule = 'coding' | 'email';
+export type ModulePosition = { page: number; cursor: number };
+export function offeredModules(modules?: string[]): GlassModule[] {
+  const supported = [...new Set(modules)].filter((id): id is GlassModule => id === 'coding' || id === 'email');
+  return supported.length ? supported : ['coding'];
+}
+export const nextModule = (modules: GlassModule[], current: GlassModule) => modules[(modules.indexOf(current) + 1) % modules.length];
+export const moduleLabel = (id: GlassModule) => t(id === 'coding' ? 'moduleCoding' : 'moduleEmail');
+export const MENU_HEAD = { xPosition: 28, width: 548, height: 28 };
+export const MENU_COUNT = { containerID: 3, containerName: 'menu-count', xPosition: 300, yPosition: 0, width: 276, height: 28 };
+export function moduleHeading(label: string, versionTitle = sessionHeading()): string {
+  const centre = (576 - glassWidth(versionTitle)) / 2 - MENU_HEAD.xPosition;
+  const spaces = Math.max(1, Math.round((centre - glassWidth(label)) / glassWidth(' ')));
+  return label + ' '.repeat(spaces) + versionTitle;
+}
 // Titles span to the right edge and sit under the right-label column; each row's
 // title is fitted to end before its own label, so short labels leave more title.
 export const MENU_LEFT = { containerID: 2, containerName: 'body', xPosition: 28, yPosition: 28, width: 548, height: 260 };
@@ -33,17 +48,17 @@ export function sessionAgentLabel(workspace: string, agent: string): string {
   while (name.length > 1 && glassWidth(`[${name}${name === workspace ? '' : '…'}/${provider}]`) > MENU_RIGHT.width) name = name.slice(0, -1);
   return `[${name}${name === workspace ? '' : '…'}/${provider}]`;
 }
-export const MENU_CURSOR = { containerID: 4, containerName: 'menu-cursor', xPosition: 0, yPosition: 28, width: 32, height: 260 };
+export const MENU_CURSOR = { containerID: 4, containerName: 'menu-cursor', xPosition: 0, yPosition: 0, width: 32, height: 288 };
 // Keep arrow plus three marker cells inside the gutter, including selected rows.
 // An extra separator can wrap one row and displace every later marker.
 // The dot moves in the existing cursor gutter. Session titles never get rewritten
 // during animation, and there is no trailing text padding before the title column.
 export const MENU_DOTS = ['·  ', ' · ', '  ·'];
 export function menuNativeText(rows: SessionColumns[]): string {
-  return rows.map(row => ' ' + menuTitle(row.title, MENU_LEFT.width - 4 - (row.right ? glassWidth(row.right) + TITLE_LABEL_GAP : 0))).join('\n');
+  return rows.map(row => ' ' + menuTitle(row.title, MENU_LEFT.width - 4 - (row.right ? glassWidth(row.right) + TITLE_LABEL_GAP : 0), row.preserveSuffix)).join('\n');
 }
 export function menuCursorText(rows: SessionColumns[], selected: number, frame = 0): string {
-  return rows.map((row, i) => `${i === selected ? '>' : ' '}${row.busy ? MENU_DOTS[frame % MENU_DOTS.length] : row.marker || ' '}`).join('\n');
+  return [{ marker: '', title: '', right: '' }, ...rows].map((row, i) => `${i === selected ? '>' : ' '}${row.busy ? MENU_DOTS[frame % MENU_DOTS.length] : row.marker || ' '}`).join('\n');
 }
 // Native text has no alignment flag. Pad a dedicated right column using measured
 // proportional text widths; no labels are rasterized or transferred as images.
@@ -52,8 +67,8 @@ export function nativeRight(text: string, width: number): string {
   return ' '.repeat(Math.max(0, Math.floor((width - 6 - glassWidth(text)) / glassWidth(' ')))) + text;
 }
 // Shorten the title head and keep any ' · handle' suffix so rows stay distinguishable.
-export function menuTitle(text: string, maxWidth = MENU_LEFT.width - 4): string {
-  const cut = text.lastIndexOf(' · ');
+export function menuTitle(text: string, maxWidth = MENU_LEFT.width - 4, preserveSuffix = true): string {
+  const cut = preserveSuffix ? text.lastIndexOf(' · ') : -1;
   const suffix = cut > 0 ? text.slice(cut) : '';
   let head = clipBytes(cut > 0 ? text.slice(0, cut) : text, TITLE_BYTES - new TextEncoder().encode(suffix).length);
   while (head.length > 1 && glassWidth(' ' + head + suffix) > maxWidth) head = head.replace(/…$/, '').slice(0, -1) + '…';

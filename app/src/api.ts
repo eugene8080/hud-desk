@@ -66,9 +66,21 @@ export type Activity = 'working' | 'waiting' | 'attention' | 'unknown';
 export type UsageLimit = { usedPercent: number; resetDescription: string; resetsAt?: number | null; computerResetDescription?: string };
 type Limit = UsageLimit | null;
 export type Usage = Record<string, { provider?: string; status: string; error?: string | null; session?: Limit; weekly?: Limit; monthly?: Limit }>;
+export type MailAccount = { id: string; short: string; ok: boolean; error?: string };
+export type MailLabel = { id: string; name: string; unread: number };
+export type MailThread = { account: string; id: string; from: string; subject: string; date: number; unread: boolean; count: number };
+export type MailPage = { items: MailThread[]; hasMore: boolean; unread: number };
+export type MailConversation = { subject: string; messages: { id: string; from: string; to: string; cc: string; date: number; text: string }[] };
 
 export const api = {
-  capabilities: () => call<{ voice: boolean }>('GET', '/api/capabilities'),
+  capabilities: () => call<{ voice: boolean; modules?: string[] }>('GET', '/api/capabilities'),
+  mail: {
+    accounts: () => call<MailAccount[]>('GET', '/api/mail/accounts'),
+    labels: (account: string) => call<MailLabel[]>('GET', `/api/mail/labels?${new URLSearchParams({ account })}`),
+    threads: (filter: string[], page: number) => call<MailPage>('GET', `/api/mail/threads?${new URLSearchParams({ filter: filter.join(','), page: String(page), size: '8' })}`),
+    thread: (account: string, id: string) => call<MailConversation>('GET', `/api/mail/thread?${new URLSearchParams({ account, id })}`),
+    read: (account: string, threadId: string) => call<{ ok: boolean }>('POST', '/api/mail/read', { account, threadId }),
+  },
   health: () => call<{ ok: boolean }>('GET', '/healthz'),
   threads: () => call<Thread[]>('GET', '/api/threads'),
   activity: (handle: string) => call<{ state: Activity; elapsedSeconds?: number | null }>('GET', `/api/activity?handle=${encodeURIComponent(handle)}`),
