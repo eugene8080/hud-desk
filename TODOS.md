@@ -8,24 +8,21 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
-- [ ] **Super app: Coding, Email, Chat, Reader in one app -- S0 + E1 build in progress:**
-  2026-11-26 Claude coordinator (Orca Run run_5b2c33f58055) started two Codex workers in
-  child worktrees off db57f9f: `super-app-bridge` (Gmail client + endpoint allowlist,
-  MIME-to-text, mail routes, private-host gate, `modules` capability, `scripts/mail-auth.mjs`,
-  `docs/email.md`) and `super-app-ui` (row-0 module selector, Email list, label picker,
-  reader source generalised, demo mail, simulator preview). API contract between them is
-  fixed by the coordinator and recorded in `docs/email.md` when merged. Not yet: merge,
-  beta 1.0.60, bridge restart, Gmail consent (each waits on the merge; restart and consent
-  wait on Eugene). Main checkout's uncommitted Cursor-title files untouched.
-  user 2026-11-26 wants the reading and replying apps together in Orca Glass: Coding (Orca),
-  Email (Gmail), Chat (Beeper), Reader (text, PDFs to text); transport schedule and gym stay
-  separate. Email first; Reader later. Row 0 of the home screen becomes the module selector
-  (left, click cycles), title centred. Brief: `docs/super-app-task.md` (S0 + E1 first: work
-  account, label filter, reader, opening marks read in Gmail; no send, draft or archive;
-  E2 personal account later; C chat, R reader later; constraints incl. the Gmail endpoint
-  allowlist and the Quick Tunnel gate for mail routes). Decisions recorded 2026-11-26.
-  Private details: untracked `INTERNAL.md`. Waits on: the two workers; Eugene's
-  `gmail.modify` consent for the work account at E1. No code changed by the brief.
+- [ ] **Super app: Coding, Email, Chat, Reader in one app -- S0 + E1 merged; beta, restart, consent pending:**
+  2026-11-26 Claude coordinator (Orca Run run_5b2c33f58055): two Codex workers built the
+  bridge (c76b828: Gmail client + endpoint allowlist, MIME-to-text, mail routes, private-
+  host gate, `modules` capability, `scripts/mail-auth.mjs`) and the app (b269735: row-0
+  module selector, Email list, label picker, shared reader, demo mail). Merged fe10bb9 on
+  windows-android-codex; 181 tests and app build pass. Coordinator reviewed the allowlist
+  and gate, and smoke-tested `node bridge/server.mjs` on port 8829 (healthz ok, modules
+  coding only without mail config). Simulator automation verified Coding home, legacy
+  fallback, Email list/picker, reader paging and synthetic mark-read; screenshots solid
+  green (no visual proof). Main checkout now has gitignored `bridge/config.local.json` with
+  the work mail block. Open, in order: (1) Eugene runs `evenhub login` (CLI refresh token
+  expired; beta 1.0.60 upload refused at self-check; version bump held uncommitted in the
+  super-app-bridge worktree); (2) Eugene's work-account consent, running in Orca tab
+  `Gmail Consent (work)`; (3) bridge restart, needs Eugene's approval; (4) G2 check on a
+  thread Eugene names. See `docs/email.md`. Uncommitted Cursor-title files untouched.
 
 - [ ] **Quick Tunnel fixed metrics port -- next restart verification:**
   2026-11-10 pin `tunnel/quick.yml` to loopback 127.0.0.1:20261, outside the
