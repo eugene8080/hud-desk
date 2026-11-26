@@ -53,6 +53,8 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-26 user: put Email (Gmail), Chat (Beeper) and a later Reader into Orca Glass beside Coding, one app; module selector on row 0 left, "Orca-glass [version]" centred; email first. Brief written for the implementing agent: `docs/super-app-task.md` (private details in untracked `INTERNAL.md`). No app or bridge code changed; no beta, no bridge restart. Work list: `TODOS.md` Open work, first item.
+
 2026-11-12 user: App Brightness wraps the same way as the font list. A swipe past 15 lands on 1, and a swipe past 1 lands on 15. The levels in between still page ten at a time. 164 tests. Beta 1.0.59 uploaded/promoted, CLI verified 203,582 bytes; prototype dist restored. App-only. G2 check pending.
 
 2026-11-12 user: the font list wraps. A swipe past the first row lands on the last, and a swipe past the last lands on the first. App Brightness still pages and does not wrap. 164 tests. Beta 1.0.58 uploaded/promoted, CLI verified 203,585 bytes; prototype dist restored. App-only. G2 check pending.

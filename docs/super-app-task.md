@@ -1,0 +1,294 @@
+# Super app (Coding, Email, Chat, Reader): task brief for the implementing agent
+
+Generated: 2026-11-26
+
+Eugene, 2026-11-26: "I just want all the reading and replying apps together into a super app under the
+existing orca-glass repo. That would be Coding (orca), Email (gmail), Chat (beeper), Reader (text, pdfs
+parsed into text). The transport schedule and gym apps would not be included as they are not primarily text
+readers." Also: "the reader is a later build. first start with the easy stuff which is the email", and for
+the UI: "the main menu of orca glass does not use the first row for selection. so I'm thinking we can select
+between coding email chat or reader on the first row, left side. the 'Orca-glass [version]' title can move to
+center."
+
+Read first: `CLAUDE.md` (constraints, terminal policy, release policy), `INTERNAL.md` (untracked: mailbox
+addresses, OAuth client file, origins; ask Eugene if it is missing), `docs/session-reader.md`,
+`docs/voice-input.md`, `git log --oneline -15`.
+
+## Phases
+
+| Phase | Scope | Sends anything? | Status 2026-11-26 |
+|---|---|---|---|
+| S0 | Module selector on row 0; Coding = today's app, unchanged | no | to build |
+| E1 | Email: two Gmail accounts, label filter, thread list, reader | no | to build with S0 |
+| E2 | Email: voice reply with review and a 10 s undo | yes | after E1 is confirmed on G2 |
+| C | Chat: Beeper Desktop API through the bridge | yes | later |
+| R | Reader: share-in, PDF and article to text, library | no | later; design notes only |
+
+Build S0 + E1 first, release them, and wait for Eugene's G2 check before E2.
+
+## State at handoff (2026-11-26)
+
+- Branch `windows-android-codex` is this fork's working branch. `main` mirrors upstream (`6315d7f`);
+  upstream (2ero20ne) last pushed 2026-10-13. Beta 1.0.59, public 1.0.36, 164 tests.
+- **Uncommitted work from 2026-11-11 is in the main checkout**: `bridge/conversation.mjs`, `bridge/orca.mjs`,
+  `bridge/session-titles.mjs`, `tests/session-titles.test.mjs` and the new `bridge/cursor-title.mjs`,
+  `tests/cursor-title.test.mjs`. It is not part of this task. Do not commit, stash or discard it; ask Eugene
+  who owns it. Develop this task in its own Orca worktree off `windows-android-codex` (terminal policy).
+- Email on the glasses today is a stop-gap in another repo: github.com/eugene8080/messenger-glass
+  `companion/mail-facade.mjs` adds one read-only Gmail label to the GazeChat fork by imitating the Beeper
+  Desktop API. Eugene confirmed it works on 2026-11-26, then rejected GazeChat as an email reader: six
+  readable rows, a large left indent, a total row at the top, a tap-to-reply so sensitive that it sends
+  replies by accident, and email mixed in with WhatsApp. This brief replaces it.
+- Working Gmail code to port (MIT, same owner), all in github.com/eugene8080/messenger-glass:
+  - `companion/mail-auth.mjs`: one-time PKCE loopback consent. It checks the granted scope and that
+    `users/me/profile` returns the expected address, then writes the refresh token.
+  - `companion/mail-facade.mjs`: `googleAccessToken`, `gmail` (exponential back-off on 429 and on 403
+    `rateLimitExceeded`), `decodeEntities`, `htmlToText`, `tidy` (strips URLs and zero-width characters),
+    `findPart`, `bodyText` (prefers text/plain; falls back to HTML when the plain part is under 200
+    characters), `parseFrom`, `resolveLabelId`, `listIds`.
+  - Lesson: a cold fetch of 250 full messages at 3 parallel calls hit `rateLimitExceeded` and took about
+    2 minutes. Fetch metadata for the visible page only, and bodies on open.
+  - Lesson: write the zero-width character class from code points (`new RegExp` built from numbers). An
+    editor tool once turned the U+2028 escape (backslash-u-2028) into a literal line terminator inside the regex.
+- OAuth client: reuse the existing Google OAuth client named in `INTERNAL.md` (type "installed", External,
+  in production, so refresh tokens do not expire after 7 days). It already holds working tokens for both of
+  Eugene's mailboxes (checked 2026-11-26). Eugene: "leave the hermes oauth". Do not create, edit or replace
+  any Google Cloud project or client. Google's consent screen shows the project name "Hermes"; that is
+  expected. Mint NEW per-account tokens for this app; do not reuse another tool's token files.
+
+## Why one app
+
+- G2 runs one Even Hub plugin at a time, in the foreground. With separate apps Eugene must leave one app and
+  start another from the phone. In one app it is one click.
+- The modules share the reader (nine rows, whole-page swipes, the font list, App Brightness, the status
+  row), the voice flow (hold, release, review, click to send, double-click to cancel), pairing, the bridge,
+  Whisper and the tailnet origin.
+- The transport schedule and gym apps stay separate. They are not text readers, and they have their own
+  loops (Workout Glass keeps a countdown running with the phone screen off).
+
+## Constraints (in addition to `CLAUDE.md`)
+
+1. **Orca Glass is a public Even Hub app.** Other users must see only Coding. The bridge lists the modules it
+   can serve in `GET /api/capabilities` (for example `{ "voice": true, "modules": ["coding", "email"] }`);
+   the app offers only those in the selector. With no `mail` block in `bridge/config.local.json` the bridge
+   offers Coding only, and the app behaves as today apart from the row-0 layout.
+2. **Mail stays private.** No mail content, address, display name, subject or label name in a tracked file,
+   a test fixture, a log line, a diagnostic or a commit message. Tests use synthetic MIME fixtures. Bridge log
+   lines carry the route, status code, counts and timings only. Gmail tokens live under `.local/`
+   (gitignored), written with mode 0600, never in `bridge/config.json`.
+   Tracked files here already name the PC's tailnet host (`app/app.json` and some docs); add no more.
+   Suggest to Eugene, do not add unasked: a private-pattern pre-commit hook like messenger-glass's
+   `.githooks/pre-commit`.
+3. **Mail and chat routes refuse the public tunnel.** `tunnel/watch.mjs` publishes `127.0.0.1:8787` through a
+   Cloudflare Quick Tunnel for prototype loading, and Cloudflare terminates TLS there
+   (`docs/windows-android.md`, "Data handling"). Mail sent that way is readable by Cloudflare and reachable
+   from the internet with only the bearer token. The packaged beta reaches the bridge through
+   `tailscale serve` only (its allowlist has no trycloudflare origin). So every `/api/mail/*` (and later
+   `/api/chat/*`) route answers 403 when the request carries a `cf-ray` or `cf-connecting-ip` header, or when
+   its Host is not in `privateHosts` in `bridge/config.local.json`. Check which Host header `tailscale serve`
+   forwards before you fill `privateHosts`. Test both refusals.
+4. **No real sends during development.** Never send an email to anyone but Eugene's own two mailboxes. The E2
+   end-to-end test uses a thread between those two addresses only, and only after Eugene says go for that
+   test. Unit tests use a fake Gmail transport.
+5. **Every send keeps a review step and the undo window** (E2).
+6. **No new network surface for mail.** Mail uses the existing bridge origin. No new allowlist entry, no
+   Tailscale Funnel, no public tunnel.
+
+## S0: module selector on row 0
+
+Today (beta 1.0.59) row 0 of the home screen is not selectable. The page in `show()`
+(`app/src/main.ts`, the `sessionList` branch) puts `sessionHeading()` ("Orca-glass 1.0.59",
+`app/src/session-list.ts`) in `HEAD` at width 300 and "N sessions" in `menu-count` at x 300. The cursor
+column `MENU_CURSOR` starts at y 28, so the cursor reaches rows 1 to 9 only (`home()`: two filter rows and
+seven sessions).
+
+New row 0:
+
+```
+>Email               Orca-glass 1.0.60                  3 unread
+```
+
+- Left: the current module name. It is the first selectable row of every page (cursor `>` in the gutter, so
+  `MENU_CURSOR` starts at y 0).
+- Centre: "Orca-glass <version>". Native text has no alignment flag: pad with measured widths, as
+  `nativeRight()` does. Check the fit with `glassWidth()`.
+- Right: the module's count. Coding: N sessions. Email: N unread. Chat: N unread chats. Reader: N documents.
+- Stay inside the six text containers the page uses today (left and centre in `HEAD`, right in
+  `menu-count`), so the firmware is asked for nothing new.
+- Rows 1 to 9 belong to the module. Coding keeps its rows exactly as today.
+
+Input (recommended default; show Eugene a simulator preview before the beta):
+
+- Click on row 0: next module, wrapping (Coding, Email, Chat, Reader, Coding), over the modules the bridge
+  offers. The label changes at once. The module's rows load after about 0.6 s without a further click, so
+  clicking past a module does not load it.
+- Swipe up from row 1 lands on row 0. Swipe up from row 0 turns to the previous page, as row 1 does today.
+  A module changes only on a click, never on a swipe.
+- Each module keeps its own page, cursor and filters. The app reopens in the last module
+  (`setLocalStorage('module', ...)`).
+- Double-click on a module's list closes the app, as on today's home screen.
+- Long press opens the firmware menu with that module's actions (`menuActions`). Coding keeps Refresh,
+  New session and Usage.
+- Fallback if cycling feels slow on G2: a click on row 0 opens a module picker built like Filter by Agent
+  (ten rows, double-click returns).
+
+## E1: Email, read only
+
+### Glasses
+
+- **List.** Row 0 selector. Row 1 `* Filter [W: <label> +2]`, which opens the label picker. Rows 2 to 9:
+  eight threads. Left column "Sender - Subject", fitted with `menuTitle()`; right column `[W] 14:05` or
+  `[P] 25 Nov` (account letter, then the time today or the date). Unread marker in the gutter, where Coding
+  shows `/ * ?`. Page swipes as on the Coding list.
+- **Label picker.** Built like Filter by Workspace (ten rows, no title, Done first, paged with
+  `v more below` / `^ more above`). One heading per account, then that account's labels with the unread
+  count; click toggles a label; several labels across both accounts can be on at once. Saved with
+  `setLocalStorage`. First-run default: each account's Inbox.
+- **Reader.** The existing reader: nine text rows, whole-page swipes, the font list, App Brightness, the
+  status row. Each message starts with three header lines (From, Date, Subject), a blank line, then the
+  body. A thread reads oldest to newest and opens at the top of the newest message (the same mechanic as
+  Coding opening at the top of the latest response, `latestResponseStart()` in `app/src/text.ts`). Strip
+  quoted history from each message (lines starting `>` and the "On ... wrote:" line before them), because
+  the earlier messages are already on screen. Status row, for example `[W] Pg 2/7`, with `Hold: reply`
+  after E2.
+- **Read state.** The default scopes (below) cannot mark Gmail messages read. The bridge keeps a local
+  "opened on the glasses" set (message IDs only, `.local/mail/seen.json`); the list shows Gmail's unread
+  marker until a message is opened on the glasses. Gmail's own unread state does not change.
+
+### Bridge
+
+- New files: `bridge/gmail.mjs` (OAuth refresh, REST calls, back-off), `bridge/mail-text.mjs` (MIME to text;
+  pure functions), `bridge/mail.mjs` (routes, per-account cache), `scripts/mail-auth.mjs` (consent, ported
+  from messenger-glass with an `--account <id>` argument and the scopes below).
+- Register the mail routes only when `bridge/config.local.json` has a `mail` block:
+
+  ```json
+  "mail": {
+    "oauthClientFile": "<from INTERNAL.md>",
+    "accounts": [
+      { "id": "work", "short": "W", "address": "<from INTERNAL.md>", "tokenFile": ".local/mail/work.json" },
+      { "id": "personal", "short": "P", "address": "<from INTERNAL.md>", "tokenFile": ".local/mail/personal.json" }
+    ],
+    "windowDays": 30,
+    "refreshSeconds": 120
+  },
+  "privateHosts": ["<from INTERNAL.md>"]
+  ```
+
+- Routes (bearer token as today, plus the private-host gate):
+  - `GET /api/mail/accounts`: `[{ id, short, ok, error? }]`. No address.
+  - `GET /api/mail/labels?account=`: `[{ id, name, unread }]`. User labels plus INBOX; other system labels
+    hidden.
+  - `GET /api/mail/threads?filter=<account>:<labelId>,...&page=`: `{ items: [{ account, id, from, subject,
+    date, unread, count }], hasMore }`. Use `users.threads.list` (`newer_than:<windowDays>d`) and
+    `users.threads.get` with `format=metadata` (From, Subject, Date) for the visible page only.
+  - `GET /api/mail/thread?account=&id=`: `{ subject, messages: [{ id, from, to, cc, date, text }] }`,
+    `format=full`, converted with `mail-text.mjs`.
+- Keep a per-account snapshot, refreshed every `refreshSeconds`. On a cold start answer within about 3 s
+  with whatever is cached, as the messenger-glass facade does.
+- `GET /api/capabilities` adds `modules`.
+
+### App
+
+- `app/src/main.ts` is 1,524 lines and holds every screen. Put Email in a new file (`app/src/mail.ts`; later
+  `chat.ts` and `library.ts`). Move only the shared parts Email needs behind small interfaces.
+- The reader is typed to an Orca session today (`reader?: Thread` in the `Screen` type near the top of
+  `app/src/main.ts`, and `record(t, ...)` takes a `Thread`). Generalise it to a reader source (title, load,
+  status text, and a hold handler that names the reply target) so Email and Chat reuse paging, fonts,
+  brightness, the status row and the voice flow.
+- `app/src/api.ts`: add `api.mail.*`. Keep its rule that a POST is never replayed after a disconnect.
+- `app/src/demo.ts`: add synthetic mail for demo mode and the simulator.
+
+## E2: Email reply
+
+- From the reader: hold, speak, release, review, click to send, as in Coding. The review screen shows
+  `To: <name>` (and `Cc: N` for Reply all) above the transcript.
+- After the click the bridge holds the send for 10 s. The glasses show `Sending in 10 s - double-click
+  cancels`, then `Sent` or the error. Gmail has no API to recall a sent message; this window is the undo.
+  The queue is in memory: if the bridge restarts inside the window, the reply is dropped, not sent.
+- Routes: `POST /api/mail/reply` `{ account, threadId, messageId, text, all, key }` returns
+  `{ id, sendAt }`; `POST /api/mail/cancel` `{ id }`; `GET /api/mail/outbox?id=` returns `queued`, `sent`,
+  `cancelled` or `failed`. `key` is a client-made idempotency key, so a retried POST cannot send twice.
+- Message: `From` = the account address; `To` = the answered message's `Reply-To`, else its `From`;
+  Reply all adds the original To and Cc minus the account's own address; `Subject: Re: <subject>` (no second
+  `Re:`); `In-Reply-To` = its `Message-ID`; `References` = its `References` plus its `Message-ID`;
+  `Content-Type: text/plain; charset=UTF-8`. Send with `users.messages.send` `{ raw, threadId }`; Gmail
+  threads a reply only when the threadId, the References/In-Reply-To headers and the subject all match.
+  Remove CR and LF from every header value; encode non-ASCII header text (RFC 2047).
+- Unit tests: threading headers, `Re:` handling, header injection, Reply all minus self, cancel inside the
+  window, restart drops the queue, idempotency key.
+
+## C: Chat (later)
+
+- The bridge calls the Beeper Desktop API on `127.0.0.1:23373` with its own Beeper token (mint one for Orca
+  Glass; do not share GazeChat's). The phone never talks to Beeper, so Beeper's Remote Access can be
+  switched off.
+- Port, do not embed: GazeChat (github.com/eugene8080/gazechat) is React with even-toolkit; Orca Glass is
+  plain TypeScript. Take the chat list, the message reader and the voice reply with review.
+- Facts (messenger-glass `docs/design.md` Q7): Eugene's WhatsApp, Signal and Telegram run on Beeper Cloud
+  (`bridge.provider: "cloud"`; on 2026-11-26 Beeper Desktop's only remote connections went to Beeper's
+  Matrix server), so chat content passes through Beeper's servers. Beeper does not bridge Telegram
+  channels. The Desktop API WebSocket `/v1/ws` needs an `Authorization` header; the `?access_token=` form
+  gets 401.
+
+## R: Reader (later; design notes only)
+
+- **Intake.** An Even Hub plugin runs inside the Even Realities app, so it cannot be an Android share
+  target. Two routes:
+  1. Gmail to self, recommended first. Android Share, Gmail, send to a plus-address of Eugene's personal
+     mailbox; a Gmail filter labels it; the bridge reads that label with the E1 code and takes attachments
+     (PDF, text, Markdown) and URLs from the body. No phone code. Gmail's attachment limit is 25 MB.
+  2. A PWA share target, later and smoother. A small page served by the bridge at the tailnet origin with a
+     web app manifest `share_target` (POST, multipart, files). Chrome on Android lists an installed PWA in
+     the share sheet. The phone needs Tailscale on, which the glasses already need.
+  Beeper's self-chat would also work but sends documents through Beeper Cloud.
+- **Conversion on the PC.** PDF to Markdown with Marker, locally. Claude or Codex only for scans or complex
+  layouts, and only when Eugene chooses that per document (third-party processing and cost). Whisper is
+  speech to text; it does not read PDFs.
+- **Articles.** Fetch the page and extract it with Mozilla Readability into Markdown. If the page is
+  paywalled or gone: an existing archive.today snapshot (`https://archive.ph/newest/<url>`), then the
+  Wayback Machine availability API (`https://archive.org/wayback/available?url=<url>`). archive.today often
+  answers automated requests with a CAPTCHA; check this before relying on it, and never solve CAPTCHAs
+  automatically.
+- **Storage.** The library of record is on the PC (`.local/reader/`, one Markdown file per document plus an
+  index). The app caches the open document and the most recent few with `setLocalStorage` for offline
+  reading; check the SDK's storage limit first. Eugene asked for documents "stored as plain text" on the
+  phone: confirm with him whether the cache is enough or the phone must hold the full library. Save the
+  reading position per document.
+
+## Defaults taken (Eugene may override; record overrides here)
+
+| # | Decision | Default | Alternative |
+|---|---|---|---|
+| 1 | Gmail scopes per account | `gmail.readonly` + `gmail.send`, one consent per account at E1, so E2 needs no second consent | `gmail.modify`: opening marks read and archive works, but a bug could also delete mail |
+| 2 | Reply recipients | Reply to sender (`Reply-To` if set); Reply all is a separate long-press menu item | Reply all by default |
+| 3 | Send safety | Review screen, then the 10 s undo | Review screen only |
+| 4 | Where the modules live | this repo, one app | separate apps (rejected by Eugene 2026-11-26) |
+| 5 | Module switch | click on row 0 cycles | module picker list |
+| 6 | Accounts | work and personal (addresses in `INTERNAL.md`) | more later |
+| 7 | Read state | local "opened on the glasses" set | Gmail sync, needs `gmail.modify` |
+| 8 | Quoted text in replies | none; Gmail threads by headers | quote the answered message |
+
+## Approvals
+
+- Beta upload: follow the `CLAUDE.md` release policy (automatic after `npm test` and the app build). Row 0
+  changes for every user, so share a simulator preview of Coding and Email with the release report. The
+  `TODOS.md` header still says visual changes need preview approval before a beta; the 2026-11-10 policy in
+  `CLAUDE.md` is newer. Follow `CLAUDE.md` and point the conflict out to Eugene once.
+- Bridge restart: ask Eugene each time (`CLAUDE.md`).
+- Gmail consent: Eugene does it. Run `node scripts/mail-auth.mjs --account <id>` and put the consent URL at
+  the top of your message to him, not only in a log (on 2026-11-26 he could not find it in a log).
+- Public Even Hub release: only on his explicit request. The listing and the `app/app.json` network
+  description mention email and chat only then.
+- After E1 is confirmed on G2, tell Eugene that the messenger-glass Gmail facade can go back to Beeper-only
+  (messenger-glass `TODOS.md` #14). Do not change that repo from here unless he asks.
+
+## Done when
+
+- S0 + E1: on the G2, Eugene switches to Email on row 0, picks labels across both accounts and reads a long
+  newsletter with the reader's fonts. Coding is unchanged. With no `mail` config the bridge offers Coding
+  only. Both private-host refusals are tested. `npm test` and the app build pass, the beta is uploaded per
+  policy, and `TODOS.md` and the `CLAUDE.md` Current work log are updated.
+- E2: after Eugene says go, a reply from the glasses lands in a thread between his own two mailboxes and is
+  threaded in Gmail on the web. A cancel inside the 10 s window sends nothing.
+- Report: what changed, the test count, the beta version, and what was not done and why.

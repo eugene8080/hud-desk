@@ -1,5 +1,5 @@
 # Orca Glass TODOs
-Updated: 2026-11-10
+Updated: 2026-11-26
 
 Current beta: **1.0.59** (App Brightness wraps at both ends). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
 Workspace-filter preview approved, released and retired with merged worktree cleanup.
@@ -7,6 +7,15 @@ Future visual changes require preview approval before beta upload.
 Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
+
+- [ ] **Super app: Coding, Email, Chat, Reader in one app -- brief written, build not started:**
+  user 2026-11-26 wants the reading and replying apps together in Orca Glass: Coding (Orca),
+  Email (Gmail), Chat (Beeper), Reader (text, PDFs to text); transport schedule and gym stay
+  separate. Email first; Reader later. Row 0 of the home screen becomes the module selector
+  (left), title centred. Brief: `docs/super-app-task.md` (phases S0+E1 read-only first, E2
+  reply, C chat, R reader; defaults table; constraints incl. the Quick Tunnel gate for mail
+  routes). Private details: untracked `INTERNAL.md`. Waits on: an implementing agent; Eugene's
+  Gmail consent per account at E1. No code changed by the brief.
 
 - [ ] **Quick Tunnel fixed metrics port -- next restart verification:**
   2026-11-10 pin `tunnel/quick.yml` to loopback 127.0.0.1:20261, outside the
