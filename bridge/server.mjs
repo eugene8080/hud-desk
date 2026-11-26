@@ -5,11 +5,13 @@ import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import { extname, join, normalize } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { executable } from './platform.mjs';
 import * as o from './orca.mjs';
 import * as secrets from './secrets.mjs';
 import { transcribe, voiceAvailable, warmWhisper } from './whisper.mjs';
+import { MailError } from './gmail.mjs';
+import { allowPrivateHost, createMail, readMailConfig } from './mail.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const DIST = join(here, '../app/dist');
@@ -18,13 +20,12 @@ const HOST = process.env.HOST || '127.0.0.1';
 // config.json(共有の既定値)に config.local.json(各自の環境・git 管理外)を上書きする
 const config = JSON.parse(readFileSync(join(here, 'config.json'), 'utf8'));
 const localFile = join(here, 'config.local.json');
-if (existsSync(localFile)) Object.assign(config, JSON.parse(readFileSync(localFile, 'utf8')));
+const local = existsSync(localFile) ? JSON.parse(readFileSync(localFile, 'utf8')) : {};
+Object.assign(config, local);
 
-const TOKEN = process.env.EHO_TOKEN || secrets.token();
-
-function authorized(req) {
+function authorized(req, token) {
   const got = Buffer.from(req.headers.authorization?.replace(/^Bearer /, '') || '');
-  const want = Buffer.from(TOKEN);
+  const want = Buffer.from(token);
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
@@ -90,7 +91,6 @@ async function body(req) {
 const routes = {
   'GET /api/threads': () => o.listThreads(),
   'GET /api/activity': (q) => o.activity(q.get('handle')),
-  'GET /api/capabilities': () => ({ voice: voiceAvailable() }),
   'GET /api/thread': (q) => o.readThread(q.get('handle')),
   'GET /api/history': (q) => o.readHistory(q.get('handle')),
   'POST /api/choice': (_q, b) => o.choose(b.handle, b.menuId, b.value),
@@ -136,10 +136,27 @@ const routes = {
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 const activityTrace = new Map();
 
-createServer(async (req, res) => {
+export function createBridge({
+  token = process.env.EHO_TOKEN || secrets.token(),
+  mailConfig = local.mail, privateHosts = local.privateHosts, mailOptions,
+} = {}) {
+  const settings = readMailConfig(mailConfig);
+  const mail = settings && createMail(settings, mailOptions);
+  const privateHostAllowed = allowPrivateHost(privateHosts);
+  const capabilities = () => ({ voice: voiceAvailable(), modules: mail ? ['coding', 'email'] : ['coding'] });
+  const server = createServer((req, res) => handle(req, res, token, capabilities, mail, privateHostAllowed));
+  if (mail) server.once('close', mail.close);
+  return server;
+}
+
+async function handle(req, res, token, capabilities, mail, privateHostAllowed) {
   const url = new URL(req.url, 'http://x');
   // アプリを別オリジン(固定の置き場所)から開いても呼べるようにする。認証は Bearer なので Cookie は使わない
   res.setHeader('access-control-allow-origin', '*');
+  const key = `${req.method} ${url.pathname}`;
+  if (mail && url.pathname.startsWith('/api/mail/')) {
+    return handleMail(req, res, url, mail.routes[key], token, privateHostAllowed);
+  }
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'access-control-allow-methods': 'GET, POST',
@@ -152,8 +169,8 @@ createServer(async (req, res) => {
     // トンネル死活監視用。情報は何も返さない
     if (url.pathname === '/healthz') return send(res, 200, { ok: true });
     if (url.pathname.startsWith('/api/')) {
-      if (!authorized(req)) return send(res, 401, { error: 'unauthorized' });
-      const route = routes[`${req.method} ${url.pathname}`];
+      if (!authorized(req, token)) return send(res, 401, { error: 'unauthorized' });
+      const route = key === 'GET /api/capabilities' ? capabilities : routes[key];
       if (!route) return send(res, 404, { error: 'not found' });
       const result = await route(url.searchParams, req.method === 'POST' ? await body(req) : {});
       if (url.pathname === '/api/activity') {
@@ -180,10 +197,52 @@ createServer(async (req, res) => {
     console.error(e);
     send(res, 500, { error: String(e.message || e) });
   }
-}).listen(PORT, HOST, () => {
-  console.log(`evenhub-orca bridge: http://${HOST}:${PORT}/ (pair with npm run pair)`);
-  if (voiceAvailable()) warmWhisper().then(() => console.log('Local speech engine ready')).catch(e => console.error(e.message));
-});
+}
+
+async function handleMail(req, res, url, route, token, privateHostAllowed) {
+  const started = Date.now();
+  let count = 0;
+  // Browsers send preflight without bearer credentials. Apply the host gate to preflight as well.
+  try {
+    if (req.method !== 'OPTIONS' && !authorized(req, token)) return send(res, 401, { error: 'unauthorized' });
+    res.setHeader('cache-control', 'no-store');
+    if (!privateHostAllowed(req.headers)) return send(res, 403, { error: 'private-route' });
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'access-control-allow-methods': 'GET, POST',
+        'access-control-allow-headers': 'authorization, content-type',
+        'access-control-max-age': '600',
+      });
+      return res.end();
+    }
+    if (!route) return send(res, 404, { error: 'not found' });
+    let input;
+    if (req.method === 'POST') {
+      try {
+        input = JSON.parse((await raw(req, 64 * 1024)).toString('utf8'));
+      } catch {
+        throw new MailError('bad request', 400);
+      }
+    }
+    const result = await route(url.searchParams, input);
+    count = (Array.isArray(result) ? result : result.items ?? result.messages ?? []).length;
+    return send(res, 200, result);
+  } catch (error) {
+    return error instanceof MailError
+      ? send(res, error.status, { error: error.code })
+      : send(res, 500, { error: 'internal' });
+  } finally {
+    const path = route ? url.pathname : '/api/mail/*';
+    console.log(`[mail] ${path} ${res.statusCode} count=${count} ${Date.now() - started}ms`);
+  }
+}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  createBridge().listen(PORT, HOST, () => {
+    console.log(`evenhub-orca bridge: http://${HOST}:${PORT}/ (pair with npm run pair)`);
+    if (voiceAvailable()) warmWhisper().then(() => console.log('Local speech engine ready')).catch(e => console.error(e.message));
+  });
+}
 
 function send(res, status, data) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
