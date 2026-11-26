@@ -38,7 +38,10 @@ workspace/worktree. This applies to every agent working here.
 Eugene, 2026-11-10: "please just upload beta automatically from now on". After a
 change passes `npm test` and the app build, bump `app/app.json`, run
 `npm run beta:update -- "<changelog>"`, verify the beta channel, restore the
-prototype build, then commit and push. Do not wait for preview approval. This covers
+prototype build, then commit and push. In the same release commit update `store/features.md`
+(feature list, "Paste: what's new" starting with the version, and the description block plus
+`store/description.txt` when a listed feature changed; `tests/store-features.test.mjs` checks
+them). Eugene pastes from that file into Even Hub (2026-11-26). Do not wait for preview approval. This covers
 the BETA channel only: public Even Hub publication still needs his explicit request.
 Bridge restarts are not covered by this note; follow the ownership-check procedure
 and ask when a restart is needed (he has approved each one so far). Simulator or
@@ -52,6 +55,16 @@ with GitHub/Discord open. Confirm the dedicated profile from fresh browser inven
 do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
+
+2026-11-26 user on G2 1.0.60: live mark-read works; Coding switch ~2 s, Email ~1 s; email rows
+end early. Cause measured on live threads (counts only): plain text hard-wrapped at 74-75
+columns, and Outlook-style quoted history (From:/Sent:, wrote:) repeating earlier messages
+(500-660 lines a message). Fixed in the bridge (62d1e31: unwrapPlain, withoutHistory; 18-24
+lines after); not live until a bridge restart. Requested and sent to the app Codex worker
+(dispatch ctx_d8670365bba1): phone module switch + Filter by Label, voice search in the label
+picker (hold), faster switching from cached rows. New `store/features.md`: feature list and
+Even Hub paste blocks, release-policy rule above; `store/description.txt` regenerated from it
+(1,714 chars); `store/description.ja.txt` is now out of date.
 
 2026-11-26 super app S0 + E1 released as beta 1.0.60 (Claude coordinator, Orca Run
 run_5b2c33f58055; Codex workers built bridge c76b828 and app b269735, merged fe10bb9).

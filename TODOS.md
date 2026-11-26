@@ -8,7 +8,13 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
-- [ ] **Super app: Coding, Email, Chat, Reader in one app -- S0 + E1 in beta 1.0.60; G2 check pending:**
+- [ ] **Super app: Coding, Email, Chat, Reader in one app -- 1.0.60 on G2; follow-ups in progress:**
+  2026-11-26 Eugene on G2: live mark-read works; layout works; Coding switch ~2 s, Email ~1 s;
+  email rows ended early. Bridge fix 62d1e31 (reflow hard-wrapped plain text, cut Outlook/
+  wrote: quoted history) waits on a bridge restart (ask Eugene). App worker
+  ctx_d8670365bba1 building: phone module switch + Filter by Label, voice search in the label
+  picker, cached-rows switching. Then beta 1.0.61. Future: Filter by email address on the
+  phone. `store/features.md` is the Even Hub paste source; `store/description.ja.txt` stale.
   2026-11-26 beta 1.0.60 uploaded/promoted (206,235 bytes). Bridge restarted with Eugene's
   approval (supervisor 78988, server 17624); work-account consent done; live read-only
   check: modules coding+email, labels and first Inbox page load, cf-ray and loopback Host
