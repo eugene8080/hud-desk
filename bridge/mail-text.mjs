@@ -66,11 +66,81 @@ export function findPart(part, mime) {
 
 const decodePart = part => Buffer.from(part.body.data, 'base64url').toString('utf8');
 
-export function bodyText(payload) {
+// Plain-text mail is often hard-wrapped by the sender near 72-78 columns (RFC 5322 suggests 78).
+// The reader keeps every line break, so each wrapped line would end a glasses row early. Join the
+// wrapped lines of a paragraph back together and let the reader wrap to the glasses' own width.
+const WRAP_MIN = 60;    // a body whose longest line is shorter than this was not wrapped to a column
+const WRAP_MAX = 80;    // lines longer than this are not part of a column-wrapped paragraph
+const WRAP_SLACK = 15;  // a wrapped line ends within this many characters of the wrap column
+const LIST_ITEM = /^\s*(?:[-*•+]|\d{1,3}[.)])\s/;
+const QUOTED = /^\s*>/;
+
+export function unwrapPlain(text) {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  // Count code points, not UTF-16 units, so an emoji counts as one column.
+  const length = line => [...line.trimEnd()].length;
+  const width = Math.max(0, ...lines.map(length).filter(n => n <= WRAP_MAX));
+  if (width < WRAP_MIN) return lines.join('\n');
+  // Require two lines ending near the column: one long sentence is not evidence of wrapping.
+  if (lines.filter(line => length(line) >= width - WRAP_SLACK && length(line) <= width).length < 2) {
+    return lines.join('\n');
+  }
+  // format=flowed (RFC 3676) marks a soft break with one trailing space; honour it directly.
+  const soft = line => / $/.test(line) && !/ {2}$/.test(line);
+  const wrapped = line => length(line) >= width - WRAP_SLACK && length(line) <= width;
+  const joins = (line, next) => next !== undefined && line.trim() !== '' && next.trim() !== '' &&
+    !QUOTED.test(line) && !QUOTED.test(next) && !LIST_ITEM.test(next) &&
+    (soft(line) || wrapped(line));
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    let paragraph = lines[i];
+    while (joins(lines[i], lines[i + 1])) {
+      paragraph = `${paragraph.trimEnd()} ${lines[i + 1].trimStart()}`;
+      i++;
+    }
+    out.push(paragraph);
+  }
+  return out.join('\n');
+}
+
+// Replies from Outlook and Gmail carry the earlier messages below the new text without `>` marks:
+// an Outlook "From: ... / Sent: ..." block, "-----Original Message-----", or "On <date>, <name> wrote:".
+// The reader already shows the earlier messages of the thread, so cut each message at that point.
+const HISTORY_FROM = /^\s*\*?From:\*?\s+\S/i;
+const HISTORY_NEXT = /^\s*\*?(?:Sent|Date):\*?\s+\S/i;
+const ORIGINAL = /^\s*-{2,}\s*Original Message\s*-{2,}\s*$/i;
+const RULE = /^\s*(?:_{5,}|-{5,})\s*$/;
+const FORWARD_MARK = /forwarded message|begin forwarded message/i;
+const FORWARD_SUBJECT = /^\s*(?:fwd?|fw)\s*:/i;
+
+export function withoutHistory(text, { subject = '' } = {}) {
+  // A forward's quoted block IS the content, so keep everything in a forwarded message.
+  if (FORWARD_SUBJECT.test(subject)) return text;
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const outlook = HISTORY_FROM.test(line) && lines.slice(i + 1, i + 5).some(l => HISTORY_NEXT.test(l));
+    // "On Tue, 3 Nov 2026 at 10:00, Name <a@b> wrote:" can be wrapped onto two lines by HTML layout.
+    const wroteStart = /wrote:\s*$/i.test(line)
+      ? (/^\s*On\s/i.test(line) ? i : /^\s*On\s/i.test(lines[i - 1] ?? '') ? i - 1 : -1)
+      : -1;
+    let start = outlook || ORIGINAL.test(line) ? i : wroteStart;
+    if (start < 0) continue;
+    if (lines.slice(Math.max(0, start - 3), start).some(l => FORWARD_MARK.test(l))) continue;
+    // Drop the rule and blank lines Outlook draws above the header.
+    while (start > 0 && (RULE.test(lines[start - 1]) || !lines[start - 1].trim())) start--;
+    const kept = lines.slice(0, start).join('\n').trim();
+    // A message that is only history (nothing new above the marker) stays whole rather than empty.
+    return kept || text;
+  }
+  return text;
+}
+
+export function bodyText(payload, { subject = '' } = {}) {
   const plain = findPart(payload, 'text/plain');
   const html = findPart(payload, 'text/html');
-  const text = plain ? decodeEntities(decodePart(plain)) : '';
-  return tidy(html && text.trim().length < 200 ? htmlToText(decodePart(html)) : text);
+  const text = plain ? unwrapPlain(decodeEntities(decodePart(plain))) : '';
+  return withoutHistory(tidy(html && text.trim().length < 200 ? htmlToText(decodePart(html)) : text), { subject });
 }
 
 export function header(message, name) {

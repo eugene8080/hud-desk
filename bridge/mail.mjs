@@ -240,7 +240,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
         subject: header(messages[0] ?? {}, 'subject'),
         messages: messages.map(m => ({
           id: m.id, from: parseFrom(header(m, 'from')), to: header(m, 'to'), cc: header(m, 'cc'),
-          date: dateOf(m), text: bodyText(m.payload),
+          date: dateOf(m), text: bodyText(m.payload, { subject: header(m, 'subject') }),
         })),
       };
     }
