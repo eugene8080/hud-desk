@@ -1,28 +1,24 @@
 # Orca Glass TODOs
 Updated: 2026-11-26
 
-Current beta: **1.0.59** (App Brightness wraps at both ends). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
+Current beta: **1.0.60** (row-0 module selector; Email when the bridge offers it). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
 Workspace-filter preview approved, released and retired with merged worktree cleanup.
 Future visual changes require preview approval before beta upload.
 Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
-- [ ] **Super app: Coding, Email, Chat, Reader in one app -- S0 + E1 merged; beta, restart, consent pending:**
-  2026-11-26 Claude coordinator (Orca Run run_5b2c33f58055): two Codex workers built the
-  bridge (c76b828: Gmail client + endpoint allowlist, MIME-to-text, mail routes, private-
-  host gate, `modules` capability, `scripts/mail-auth.mjs`) and the app (b269735: row-0
-  module selector, Email list, label picker, shared reader, demo mail). Merged fe10bb9 on
-  windows-android-codex; 181 tests and app build pass. Coordinator reviewed the allowlist
-  and gate, and smoke-tested `node bridge/server.mjs` on port 8829 (healthz ok, modules
-  coding only without mail config). Simulator automation verified Coding home, legacy
-  fallback, Email list/picker, reader paging and synthetic mark-read; screenshots solid
-  green (no visual proof). Main checkout now has gitignored `bridge/config.local.json` with
-  the work mail block. Open, in order: (1) Eugene runs `evenhub login` (CLI refresh token
-  expired; beta 1.0.60 upload refused at self-check; version bump held uncommitted in the
-  super-app-bridge worktree); (2) Eugene's work-account consent, running in Orca tab
-  `Gmail Consent (work)`; (3) bridge restart, needs Eugene's approval; (4) G2 check on a
-  thread Eugene names. See `docs/email.md`. Uncommitted Cursor-title files untouched.
+- [ ] **Super app: Coding, Email, Chat, Reader in one app -- S0 + E1 in beta 1.0.60; G2 check pending:**
+  2026-11-26 beta 1.0.60 uploaded/promoted (206,235 bytes). Bridge restarted with Eugene's
+  approval (supervisor 78988, server 17624); work-account consent done; live read-only
+  check: modules coding+email, labels and first Inbox page load, cf-ray and loopback Host
+  both 403. Built by two Codex workers (bridge c76b828, app b269735), merged fe10bb9.
+  Open: (1) Eugene's G2 check: switch to Email on row 0, pick labels, read a long
+  newsletter; (2) live mark-read on a thread Eugene names, then confirm in Gmail web that
+  it is read and no label changed; (3) the first list after a bridge restart can be empty
+  for a few seconds (3 s cold-start rule) -- check how the glasses show it; (4) after G2
+  confirmation, tell Eugene the messenger-glass Gmail facade can go back to Beeper-only
+  (messenger-glass TODOS #14). E2/C/R not started. See `docs/email.md`.
 
 - [ ] **Quick Tunnel fixed metrics port -- next restart verification:**
   2026-11-10 pin `tunnel/quick.yml` to loopback 127.0.0.1:20261, outside the
