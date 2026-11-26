@@ -53,6 +53,20 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-26 super app S0 + E1 released as beta 1.0.60 (Claude coordinator, Orca Run
+run_5b2c33f58055; Codex workers built bridge c76b828 and app b269735, merged fe10bb9).
+Row 0 is the module selector (click cycles Coding/Email, title centred, count right);
+Email: label picker, eight threads a page, shared reader, opening marks the thread read.
+Bridge offers Email only with a `mail` block; Gmail allowlist and private-host gate
+(cf-ray / non-tailnet Host -> 403) tested. 181 tests, app build pass. Beta 1.0.60
+uploaded/promoted, CLI verified 206,235 bytes; prototype dist restored. Work-account
+consent done by Eugene (token in .local/mail/, read-only profile check ok). Bridge
+restarted with his approval (old supervisor 23112/server 3744; new 78988/17624, whisper
+84652 --vad); local and tailnet healthz ok; live read: modules coding+email, account ok,
+labels and first Inbox page load, both gate refusals 403. Tunnel metrics 20261/ready 200.
+Simulator screenshots solid green (automation-verified only). G2 check pending; live
+mark-read only on a thread Eugene names. 1.0.59 showed 'In Review' in the CLI list.
+
 2026-11-26 user decisions for Email: `gmail.modify`; read only, opening a thread marks it read in Gmail; no send, no drafts, no archive for now; work account first, personal later; click on row 0 cycles modules; all work in this repo. Brief `docs/super-app-task.md` revised (Decisions table; Gmail endpoint allowlist; E2 is now the personal account). No app or bridge code changed.
 
 2026-11-26 user: put Email (Gmail), Chat (Beeper) and a later Reader into Orca Glass beside Coding, one app; module selector on row 0 left, "Orca-glass [version]" centred; email first. Brief written for the implementing agent: `docs/super-app-task.md` (private details in untracked `INTERNAL.md`). No app or bridge code changed; no beta, no bridge restart. Work list: `TODOS.md` Open work, first item.
