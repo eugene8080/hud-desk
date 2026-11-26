@@ -53,6 +53,8 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-26 user decisions for Email: `gmail.modify`; read only, opening a thread marks it read in Gmail; no send, no drafts, no archive for now; work account first, personal later; click on row 0 cycles modules; all work in this repo. Brief `docs/super-app-task.md` revised (Decisions table; Gmail endpoint allowlist; E2 is now the personal account). No app or bridge code changed.
+
 2026-11-26 user: put Email (Gmail), Chat (Beeper) and a later Reader into Orca Glass beside Coding, one app; module selector on row 0 left, "Orca-glass [version]" centred; email first. Brief written for the implementing agent: `docs/super-app-task.md` (private details in untracked `INTERNAL.md`). No app or bridge code changed; no beta, no bridge restart. Work list: `TODOS.md` Open work, first item.
 
 2026-11-12 user: App Brightness wraps the same way as the font list. A swipe past 15 lands on 1, and a swipe past 1 lands on 15. The levels in between still page ten at a time. 164 tests. Beta 1.0.59 uploaded/promoted, CLI verified 203,582 bytes; prototype dist restored. App-only. G2 check pending.

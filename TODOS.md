@@ -12,10 +12,12 @@ Completed/superseded release notes: [history](docs/todo-history.md).
   user 2026-11-26 wants the reading and replying apps together in Orca Glass: Coding (Orca),
   Email (Gmail), Chat (Beeper), Reader (text, PDFs to text); transport schedule and gym stay
   separate. Email first; Reader later. Row 0 of the home screen becomes the module selector
-  (left), title centred. Brief: `docs/super-app-task.md` (phases S0+E1 read-only first, E2
-  reply, C chat, R reader; defaults table; constraints incl. the Quick Tunnel gate for mail
-  routes). Private details: untracked `INTERNAL.md`. Waits on: an implementing agent; Eugene's
-  Gmail consent per account at E1. No code changed by the brief.
+  (left, click cycles), title centred. Brief: `docs/super-app-task.md` (S0 + E1 first: work
+  account, label filter, reader, opening marks read in Gmail; no send, draft or archive;
+  E2 personal account later; C chat, R reader later; constraints incl. the Gmail endpoint
+  allowlist and the Quick Tunnel gate for mail routes). Decisions recorded 2026-11-26.
+  Private details: untracked `INTERNAL.md`. Waits on: an implementing agent; Eugene's
+  `gmail.modify` consent for the work account at E1. No code changed by the brief.
 
 - [ ] **Quick Tunnel fixed metrics port -- next restart verification:**
   2026-11-10 pin `tunnel/quick.yml` to loopback 127.0.0.1:20261, outside the
