@@ -56,6 +56,14 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-26 beta 1.0.61 (user-requested follow-ups): phone module switch linked with row 0;
+Filter by Label on the phone (search box, shared picks); voice search in the glasses label
+picker (hold, release, all-words match); cached rows on module switch (simulator warm switch
+~830 -> ~410 ms; settle 0.6 -> 0.4 s). App worker commit 679f1aa, merged a631660. Bridge reflow/
+history fix 62d1e31 live after a restart Eugene approved (old supervisor 78988/server 17624;
+new 70236/80148, whisper 78156 --vad); live line stats confirm reflow. Phone preview checked
+by screenshot; glasses PNGs solid green (automation-verified). G2 check pending.
+
 2026-11-26 user on G2 1.0.60: live mark-read works; Coding switch ~2 s, Email ~1 s; email rows
 end early. Cause measured on live threads (counts only): plain text hard-wrapped at 74-75
 columns, and Outlook-style quoted history (From:/Sent:, wrote:) repeating earlier messages

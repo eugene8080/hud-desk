@@ -9,7 +9,7 @@ Coding:
 
 Email (Gmail, when your bridge is set up for it):
 - Read only: no sending, drafts or archive. Opening a thread marks it read.
-- Filter by Label, eight threads a page, unread markers. Threads open at the newest message with quoted history removed.
+- Filter by Label on the glasses or the phone, with voice search on the glasses. Eight threads a page, unread markers. Threads open at the newest message with quoted history removed and plain text reflowed.
 
 Reader for both: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Misc Fixed, GohuFont, Departure, Shinonome, Terminus, Scientifica), App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
 
