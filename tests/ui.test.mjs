@@ -25,10 +25,16 @@ vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/filters.t
 
 const listExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/session-list.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: listExports, __APP_VERSION__: '1.0.12', require: name => name === './i18n' ? i18nExports : textExports, TextEncoder, document: { createElement: () => ({ getContext: () => ({ font: '', measureText: t => ({ width: t.length * 10 }) }) }) } });
+const mailSource = ts.transpileModule(readFileSync(new URL('../app/src/mail.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+function mailModule(api) {
+  const exports = {};
+  vm.runInNewContext(mailSource, { exports, require: name => ({ './i18n': i18nExports, './session-list': listExports, './api': { api } })[name] });
+  return exports;
+}
 
 // Exercise the real controller with a simulated Even bridge: no agent input,
 // microphone access, network, or hardware claims.
-async function harness(count = 2, voice = false, mode = 'tap', savedView = '', startupResult = 0, rejectAlignedMenu = false, savedWorkspaces = '', savedUsage = '', savedOpen = '') {
+async function harness(count = 2, voice = false, mode = 'tap', savedView = '', startupResult = 0, rejectAlignedMenu = false, savedWorkspaces = '', savedUsage = '', savedOpen = '', options = {}) {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, { value: '', hidden: false, textContent: '', listeners: {}, addEventListener(name, fn) { this.listeners[name] = fn; } });
@@ -37,6 +43,9 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
   const threads = Array.from({ length: count }, (_, i) => ({ handle: `terminal-${i}`, title: `Session ${i}`, agent: 'codex', state: 'unknown' }));
   const pages = [], sends = [], choices = [], timers = new Map(), mic = [], upgrades = [], transcriptions = [], images = [];
   const animations = new Map();
+  const timeouts = new Map();
+  const storage = new Map(Object.entries(options.storage ?? {}));
+  let exited = 0;
   let timerId = 0, event, phoneDeps;
   const windowListeners = new Map();
   const phoneCalls = [];
@@ -46,15 +55,17 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     workspaces: async () => [],
     thread: async h => ({ text: `Content ${h}` }),
     history: async () => ({ text: 'Older terminal output' }),
-    capabilities: async () => ({ voice }),
+    capabilities: async () => ({ voice, ...(options.capabilities ?? {}) }),
+    mail: options.mail,
     transcribe: async pcm => { transcriptions.push(pcm); return { text: 'A voice test.' }; },
     say: async (handle, text) => { sends.push({ handle, text }); return { sent: text }; },
     choice: async (handle, menuId, value) => { choices.push({ handle, menuId, value }); return { sent: value }; },
   };
   const bridge = {
     updateImageRawData: async value => { images.push(value); return 'success'; },
-    getLocalStorage: async key => key === 'code' ? 'demo' : key === 'recording-mode' ? mode : key === 'lang' ? 'en' : key === 'view-provider' ? savedView : key === 'view-workspaces' ? savedWorkspaces : key === 'usage-reset-mode' ? savedUsage : key === 'open-thread' ? savedOpen : '',
-    setLocalStorage: async () => {},
+    getLocalStorage: async key => storage.get(key) ?? (key === 'code' ? 'demo' : key === 'recording-mode' ? mode : key === 'lang' ? 'en' : key === 'view-provider' ? savedView : key === 'view-workspaces' ? savedWorkspaces : key === 'usage-reset-mode' ? savedUsage : key === 'open-thread' ? savedOpen : ''),
+    setLocalStorage: async (key, value) => { storage.set(key, value); },
+    shutDownPageContainer: async () => { exited++; },
     createStartUpPageContainer: async p => { pages.push(p); return startupResult; },
     rebuildPageContainer: async p => { pages.push(p); return !(rejectAlignedMenu && p.textObject.some(c => c.containerName === 'menu-right') && (rejectAlignedMenu !== 'images' || !!p.imageObject)); },
     textContainerUpgrade: async value => { upgrades.push(value); return true; },
@@ -74,6 +85,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     './footer-hint': hintExports,
     './usage-reset': usageResetExports,
     './session-list': listExports,
+    './mail': mailModule(api),
     './filters': filterExports,
     './fine-text': fineExports,
     // The phone page is DOM-only and checked in a browser preview; the glasses tests see a no-op.
@@ -85,16 +97,21 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     location: { search: '' }, window: { addEventListener(name, fn) { windowListeners.set(name, fn); } }, URLSearchParams, Uint8Array, TextEncoder,
     setInterval: (fn, delay) => { (delay === 200 ? animations : timers).set(++timerId, fn); return timerId; },
     clearInterval: id => { timers.delete(id); animations.delete(id); },
+    setTimeout: (fn, delay) => { timeouts.set(++timerId, { fn, delay }); return timerId; },
+    clearTimeout: id => timeouts.delete(id),
   });
   const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush();
-  return { api, bridge, elements, pages, sends, choices, threads, timers, animations, mic, upgrades, images, transcriptions, flush, phone: () => phoneDeps, phoneCalls,
+  const pickRow = async i => { event({ listEvent: { currentSelectItemIndex: i, eventType: 0 } }); await flush(); };
+  return { api, bridge, elements, pages, sends, choices, threads, timers, animations, mic, upgrades, images, transcriptions, flush, phone: () => phoneDeps, phoneCalls, storage, timeouts, exited: () => exited, pickRow,
+    debounce: async () => { for (const [id, { fn }] of timeouts) { timeouts.delete(id); fn(); } await flush(); },
     menu: async id => { event({ menuItemClickEvent: { itemID: id } }); await flush(); },
     system: async type => { event({ sysEvent: { eventType: type } }); await flush(); },
     press: () => { event({ sysEvent: { eventType: 9 } }); },
     release: () => { event({ sysEvent: { eventType: 10 } }); },
     audio: () => { event({ audioEvent: { audioPcm: new Uint8Array(32000) } }); },
-    pick: async i => { event({ listEvent: { currentSelectItemIndex: i, eventType: 0 } }); await flush(); },
+    // Existing Coding checks index the body rows. Selector tests use the physical row.
+    pick: i => pickRow(i + (pages.at(-1).menuObject?.menuItems?.some(item => item.itemID === 1001) ? 1 : 0)),
     tap: async () => { event({ textEvent: { eventType: 0 } }); await flush(); },
     back: async () => { event({ textEvent: { eventType: 3 } }); await flush(); },
     scroll: async direction => { event({ textEvent: { eventType: direction === 'up' ? 1 : 2 } }); await flush(); },
@@ -103,6 +120,160 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
 }
 
 const voiceBody = h => h.upgrades.findLast(u => u.containerName === 'voice-body')?.content;
+
+const moduleHarness = options => harness(15, false, 'tap', '', 0, false, '', '', '', options);
+const container = (h, name) => h.pages.at(-1).textObject.find(c => c.containerName === name);
+const mailFixture = () => {
+  const date = new Date(2026, 10, 25, 14, 5).getTime();
+  const item = { account: 'work', id: 'news-1', from: 'Test Desk', subject: 'Field survey', date, unread: true, count: 2 };
+  const messages = [
+    { id: 'old', from: 'First Desk', date: date - 60_000, text: 'Earlier notes.' },
+    { id: 'new', from: 'Second Desk', date, text: Array.from({ length: 15 }, (_, i) => `Survey line ${i + 1}.`).join('\n') },
+  ];
+  const requests = [];
+  const fixture = {
+    accounts: async () => [{ id: 'work', short: 'W', ok: true }],
+    labels: async () => [{ id: 'INBOX', name: 'Inbox', unread: Number(item.unread) }, { id: 'Label_1', name: 'Bulletins', unread: Number(item.unread) }],
+    threads: async (filter, page) => {
+      requests.push({ filter: [...filter], page });
+      return { items: Array.from({ length: 8 }, (_, i) => ({ ...item, id: `page${page}-${i}`, subject: page ? `Page ${page} survey` : item.subject })), hasMore: page === 0, unread: Number(item.unread) };
+    },
+    thread: async () => ({ subject: item.subject, messages }),
+    read: async () => { item.unread = false; return { ok: true }; },
+  };
+  return { fixture, messages, requests };
+};
+
+test('row zero fits the centered longest release title, module labels and counts', () => {
+  const { glassWidth, moduleHeading, nativeRight, MENU_HEAD, MENU_COUNT } = listExports;
+  const heading = 'Orca-glass 1.0.59';
+  for (const [label, count] of [['Coding', '9999 sessions'], ['Email', '99999 unread'], ['コーディング', 'セッション9999件'], ['メール', '未読99999件']]) {
+    const row = moduleHeading(label, heading);
+    const centre = MENU_HEAD.xPosition + glassWidth(row.slice(0, -heading.length));
+    const headEnd = centre + glassWidth(heading);
+    const countRow = nativeRight(count, MENU_COUNT.width);
+    const countStart = MENU_COUNT.xPosition + glassWidth(countRow.slice(0, -count.length));
+    assert.ok(Math.abs(centre + glassWidth(heading) / 2 - 288) <= glassWidth(' ') / 2);
+    assert.ok(MENU_HEAD.xPosition + glassWidth(label) < centre);
+    assert.ok(headEnd + 6 <= countStart, `${row} / ${countRow}`);
+    assert.ok(MENU_COUNT.xPosition + glassWidth(countRow) <= 576);
+  }
+});
+
+test('row zero debounces module loads, wraps over offered modules, and restores each position', async () => {
+  const { fixture, requests } = mailFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'future', 'email', 'email'] }, mail: fixture });
+  assert.match(container(h, 'head').content, /^Coding\s+Orca-glass/);
+  for (let i = 0; i < 10; i++) await h.scroll('down');
+  const codingPage = container(h, 'body').content;
+  assert.match(codingPage, /Session 7/);
+  assert.match(container(h, 'menu-cursor').content.split('\n')[1], /^>/);
+  await h.scroll('up');
+  assert.match(h.upgrades.at(-1).content.split('\n')[0], /^>/);
+  await h.tap();
+  assert.match(h.upgrades.at(-1).content, /^Email\s+Orca-glass/);
+  assert.equal([...h.timeouts.values()][0].delay, 600);
+  assert.equal(requests.length, 0);
+  await h.tap(); await h.debounce();
+  assert.equal(requests.length, 0);
+  assert.equal(h.storage.get('module'), 'coding');
+  await h.tap(); await h.debounce();
+  assert.equal(h.storage.get('module'), 'email');
+  assert.equal(requests[0].page, 0);
+  for (let i = 0; i < 10; i++) await h.scroll('down');
+  assert.match(container(h, 'body').content, /Page 1 survey/);
+  await h.scroll('up'); await h.tap(); await h.debounce();
+  assert.equal(container(h, 'body').content, codingPage);
+  assert.match(container(h, 'menu-cursor').content.split('\n')[0], /^>/);
+  await h.tap(); await h.debounce();
+  assert.match(container(h, 'body').content, /Page 1 survey/);
+  assert.match(container(h, 'menu-cursor').content.split('\n')[0], /^>/);
+  await h.back();
+  assert.equal(h.exited(), 1);
+});
+
+test('missing capability modules fall back to Coding even with Email saved', async () => {
+  const h = await moduleHarness({ storage: { module: 'email' } });
+  assert.match(container(h, 'head').content, /^Coding\b/);
+  const page = h.pages.at(-1);
+  await h.tap(); await h.debounce();
+  assert.equal(h.pages.at(-1), page);
+  assert.equal(h.timeouts.size, 0);
+});
+
+test('mail list dates use the local day, and filter summaries show first label and extras', () => {
+  const { mailDate, mailFilterSummary, mailFilterColumn } = mailModule({});
+  const now = new Date(2026, 10, 26, 23, 30);
+  assert.equal(mailDate(new Date(2026, 10, 26, 14, 5).getTime(), now), '14:05');
+  assert.equal(mailDate(new Date(2026, 10, 25, 23, 59).getTime(), now), '25 Nov');
+  assert.equal(mailFilterSummary(new Set(), new Map()), 'None');
+  assert.equal(mailFilterSummary(new Set(['work:INBOX']), new Map()), 'Inbox');
+  const names = new Map([['work:Label_1', 'Bulletins']]);
+  assert.equal(mailFilterSummary(new Set(['work:Label_1', 'work:INBOX', 'work:Label_2']), names), 'Bulletins +2');
+  const fitted = mailFilterColumn(`${'Long label '.repeat(12).trim()} +2`, 2);
+  assert.match(fitted, /… \+2\]$/);
+  assert.ok(listExports.glassWidth(fitted) <= listExports.MENU_RIGHT.width - 6);
+});
+
+test('the mail POST carries the account and thread ID and never replays after a disconnect', async () => {
+  const exports = {};
+  const requests = [];
+  let resolveCount = 0;
+  const source = ts.transpileModule(readFileSync(new URL('../app/src/api.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  vm.runInNewContext(source, { exports, require: () => ({}), TextEncoder, Uint8Array, AbortSignal,
+    fetch: async (url, req) => { requests.push({ url, req }); throw new Error('synthetic disconnect'); } });
+  exports.setConnection({ token: 'sample', base: 'http://127.0.0.1:12345', resolve: async () => { resolveCount++; return 'http://127.0.0.1:12346'; } });
+  await assert.rejects(exports.api.mail.read('work', 'thread-123'), /Delivery uncertain/);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /\/api\/mail\/read\?/);
+  assert.equal(requests[0].req.method, 'POST');
+  assert.deepEqual(JSON.parse(requests[0].req.body), { account: 'work', threadId: 'thread-123' });
+  assert.equal(resolveCount, 0);
+});
+
+test('mail reader assembles chronological headers and opens at the newest message start', () => {
+  const { mailReaderText } = mailModule({});
+  const { messages } = mailFixture();
+  const { text, openingOffset } = mailReaderText({ subject: 'Field survey', messages: messages.toReversed() });
+  assert.match(text, /^From: First Desk\nDate: [^\n]+\nSubject: Field survey\n\nEarlier notes\.\n\nFrom: Second Desk/);
+  assert.match(text.slice(openingOffset), /^From: Second Desk\nDate: [^\n]+\nSubject: Field survey\n\nSurvey line 1\./);
+});
+
+test('Email restores its saved filter, skips account headings, and retries failed mark-read on reopen', async () => {
+  const { fixture, requests } = mailFixture();
+  let attempts = 0, h;
+  const read = fixture.read;
+  fixture.read = async () => {
+    attempts++;
+    assert.match(container(h, 'hint').content, /Pg2\/4$/);
+    assert.match(container(h, 'body').content, /^From: Second Desk/);
+    if (attempts === 1) throw new Error('synthetic disconnect');
+    return read();
+  };
+  h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] }, storage: { module: 'email', 'mail-labels': '["work:Label_1"]' }, mail: fixture });
+  assert.match(container(h, 'menu-right').content, /\[Bulletins\]/);
+  await h.pickRow(1);
+  assert.equal(container(h, 'body').content.split('\n')[1], 'W');
+  await h.scroll('down');
+  assert.match(h.upgrades.at(-1).content, /> \[ \] Inbox/);
+  await h.tap();
+  assert.equal(h.storage.get('mail-labels'), '["work:Label_1","work:INBOX"]');
+  await h.back();
+  assert.deepEqual(requests.at(-1).filter, ['work:Label_1', 'work:INBOX']);
+  await h.pickRow(2);
+  assert.equal(attempts, 1);
+  assert.equal(h.upgrades.findLast(update => update.containerName === 'voice').content, 'not marked read');
+  assert.deepEqual(Array.from(h.pages.at(-1).menuObject.menuItems, item => item.itemName), ['Font: Native text', 'App Brightness: 15']);
+  h.press(); h.release(); await h.flush();
+  assert.equal(h.mic.length, 0);
+  await h.scroll('up');
+  assert.match(h.upgrades.findLast(update => update.containerName === 'body').content, /^From: First Desk/);
+  await h.back();
+  assert.match(container(h, 'menu-count').content, /1 unread$/);
+  await h.pickRow(2); await h.back();
+  assert.equal(attempts, 2);
+  assert.match(container(h, 'menu-count').content, /0 unread$/);
+});
 const statusHint = h => h.upgrades.findLast(u => u.containerName === 'hint').content.trim();
 const menuItems = h => h.pages.at(-1).listObject?.[0].itemContainer.itemName || h.pages.at(-1).textObject.find(c => c.containerName === 'body').content.split('\n').map(row => row.trim().replace(/^> ?/, '').replace(/^[*/?+◇]\s+/, ''));
 
@@ -662,6 +833,7 @@ test('compact session menu uses native text and one update per cursor move', asy
   assert.equal(h.upgrades[0].content.split('\n')[1].trimStart(), '>*');
   await h.scroll('down');
   assert.equal(h.pages.length, pages);
+  await h.scroll('down');
   await h.tap();
   assert.equal(h.pages.at(-1).textObject[1].content, 'Content terminal-0');
 });
@@ -718,6 +890,7 @@ test('hardware rejecting aligned layout gets an operable compact fallback', asyn
   await h.scroll('down');
   assert.equal(h.upgrades.at(-1).containerName, 'body');
   await h.scroll('down');
+  await h.scroll('down');
   await h.tap();
   assert.equal(h.pages.at(-1).textObject[1].content, 'Content terminal-0');
   await h.back();
@@ -746,7 +919,7 @@ test('menu activity polling starts a spinner after a session becomes busy', asyn
   assert.equal(h.images.length, 0);
   const bodyWrites = h.upgrades.filter(u => u.containerName === 'body');
   assert.equal(bodyWrites.length, 0);
-  assert.match(after.split('\n')[2], /^[ >][ ·]{3}$/);
+  assert.match(after.split('\n')[3], /^[ >][ ·]{3}$/);
 });
 
 test('locking the phone keeps the open chat polling', async () => {
@@ -792,10 +965,10 @@ test('action, idle and working titles share one fixed leading space', () => {
   ];
   assert.equal(listExports.menuNativeText(rows), ' Filter by Agent\n Usage\n Idle\n Working');
   for (let frame = 0; frame < 3; frame++) {
-    const markers = listExports.menuCursorText(rows, 3, frame).split('\n');
-    assert.equal(markers.length, rows.length);
-    assert.equal(markers[3].length, 4);
-    assert.equal(markers[3][0], '>');
+    const markers = listExports.menuCursorText(rows, 4, frame).split('\n');
+    assert.equal(markers.length, rows.length + 1);
+    assert.equal(markers[4].length, 4);
+    assert.equal(markers[4][0], '>');
   }
 });
 
@@ -1024,17 +1197,19 @@ test('workspaces with the same project name are filtered by exact Orca ID', asyn
 test('session edge swipes change pages in both directions and clamp at the outer ends', async () => {
   const h = await harness(15);
   assert.equal(menuItems(h).length, 9);
-  for (let i = 0; i < 9; i++) await h.scroll('down');
+  for (let i = 0; i < 10; i++) await h.scroll('down');
   assert.match(menuItems(h)[2], /Session 7/);
-  assert.match(h.pages.at(-1).textObject.find(c => c.containerName === 'menu-cursor').content.split('\n')[0], /^>/);
+  assert.match(h.pages.at(-1).textObject.find(c => c.containerName === 'menu-cursor').content.split('\n')[1], /^>/);
+  await h.scroll('up');
+  assert.match(h.upgrades.at(-1).content.split('\n')[0], /^>/);
   await h.scroll('up');
   assert.match(menuItems(h)[2], /Session 0/);
-  assert.match(h.pages.at(-1).textObject.find(c => c.containerName === 'menu-cursor').content.split('\n')[8], /^>/);
-  for (let i = 0; i < 8; i++) await h.scroll('up');
+  assert.match(h.pages.at(-1).textObject.find(c => c.containerName === 'menu-cursor').content.split('\n')[9], /^>/);
+  for (let i = 0; i < 9; i++) await h.scroll('up');
   const count = h.pages.length;
   await h.scroll('up');
   assert.equal(h.pages.length, count);
-  for (let i = 0; i < 18; i++) await h.scroll('down');
+  for (let i = 0; i < 19; i++) await h.scroll('down');
   assert.equal(menuItems(h).length, 3);
   assert.match(menuItems(h)[2], /Session 14/);
   await h.scroll('down'); await h.scroll('down');
@@ -1079,7 +1254,7 @@ test('rapid edge swipes and clicks cannot skip pages or activate a row during a 
 
 test('an in-flight page fetch cannot reopen the glasses after system exit', async () => {
   const h = await harness(15);
-  for (let i = 0; i < 8; i++) await h.scroll('down');
+  for (let i = 0; i < 9; i++) await h.scroll('down');
   let finish;
   h.api.threads = () => new Promise(resolve => { finish = resolve; });
   await h.scroll('down');

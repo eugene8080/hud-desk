@@ -1,7 +1,32 @@
 // デモモード: 中継サーバなしで全画面を試せる架空データ(審査・ストア画像用)。実在の名前や会話は入れない
 import type { Lang } from './i18n';
+import type { MailThread } from './api';
 
 type Thread = { handle: string; title: string; agent: string; state: 'idle' | 'busy' | 'unknown' };
+
+const demoLabels = ['Inbox', 'Bulletins', 'Events', 'Logistics', 'Planning', 'Projects', 'Reading', 'Reference', 'Travel', 'Updates'];
+const demoSubjects = ['Field notes newsletter', 'Workshop schedule', 'Revised packing list', 'Trail opening', 'Reading list', 'A new meeting room', 'Map corrections', 'April notes', 'Survey draft', 'Volunteer schedule'];
+const marked = new Set<string>();
+const mailDate = (i: number) => Date.now() - (i === 0 ? 21 : i * 480) * 60_000;
+const demoMail = () => demoSubjects.map((subject, i): MailThread & { labels: string[] } => ({
+  account: 'work', id: `demo-mail-${i}`, from: ['Field Notes Desk', 'Workshop Desk', 'Trail Team'][i % 3], subject,
+  date: mailDate(i), unread: i % 3 !== 2 && !marked.has(`demo-mail-${i}`), count: i === 0 ? 3 : 1,
+  labels: [...(i !== 3 ? ['INBOX'] : []), `Label_${i % (demoLabels.length - 1) + 1}`],
+}));
+
+function newsletterText(i: number): string {
+  const history = i ? '\n\nOn Tuesday the Field Notes Desk wrote:\n> The early route plan is available.\n> Follow the signs to the footbridge.' : '';
+  const paragraphs = [
+    'Morning survey. The team checked the eastern loop after the first rain. The gravel approach held up well and the creek was still below the footbridge.',
+    'Route notes. Take the branch at the white trail post. The side path closer to the water ends at the reed bed. Record observations from the marked lookout.',
+    'Equipment. Bring a small notebook and a pencil. The survey cards have space for the time, cloud cover, and any changes you notice in the trail surface.',
+    'Next meeting. We will compare the north and east loops at the field station. Leave the completed survey cards in the tray on the left by the door.',
+  ];
+  // The sample source carries quoted history. The fixture API serves the same
+  // cleaned message shape as the bridge, which removes the old quoted lines.
+  const edition = ['First field report.', 'Second field report.', 'Latest field report.'][i];
+  return ([edition, ...paragraphs].join('\n\n') + history).replace(/\n\nOn Tuesday the Field Notes Desk wrote:\n(?:>[^\n]*(?:\n|$))+$/, '');
+}
 
 const content = {
   en: {
@@ -32,6 +57,35 @@ export function demoCall(lang: Lang, method: string, path: string, body: unknown
   const searchParams = new URLSearchParams(queryStart === -1 ? '' : path.slice(queryStart + 1));
   const b = (body ?? {}) as Record<string, unknown>;
   switch (`${method} ${pathname}`) {
+    case 'GET /api/capabilities':
+      return { voice: true, modules: ['coding', 'email'] };
+    case 'GET /api/mail/accounts':
+      return [{ id: 'work', short: 'W', ok: true }];
+    case 'GET /api/mail/labels':
+      return demoLabels.map((name, i) => {
+        const id = i === 0 ? 'INBOX' : `Label_${i}`;
+        return { id, name, unread: demoMail().filter(row => row.unread && row.labels.includes(id)).length };
+      });
+    case 'GET /api/mail/threads': {
+      const filter = new Set(searchParams.get('filter')?.split(','));
+      const page = Number(searchParams.get('page'));
+      const size = Number(searchParams.get('size')) || 8;
+      const rows = demoMail().filter(row => row.labels.some(label => filter.has(`${row.account}:${label}`)));
+      return { items: rows.slice(page * size, (page + 1) * size).map(({ labels, ...row }) => row), hasMore: rows.length > (page + 1) * size,
+        unread: rows.filter(row => row.unread).length };
+    }
+    case 'GET /api/mail/thread': {
+      const thread = demoMail().find(row => row.account === searchParams.get('account') && row.id === searchParams.get('id'));
+      if (!thread) throw new Error('Unknown sample thread');
+      return { subject: thread.subject, messages: Array.from({ length: thread.count }, (_, i) => ({
+        id: `${thread.id}-${i}`, from: thread.from, to: 'Sample Reader', cc: '', date: thread.date - (thread.count - 1 - i) * 86400000,
+        text: thread.count > 1 ? newsletterText(i) : 'The updated notes are ready for the next meeting.',
+      })) };
+    }
+    case 'POST /api/mail/read':
+      if (b.account !== 'work' || !demoMail().some(row => row.id === b.threadId)) throw new Error('Unknown sample thread');
+      marked.add(String(b.threadId));
+      return { ok: true };
     case 'GET /healthz':
       return { ok: true };
     case 'GET /api/threads':

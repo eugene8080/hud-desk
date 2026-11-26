@@ -16,7 +16,7 @@ import {
   type EvenAppBridge,
   type EvenHubEvent,
 } from '@evenrealities/even_hub_sdk';
-import { api, currentBase, setApiLang, setConnection, setDemo, type ChoiceMenu, type Provider, type Thread, type Usage, type Workspace } from './api';
+import { api, currentBase, setApiLang, setConnection, setDemo, type ChoiceMenu, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
 import { parseCode, resolveBase } from './pairing';
 import { applyPage, detectLang, getLang, setLang, t as tr } from './i18n';
 import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth } from './text';
@@ -26,7 +26,8 @@ import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usag
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone } from './phone';
 import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, inkByte, nativeTextColor, parseInk, type FineFont, type FineStatus } from './fine-text';
-import { agentLabel, sessionRow, sessionListTitle, sessionHeading, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type SessionColumns } from './session-list';
+import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
+import { Mail, mailColumns, type ReaderContent, type ReaderSource } from './mail';
 
 // 画面 576x288。上に見出し(テキスト)、下に本文(リスト or テキスト)の2段構成で統一する。
 const HEAD = { containerID: 1, containerName: 'head', xPosition: 0, yPosition: 0, width: 576, height: 36 };
@@ -61,8 +62,8 @@ const TEXT_BYTES = 999;
 const POLL_MS = 1000;
 
 type Screen =
-  | { kind: 'list'; title: string; items: string[]; sessionList?: boolean; workspacePicker?: boolean; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; connectedCount?: number; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void }
-  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: string[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: Thread; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; pattern?: boolean; pendingPattern?: boolean; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; onHold?: () => void; };
+  | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void }
+  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: string[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; pattern?: boolean; pendingPattern?: boolean; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
 let current: Screen | null = null;
@@ -75,6 +76,13 @@ let statusAnimation: ReturnType<typeof setInterval> | undefined;
 let readerWrites: Promise<void> = Promise.resolve();
 let panelWrites: Promise<void> = Promise.resolve();
 let sessionCursorWrites: Promise<void> = Promise.resolve();
+let modules: GlassModule[] = ['coding'];
+let activeModule: GlassModule = 'coding';
+const positions: Record<GlassModule, ModulePosition> = { coding: { page: 0, cursor: 0 }, email: { page: 0, cursor: 0 } };
+let moduleTimer: ReturnType<typeof setTimeout> | undefined;
+let moduleRevision = 0;
+let modulePending = false;
+let mail: Mail;
 let selectedThread: Thread | null = null;
 let sending = false;
 let holding = false;
@@ -104,7 +112,7 @@ let phone: ReturnType<typeof createPhone> | null = null;
 // A phone change redraws whichever filter-dependent glasses page is showing.
 function refreshGlasses() {
   const s = current;
-  if (s?.kind === 'list' && s.sessionList) void home();
+  if (s?.kind === 'list' && s.module === 'coding' && !modulePending) void home(0, 0);
   else if (s?.kind === 'list' && s.workspacePicker) void workspaceOptions();
   else if (s?.kind === 'list' && s.agentPicker) void viewOptions();
 }
@@ -129,6 +137,14 @@ function selectThread(t: Thread | null) {
 // 8px (under one glyph) in case hardware rendering differs slightly.
 const READER_WRAP_WIDTH = 552;
 type TextScreen = Extract<Screen, { kind: 'text' }>;
+function messagePages(s: TextScreen, paginate: (text: string) => string[], transform = (text: string) => text) {
+  const start = s.openingOffset!;
+  const before = start ? paginate(transform(s.text.slice(0, start - 2))) : [];
+  s.pages = [...before, ...paginate(transform(s.text.slice(start)))];
+  s.responsePage = before.length;
+  s.pageText = s.text;
+  return s.pages;
+}
 function readerLayout(s: TextScreen) {
   if (s.pageText !== s.text || !s.pages || s.pagesFine !== s.fine) {
     s.pagesFine = s.fine;
@@ -137,6 +153,7 @@ function readerLayout(s: TextScreen) {
       const layout = fineLayout(s.fine);
       const measure = fineMeasure(s.fine);
       const width = layout.textWidth, rows = layout.rows;
+      if (s.openingOffset !== undefined) return messagePages(s, text => readerPages(text, measure, width, rows, Infinity), alignMarkdownTables);
       // Monospace: Markdown tables are padded so their columns line up.
       const text = alignMarkdownTables(s.text);
       const start = latestResponseStart(text);
@@ -156,6 +173,7 @@ function readerLayout(s: TextScreen) {
     if (ctx) ctx.font = '21px Arial';
     // Wrap with the measured firmware font; Arial only sizes non-ASCII glyphs.
     const measure = (text: string) => glassTextWidth(text, ch => ctx ? ctx.measureText(ch).width : 21);
+    if (s.openingOffset !== undefined) return messagePages(s, text => readerPages(text, measure, READER_WRAP_WIDTH, READER_ROWS));
     // Open on the latest response. When it already lies wholly on the last
     // page, keep normal pages; otherwise start a fresh page at its first line
     // so it opens at the page top. Pages keep every character except the
@@ -215,6 +233,7 @@ function statusLeft(label: string, model?: string) {
   const prefix = model ? `${model} ` : '';
   return label[0] !== '/' && label.length > 2 ? `${prefix}    ${label.slice(2)}` : prefix + label;
 }
+const readerStatusLeft = (s: TextScreen, label = s.activityLabel!) => s.reader?.coding ? statusLeft(label, s.model) : label;
 const statusIconX = (model?: string) => VOICE.xPosition + (model ? glassWidth(`${model} `) : 0);
 
 // Right part: '[Tap&hold] Pg77/78', right-aligned in its own layer on the same
@@ -222,11 +241,12 @@ const statusIconX = (model?: string) => VOICE.xPosition + (model ? glassWidth(`$
 // and shrink the hint so the two parts never collide.
 function readerHint(s: TextScreen, seconds: number | null | undefined) {
   bodyText(s);
+  const page = s.refreshing ? tr('refreshing') : tr('pageCounter', s.offset! + 1, s.pages!.length);
+  if (!s.reader?.coding) return nativeRight(page, HINT.width);
   const left = s.activityState === 'working'
     ? Math.max(...workingLabels().map(word => glassWidth(statusLeft(`. ${word}...`, s.model))))
     : glassWidth(statusLeft(s.activityLabel || readerStatus('unknown'), s.model));
   const room = Math.min(VOICE.width - 6 - left - 10, HINT.width - 6);
-  const page = s.refreshing ? tr('refreshing') : tr('pageCounter', s.offset! + 1, s.pages!.length);
   return nativeRight(statusRight(seconds, !!s.choiceMenu, page, text => glassWidth(text) <= room), HINT.width);
 }
 
@@ -240,7 +260,7 @@ function flipReader(s: TextScreen, delta: number) {
   }
   const pages = readerLayout(s);
   // Swiping down past the last page resumes live updates and fetches now.
-  if (delta > 0 && !s.pageWriting && (s.offset ?? 0) >= pages.length - 1) { void refreshReader(s); return; }
+  if (delta > 0 && !s.pageWriting && (s.offset ?? 0) >= pages.length - 1) { if (s.reader?.coding) void refreshReader(s); return; }
   s.reading = true; // Freeze this snapshot and its page count while browsing.
   s.pageTarget = Math.max(0, Math.min(pages.length - 1, (s.pageTarget ?? s.offset ?? 0) + delta));
   if (s.pageWriting) return;
@@ -290,14 +310,16 @@ function writePanel(label: string, active: () => boolean = () => true) {
   const write = panelWrites.then(async () => {
     if (!active() || owner?.kind !== 'text' || !owner.reader) return false;
     if (owner.fine) { owner.fineLabel = label; requestFineStatus(owner); return true; }
-    let visible = statusLeft(label, owner.model);
-    try {
-      await bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: STATUS_ICON.containerID, containerName: STATUS_ICON.containerName,
-        imageData: statusPixels(label[0] !== '/' ? label[0] : '', inkByte(inkLevel)) }));
-    } catch (e) {
-      // A missing image renderer must not prevent the status text.
-      diag((e as Error).message);
-      visible = owner.model ? `${owner.model} ${label}` : label;
+    let visible = readerStatusLeft(owner, label);
+    if (owner.reader.coding) {
+      try {
+        await bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: STATUS_ICON.containerID, containerName: STATUS_ICON.containerName,
+          imageData: statusPixels(label[0] !== '/' ? label[0] : '', inkByte(inkLevel)) }));
+      } catch (e) {
+        // A missing image renderer must not prevent the status text.
+        diag((e as Error).message);
+        visible = owner.model ? `${owner.model} ${label}` : label;
+      }
     }
     if (!active()) return false;
     return bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: VOICE.containerID, containerName: VOICE.containerName, content: visible || ' ', textColor: textBrightness() }));
@@ -324,7 +346,7 @@ async function show(s: Screen, reloadText = false) {
   clearInterval(statusAnimation);
   clearInterval(menuAnimation);
   clearInterval(menuPoll);
-  if (s.kind === 'text' && s.reader) s.activityLabel ??= readerStatus('unknown');
+  if (s.kind === 'text' && s.reader) s.activityLabel = s.reader.statusText?.() ?? s.activityLabel ?? readerStatus('unknown');
   if (s.kind === 'text' && s.reader && !s.voice) {
     const compare = !!s.pendingPattern;
     s.pendingPattern = false;
@@ -338,25 +360,25 @@ async function show(s: Screen, reloadText = false) {
   const content = s.kind === 'text' ? (s.voice ? voiceBodyText(s) : bodyText(s)) : '';
   const fine = s.kind === 'text' && !!s.reader && !!s.fine;
   const uploadText = !fine && (reloadText || (s.kind === 'text' && !!s.reader && s.text.length > 900) || new TextEncoder().encode(content).length > 999);
-  const head = new TextContainerProperty({ ...HEAD, ...(s.kind === 'text' && s.usageMode ? { height: 28 } : {}), ...(s.kind === 'text' && s.reader ? { xPosition: 16, yPosition: 2, width: 544, height: 28, zOrderIndex: 1 } : {}), content: s.kind === 'list' && s.sessionList ? sessionHeading() : clipBytes(screenTitle(s), TEXT_BYTES), isEventCapture: 0 });
+  const head = new TextContainerProperty({ ...HEAD, ...(s.kind === 'text' && s.usageMode ? { height: 28 } : {}), ...(s.kind === 'text' && s.reader ? { xPosition: 16, yPosition: 2, width: 544, height: 28, zOrderIndex: 1 } : {}), content: clipBytes(screenTitle(s), TEXT_BYTES), isEventCapture: 0 });
   // Firmware retains Display off, Brightness and Close alongside these actions.
-  const menu = (s.kind === 'list' && s.sessionList) || (s.kind === 'text' && s.menuActions) ? { menuObject: new MenuContainerProperty({
+  const menu = s.menuActions ? { menuObject: new MenuContainerProperty({
     menuItems: s.menuActions!.map(action => new MenuItemProperty({ itemID: action.id, itemName: action.label })),
   }) } : {};
   let page =
     s.kind === 'list'
       ? {
-          containerTotalNum: s.sessionList ? 6 : 2,
+          containerTotalNum: s.module ? 6 : 2,
           ...menu,
-          textObject: s.sessionList ? [
-            new TextContainerProperty({ ...HEAD, width: 300, height: 28, content: sessionHeading(), isEventCapture: 0, paddingLength: 0, zOrderIndex: 1 }),
-            new TextContainerProperty({ containerID: 3, containerName: 'menu-count', xPosition: 300, yPosition: 0, width: 276, height: 28, content: nativeRight(tr('sessionCount', s.connectedCount ?? 0), 276), isEventCapture: 0, paddingLength: 0, zOrderIndex: 2 }),
+          textObject: s.module ? [
+            new TextContainerProperty({ ...HEAD, ...MENU_HEAD, content: moduleHeading(moduleLabel(activeModule)), isEventCapture: 0, paddingLength: 0, zOrderIndex: 1 }),
+            new TextContainerProperty({ ...MENU_COUNT, content: nativeRight(s.count ?? '', MENU_COUNT.width), isEventCapture: 0, paddingLength: 0, zOrderIndex: 2 }),
             new TextContainerProperty({ containerID: 5, containerName: 'menu-input', xPosition: 0, yPosition: 0, width: 576, height: 288, content: ' ', isEventCapture: 1, paddingLength: 0, zOrderIndex: 0 }),
             new TextContainerProperty({ ...MENU_CURSOR, content: menuCursorText(s.columns!, s.selected || 0), isEventCapture: 0, paddingLength: 0, zOrderIndex: 3 }),
             new TextContainerProperty({ ...MENU_LEFT, content: menuNativeText(s.columns!), isEventCapture: 0, paddingLength: 0, zOrderIndex: 4 }),
             new TextContainerProperty({ containerID: 6, containerName: 'menu-right', ...MENU_RIGHT, yPosition: 28, height: 260, content: s.columns!.map(r => nativeRight(r.right, MENU_RIGHT.width)).join('\n'), isEventCapture: 0, paddingLength: 0, zOrderIndex: 5 }),
           ] : [head],
-          ...(s.sessionList ? {} : { listObject: [
+          ...(s.module ? {} : { listObject: [
             new ListContainerProperty({
               ...BODY,
               isEventCapture: 1,
@@ -374,7 +396,7 @@ async function show(s: Screen, reloadText = false) {
             ...(s.usageMode ? [new TextContainerProperty({ ...USAGE_RESET, content: tr('resetLine', resetModeLabel(s.usageMode)), isEventCapture: 0 })] : []),
             ...(s.reader ? [
               new TextContainerProperty({ ...HINT, content: readerHint(s, s.reportedSeconds), textColor: textBrightness(), isEventCapture: 0, paddingLength: 0, zOrderIndex: 6 }),
-              new TextContainerProperty({ ...VOICE, content: statusLeft(s.activityLabel!, s.model), textColor: textBrightness(), isEventCapture: 0, paddingLength: 0, zOrderIndex: 5 }),
+              new TextContainerProperty({ ...VOICE, content: readerStatusLeft(s), textColor: textBrightness(), isEventCapture: 0, paddingLength: 0, zOrderIndex: 5 }),
               new TextContainerProperty({ ...FRAME, content: ' ', textColor: textBrightness(), borderWidth: 1, borderColor: inkLevel, borderRadius: 0, isEventCapture: 0, zOrderIndex: 0 }),
               new TextContainerProperty({ ...DIVIDER, content: ' ', textColor: textBrightness(), borderWidth: 1, borderColor: inkLevel, isEventCapture: 0, zOrderIndex: 3 }),
             ] : [])],
@@ -399,27 +421,27 @@ async function show(s: Screen, reloadText = false) {
         throw new Error(`${sessionHeading()}: native startup failed (${result}); bootstrap recovery rejected.`);
       }
     }
-    if (s.kind === 'list' && s.sessionList && compactMenuOnly) {
+    if (s.kind === 'list' && s.module && compactMenuOnly) {
       s.compat = true; page = compatibilityMenu(s, menu) as typeof page;
     }
     if (s.kind === 'list' && (s.workspacePicker || s.agentPicker || s.textPicker)) { s.compat = true; page = compatibilityMenu(s, {}) as typeof page; }
     let accepted = await bridge.rebuildPageContainer(new RebuildPageContainer(page));
-    if (!accepted && s.kind === 'list' && s.sessionList && !s.compat) {
+    if (!accepted && s.kind === 'list' && s.module && !s.compat) {
       s.compat = true;
       accepted = await bridge.rebuildPageContainer(new RebuildPageContainer(compatibilityMenu(s, menu)));
       if (accepted) { compactMenuOnly = true; diag(`${sessionHeading()}: aligned layout rejected; compact compatibility menu active.`); }
     }
-    if (!accepted) throw new Error(`${sessionHeading()}: ${s.kind === 'list' && s.sessionList ? 'both aligned and compact menus rejected' : tr('screenRejected')}.`);
-    if (s.kind === 'list' && s.sessionList) document.getElementById('menu-layout')!.textContent = s.compat
+    if (!accepted) throw new Error(`${sessionHeading()}: ${s.kind === 'list' && s.module ? 'both aligned and compact menus rejected' : tr('screenRejected')}.`);
+    if (s.kind === 'list' && s.module) document.getElementById('menu-layout')!.textContent = s.compat
       ? tr('menuLayoutCompact') : tr('menuLayoutAligned');
     if (uploadText && s.kind === 'text') {
       const accepted = await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: BODY.containerID, containerName: BODY.containerName, content }));
       if (!accepted) throw new Error(tr('textLoadFailed'));
     }
-    if (s.kind === 'list' && s.sessionList && !s.compat) startMenuSpinner(s);
+    if (s.kind === 'list' && s.module === 'coding' && !s.compat) startMenuSpinner(s);
     if (s.kind === 'text' && s.reader) {
       if (s.fine && !s.voice) await paintFine(s, content, s.offset ?? 0, s.pattern);
-      else await bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: STATUS_ICON.containerID, containerName: STATUS_ICON.containerName, imageData: statusPixels(s.activityLabel![0] === '/' ? '' : s.activityLabel![0], inkByte(inkLevel)) })).catch(e => diag((e as Error).message));
+      else if (s.reader.coding) await bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: STATUS_ICON.containerID, containerName: STATUS_ICON.containerName, imageData: statusPixels(s.activityLabel![0] === '/' ? '' : s.activityLabel![0], inkByte(inkLevel)) })).catch(e => diag((e as Error).message));
       startReaderUpdates(s);
     }
   } catch (e) {
@@ -454,6 +476,7 @@ async function paintFine(s: TextScreen, content: string, page: number, pattern =
 // changes (and is re-sent) at most once a minute while idle text stays put.
 function fineStatus(s: TextScreen, page: number): FineStatus {
   const label = s.fineLabel ?? s.activityLabel ?? readerStatus('unknown');
+  if (!s.reader?.coding) return { left: label, right: tr('pageCounter', page + 1, readerLayout(s).length) };
   // Working labels start with a Braille spinner frame; tile modes draw the
   // scanner sweep in its place, stepping with the same frame counter.
   const working = label[0] !== '/' && label.length > 2;
@@ -611,15 +634,21 @@ function compatibilityMenu(screen: SessionMenuScreen, menu: object) {
   // The workspace picker has no title row: its ten 27px rows start at the top.
   const picker = !!screen.workspacePicker || !!screen.agentPicker || !!screen.textPicker; // no title row: ten rows
   return { containerTotalNum: 3, ...menu, textObject: [
-    new TextContainerProperty({ ...HEAD, height: 28, content: picker ? ' ' : screen.title, isEventCapture: 0 }),
-    new TextContainerProperty({ ...BODY, yPosition: picker ? 4 : 28, height: picker ? 280 : 260, content: compatibilityText(screen), isEventCapture: 0 }),
+    new TextContainerProperty({ ...HEAD, height: 28, content: ' ', isEventCapture: 0 }),
+    new TextContainerProperty({ ...BODY, yPosition: picker ? 4 : 0, height: picker ? 280 : 288, content: compatibilityText(screen), isEventCapture: 0 }),
     new TextContainerProperty({ containerID: 3, containerName: 'menu-input', xPosition: 0, yPosition: 0,
       width: 576, height: 288, content: ' ', isEventCapture: 1 }),
   ] };
 }
 function compatibilityText(screen: SessionMenuScreen, selected = screen.selected || 0) {
   // Section headings sit flush left without a cursor column.
-  return screen.items.map((item, i) => screen.headings?.includes(i) ? clipBytes(item, 48) : `${i === selected ? '>' : ' '} ${clipBytes(item, 48)}`).join('\n');
+  return screen.items.map((item, i) => {
+    if (screen.module && i === 0) {
+      const left = `${i === selected ? '>' : ' '} ${moduleHeading(moduleLabel(activeModule))}`;
+      return left + nativeRight(screen.count ?? '', 576 - glassWidth(left));
+    }
+    return screen.headings?.includes(i) ? clipBytes(item, 48) : `${i === selected ? '>' : ' '} ${clipBytes(item, 48)}`;
+  }).join('\n');
 }
 function startMenuSpinner(screen: SessionMenuScreen) {
   let polling = false;
@@ -666,12 +695,56 @@ async function updateSessionCursor(screen: SessionMenuScreen) {
   finally { screen.cursorWriting = false; }
 }
 
-function home(page = 0, selected = 0) {
+function cancelModuleSwitch() {
+  if (moduleTimer !== undefined) clearTimeout(moduleTimer);
+  moduleTimer = undefined;
+  modulePending = false;
+  moduleRevision++;
+}
+
+function showModule() { return activeModule === 'email' ? mailHome() : home(); }
+
+function cycleModule(screen: SessionMenuScreen) {
+  const next = nextModule(modules, activeModule);
+  if (next === activeModule) return;
+  activeModule = next;
+  modulePending = true;
+  const revision = ++moduleRevision;
+  if (moduleTimer !== undefined) clearTimeout(moduleTimer);
+  moduleTimer = setTimeout(() => {
+    moduleTimer = undefined;
+    void sessionCursorWrites.then(async () => {
+      if (current !== screen || revision !== moduleRevision) return;
+      // A complete cycle back to the mounted module needs no load.
+      try { if (screen.module !== activeModule) await showModule(); }
+      finally { if (revision === moduleRevision) modulePending = false; }
+    }).catch(e => diag((e as Error).message));
+  }, 600);
+  sessionCursorWrites = sessionCursorWrites.then(async () => {
+    if (current !== screen || revision !== moduleRevision) return;
+    const container = screen.compat ? BODY : HEAD;
+    await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: container.containerID, containerName: container.containerName,
+      content: screen.compat ? compatibilityText(screen) : moduleHeading(moduleLabel(next)) }));
+    await bridge.setLocalStorage('module', next);
+  }).catch(e => diag((e as Error).message));
+}
+
+function showModuleList(module: GlassModule, page: number, selected: number, screen: Omit<SessionMenuScreen, 'kind' | 'title' | 'module' | 'selected'>) {
+  const items = [moduleLabel(module), ...screen.items];
+  const cursor = selected < 0 ? items.length - 1 : Math.min(selected, items.length - 1);
+  const list: SessionMenuScreen = { ...screen, kind: 'list', title: sessionHeading(), module, items, selected: cursor, paintedSelection: cursor,
+    onPick: (i) => { if (i === 0) cycleModule(list); else if (!modulePending) screen.onPick(i - 1); } };
+  positions[module] = { page, cursor };
+  return show(list);
+}
+
+function home(page = positions.coding.page, selected = positions.coding.cursor) {
   selectThread(null);
   return guard('Orca-glass', async () => {
     const owner = current;
+    const revision = moduleRevision;
     const allThreads = await api.threads();
-    if (current !== owner) return;
+    if (current !== owner || revision !== moduleRevision) return;
     // Hermes Agent lists only Hermes sessions; All Orca sessions and each Orca agent
     // exclude Hermes. Each side applies its own workspace selection.
     const selection = activeWorkspaces();
@@ -695,18 +768,74 @@ function home(page = 0, selected = 0) {
       return i === 0 ? { marker: '*', title: tr('filterAgent'), right: `[${providerFilterLabel()}]` }
         : i === 1 ? { marker: '*', title: tr('filterWorkspace'), right: `[${workspaceFilter}]` } : { marker: '', title: a.label, right: '' };
     });
-    const cursor = selected < 0 ? actions.length - 1 : Math.min(selected, actions.length - 1);
-    await show({ kind: 'list', title: sessionListTitle(allThreads.length), sessionList: true, columns, connectedCount: allThreads.length, selected: cursor, paintedSelection: cursor,
+    await showModuleList('coding', page, selected, { columns, count: tr('sessionCount', allThreads.length),
       onPreviousPage: page > 0 ? () => home(page - 1, -1) : undefined,
-      onNextPage: page + 1 < pageCount ? () => home(page + 1) : undefined,
+      onNextPage: page + 1 < pageCount ? () => home(page + 1, 1) : undefined,
       menuActions: [
-        { id: 1001, label: tr('refreshSessions'), run: () => home(page) },
+        { id: 1001, label: tr('refreshSessions'), run: () => home(page, 1) },
         { id: 1002, label: tr('menuNewSession'), run: newSession },
         { id: 1003, label: tr('menuUsage'), run: usage },
       ],
       items: actions.map(a => a.label),
       onPick: i => { actions[i]?.run(); } });
   }, home);
+}
+
+async function mailHome(page = positions.email.page, selected = positions.email.cursor) {
+  selectThread(null);
+  const owner = current;
+  const revision = moduleRevision;
+  try {
+    let result = await mail.list(page);
+    // A changed filter or external mailbox activity can remove the last page.
+    while (page > 0 && !result.items.length && !result.hasMore && current === owner && revision === moduleRevision) result = await mail.list(--page);
+    if (current !== owner || revision !== moduleRevision) return;
+    const columns = [{ marker: '*', title: tr('mailFilter'), right: result.filterColumn }, ...result.items.map(mailColumns)];
+    await showModuleList('email', page, selected, { columns, count: tr('mailUnread', result.unread),
+      items: columns.map(row => `${row.marker || ' '} ${row.title} ${row.right}`),
+      onPreviousPage: page > 0 ? () => mailHome(page - 1, -1) : undefined,
+      onNextPage: result.hasMore ? () => mailHome(page + 1, 1) : undefined,
+      menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
+      onPick: i => { if (i === 0) void mailLabels(0, 0, true); else if (result.items[i - 1]) void openMail(result.items[i - 1]); },
+    });
+  } catch {
+    if (current === owner && revision === moduleRevision) await showModuleList('email', page, 0, {
+      columns: [{ marker: '*', title: tr('mailFilter'), right: '' }, { marker: '', title: tr('mailUnavailable'), right: '' }],
+      items: [tr('mailFilter'), tr('mailUnavailable')],
+      headings: [2],
+      menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
+      onPick: i => { if (i === 0) void mailLabels(0, 0, true); },
+    });
+  }
+}
+
+async function mailLabels(page: number, selected: number, refresh = false) {
+  const owner = current;
+  const revision = moduleRevision;
+  try {
+    const pages = await mail.picker(refresh);
+    if (current !== owner || revision !== moduleRevision) return;
+    const rows = pages[page];
+    const headings = rows.flatMap((row, i) => row.heading ? [i] : []);
+    let cursor = selected < 0 ? rows.length - 1 : Math.min(selected, rows.length - 1);
+    while (headings.includes(cursor)) cursor += selected >= 0 ? 1 : -1;
+    const done = () => mailHome(positions.email.page, 1);
+    await show({ kind: 'list', workspacePicker: true, title: ' ', items: rows.map(row => row.text), headings, selected: cursor,
+      onPreviousPage: page > 0 ? () => mailLabels(page - 1, -1) : undefined,
+      onNextPage: page + 1 < pages.length ? () => mailLabels(page + 1, 2) : undefined,
+      onPick: async i => {
+        const row = rows[i];
+        if (i === 0) { await done(); return; }
+        if (!row?.key) return;
+        const picker = current;
+        positions.email.page = 0;
+        await bridge.setLocalStorage('mail-labels', mail.toggle(row.key));
+        if (current === picker) await mailLabels(page, i);
+      }, onBack: done,
+    });
+  } catch {
+    if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('email'), text: tr('mailUnavailable'), onBack: mailHome, onClick: mailHome });
+  }
 }
 
 // Filter by Agent: Hermes Agent first, a divider, then All Orca sessions and each
@@ -729,7 +858,7 @@ function viewOptions(page?: number, selected?: number) {
       await bridge.setLocalStorage('view-provider', id);
       viewProvider = id;
       phone?.render();
-      await home();
+      await home(0, 0);
     };
     const label = (id: string, name: string) => `${name}${viewProvider === id ? ' ✓' : ''}`;
     const actions: { label: string; run: () => unknown }[] = [
@@ -786,7 +915,7 @@ function workspaceOptions(page = 0, selected = 0) {
       pages.at(-1)!.push(entry);
     }
     page = Math.max(0, Math.min(page, pages.length - 1));
-    const save = saveActiveWorkspaces;
+    const save = async () => { positions.coding.page = 0; await saveActiveWorkspaces(); };
     const actions: { label: string; run: () => unknown }[] = [
       { label: tr('done'), run: () => home() },
       { label: `[${chosen === null ? 'x' : ' '}] ${tr('allWorkspaces')}`, run: async () => { const owner = current; setActiveWorkspaces(null); await save(); if (current === owner) await workspaceOptions(page, 1); } },
@@ -812,8 +941,7 @@ function workspaceOptions(page = 0, selected = 0) {
 
 function thread(t: Thread, note = '') {
   selectThread(t);
-  return guard(t.title, async () => {
-    const title = () => `${t.title}${note ? `  ${note}` : ''}`;
+  const load = async () => {
     const snapshot = await api.thread(t.handle);
     const saved = await api.history(t.handle).catch(() => null);
     const useSaved = ['codex-transcript', 'claude-transcript', 'cursor-transcript', 'opencode-transcript', 'pi-transcript', 'hermes-transcript'].includes(saved?.source || '');
@@ -823,20 +951,48 @@ function thread(t: Thread, note = '') {
       return { state: 'unknown', elapsedSeconds: null };
     });
     const text = readerContent(conversationText, snapshot.menu, snapshot.progress, t.agent === 'claude' && state.state === 'working');
-    await show({ kind: 'text', title: title(), text, conversationText, choiceMenu: snapshot.menu, tail: true, openAtResponse: true, model: (useSaved ? saved!.model : undefined) || snapshot.model, activityState: state.state, reportedSeconds: state.state === 'working' ? state.elapsedSeconds ?? null : null, activityLabel: activityLabel(state.state), savedHistory: useSaved, reader: t, onBack: home,
-      onClick: () => { if (current?.kind === 'text' && current.choiceMenu) void replies(t); },
-      onHold: () => { void record(t, true); } });
-    startReaderUpdates(current);
+    return { text, conversationText, choiceMenu: snapshot.menu, model: (useSaved ? saved!.model : undefined) || snapshot.model, activityState: state.state, reportedSeconds: state.state === 'working' ? state.elapsedSeconds ?? null : null, activityLabel: activityLabel(state.state), savedHistory: useSaved };
+  };
+  const source = { title: `${t.title}${note ? `  ${note}` : ''}`, load, coding: t, hold: () => { void record(t, true); } };
+  return guard(t.title, async () => {
+    await openReader(source, home, () => { if (current?.kind === 'text' && current.choiceMenu) void replies(t); });
   }, home);
 }
 
+async function openReader<T extends ReaderContent>(source: ReaderSource<T> & { coding?: Thread }, onBack: () => void, onClick?: () => void) {
+  const owner = current;
+  const revision = moduleRevision;
+  const loaded = await source.load();
+  if (current !== owner || revision !== moduleRevision) return;
+  const screen: TextScreen = { ...loaded, kind: 'text', title: source.title, tail: true, openAtResponse: true, reader: source, onBack, onClick };
+  await show(screen);
+  if (current !== screen || !source.afterDisplay) return;
+  await source.afterDisplay();
+  if (current === screen && source.statusText) {
+    const label = source.statusText();
+    if (label !== screen.activityLabel) {
+      screen.activityLabel = label;
+      await writePanel(label, () => current === screen);
+    }
+  }
+}
+
+async function openMail(thread: MailThread) {
+  const owner = current;
+  const revision = moduleRevision;
+  const back = () => mailHome();
+  try { await openReader(mail.reader(thread), back); }
+  catch {
+    if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('email'), text: tr('mailUnavailable'), onBack: back, onClick: back });
+  }
+}
 
 // Restart live updates without rebuilding the mounted chat after a successful send.
 function startReaderUpdates(screen: Screen | null): (() => Promise<void>) | undefined {
   clearInterval(poll);
   clearInterval(statusAnimation);
-  if (screen?.kind !== 'text' || !screen.reader) return;
-  const t = screen.reader;
+  if (screen?.kind !== 'text' || !screen.reader?.coding) return;
+  const t = screen.reader.coding;
   screen.statusStartedAt ??= Date.now();
   let animating = false;
   statusAnimation = setInterval(async () => {
@@ -919,10 +1075,10 @@ function history(t: Thread) {
   return guard(t.title, async () => {
     const r = await api.history(t.handle);
     if (current !== previous) return;
-    await show({ kind: 'text', title: ['codex-transcript', 'claude-transcript', 'cursor-transcript', 'opencode-transcript', 'pi-transcript', 'hermes-transcript'].includes(r.source || '') ? tr('conversationHistory') : tr('terminalOnly'),
-      text: r.text || r.reason || tr('noOlderOutput'), tail: true, reader: t,
-      onBack: () => thread(t),
-      onHold: () => { void record(t, true); } });
+    const title = ['codex-transcript', 'claude-transcript', 'cursor-transcript', 'opencode-transcript', 'pi-transcript', 'hermes-transcript'].includes(r.source || '') ? tr('conversationHistory') : tr('terminalOnly');
+    const text = r.text || r.reason || tr('noOlderOutput');
+    await show({ kind: 'text', title, text, tail: true, reader: { title, load: async () => ({ text }), coding: t, hold: () => { void record(t, true); } },
+      onBack: () => thread(t) });
   }, () => thread(t));
 }
 
@@ -1252,7 +1408,7 @@ function confirm(w: Workspace, p: Provider, model: string, prompt: number, label
 function onEvent(e: EvenHubEvent) {
   if (e.menuItemClickEvent) {
     const screen = current;
-    if (screen?.kind === 'list' && screen.sessionList) {
+    if (screen?.kind === 'list' && screen.module && !modulePending) {
       const action = screen.menuActions?.find(a => a.id === e.menuItemClickEvent!.itemID);
       if (action) void sessionCursorWrites.then(() => { if (current === screen) action.run(); });
     } else if (screen?.kind === 'text' && screen.reader && !screen.voice) {
@@ -1263,6 +1419,7 @@ function onEvent(e: EvenHubEvent) {
   }
   const systemType = e.sysEvent?.eventType;
   if (systemType === OsEventTypeList.SYSTEM_EXIT_EVENT || systemType === OsEventTypeList.ABNORMAL_EXIT_EVENT) {
+    cancelModuleSwitch();
     clearInterval(poll);
     clearInterval(statusAnimation);
     clearInterval(menuAnimation);
@@ -1288,7 +1445,8 @@ function onEvent(e: EvenHubEvent) {
   // Ignore repeated swipes/clicks during a fetch so one edge gesture changes
   // exactly one page and cannot activate a row from the page being replaced.
   if (s.kind === 'list' && s.paging) return;
-  if (s.kind === 'list' && (s.sessionList || s.workspacePicker || s.agentPicker || s.textPicker) && (type === OsEventTypeList.SCROLL_TOP_EVENT || type === OsEventTypeList.SCROLL_BOTTOM_EVENT)) {
+  if (s.kind === 'list' && (s.module || s.workspacePicker || s.agentPicker || s.textPicker) && (type === OsEventTypeList.SCROLL_TOP_EVENT || type === OsEventTypeList.SCROLL_BOTTOM_EVENT)) {
+    if (s.module && modulePending) return;
     const step = type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1;
     let next = (s.selected || 0) + step;
     while (s.headings?.includes(next)) next += step; // Headings are not selectable.
@@ -1300,6 +1458,7 @@ function onEvent(e: EvenHubEvent) {
       return;
     }
     s.selected = Math.max(0, Math.min(s.items.length - 1, next));
+    if (s.module) positions[s.module].cursor = s.selected;
     if (!s.cursorWriting) sessionCursorWrites = updateSessionCursor(s);
     return;
   }
@@ -1312,7 +1471,7 @@ function onEvent(e: EvenHubEvent) {
     diag(holding ? 'Hold received; waiting for button release.' : 'Hold event received.');
     if (!holding) {
       holding = true;
-      if (s.kind === 'text') s.onHold?.();
+      if (s.kind === 'text') s.reader?.hold?.();
     }
     return;
   }
@@ -1323,14 +1482,15 @@ function onEvent(e: EvenHubEvent) {
   }
   if (type === OsEventTypeList.DOUBLE_CLICK_EVENT) {
     if (s.onBack) s.onBack();
-    else bridge.shutDownPageContainer(1);
+    else { cancelModuleSwitch(); bridge.shutDownPageContainer(1); }
     return;
   }
   if (type !== OsEventTypeList.CLICK_EVENT) return;
   if (s.kind === 'list') {
     // 先頭項目(0)も既定値として省かれうる
-    if (s.sessionList || s.workspacePicker || s.agentPicker || s.textPicker) {
+    if (s.module || s.workspacePicker || s.agentPicker || s.textPicker) {
       const index = e.listEvent?.currentSelectItemIndex ?? s.selected ?? 0;
+      if (s.module && index === 0) { cycleModule(s); return; }
       // Finish in-flight cursor writes before reusing BODY on the next page.
       void sessionCursorWrites.then(() => { if (current === s) s.onPick(index); });
     }
@@ -1349,6 +1509,7 @@ function diag(line: string) {
 }
 
 async function connect() {
+  cancelModuleSwitch();
   const code = await bridge.getLocalStorage('code');
   const pairing = parseCode(code);
   $('code').value = code;
@@ -1390,6 +1551,12 @@ async function connect() {
 // Workout Glass keeps its countdown across screen-off by restoring the saved run
 // when Even recreates the page. Do the same for the chat that was open.
 async function openSavedOrHome(known?: Thread[]) {
+  const capabilities = await api.capabilities().catch(() => null);
+  modules = offeredModules(capabilities?.modules);
+  const stored = await bridge.getLocalStorage('module') as GlassModule;
+  activeModule = modules.includes(stored) ? stored : 'coding';
+  mail = new Mail(await bridge.getLocalStorage('mail-labels'));
+  if (activeModule === 'email') return mailHome();
   const handle = await bridge.getLocalStorage('open-thread');
   if (handle) {
     const list = known ?? await api.threads().catch(() => []);
@@ -1412,10 +1579,11 @@ function useLang(pref: string) {
 function redrawForLanguage() {
   const s = current;
   if (!s) return;
-  if (s.kind === 'list' && (s.sessionList || s.workspacePicker || s.agentPicker)) { refreshGlasses(); return; }
+  if (s.kind === 'list' && s.module) { if (!modulePending) void showModule(); return; }
+  if (s.kind === 'list' && (s.workspacePicker || s.agentPicker)) { refreshGlasses(); return; }
   if (s.kind === 'text' && s.usageMode) { void usage(); return; }
   if (s.kind === 'text' && s.reader && !s.voice) {
-    s.activityLabel = readerStatus(s.activityState || 'unknown', s.statusFrame || 0, Date.now() - (s.statusStartedAt ?? Date.now()));
+    s.activityLabel = s.reader.statusText?.() ?? readerStatus(s.activityState || 'unknown', s.statusFrame || 0, Date.now() - (s.statusStartedAt ?? Date.now()));
     s.fineLabel = undefined;
     void show(s).catch(e => diag((e as Error).message));
   }

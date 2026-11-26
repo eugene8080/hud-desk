@@ -30,13 +30,24 @@ if (hermesScenario) Object.assign(fixture, hermesScenario);
 const api = `
 const request=async()=>{const r=await fetch('/__fixture');return r.json();};
 const read=async(handle)=>{const r=await fetch('/__fixture/read?handle='+encodeURIComponent(handle));const data=await r.json();if(!r.ok)throw new Error(data.error);return data;};
+const mailRequest=async(path,params,body)=>{
+ const r=await fetch(path+(params?'?'+new URLSearchParams(params):''),body?{method:'POST',body:JSON.stringify(body)}:undefined);
+ const data=await r.json();if(!r.ok)throw new Error(data.error);return data;
+};
 export const setDemo=()=>{},setApiLang=()=>{},setConnection=()=>{};
 export const currentBase=()=> 'isolated simulator';
 export const api={
   threads:async()=>(await request()).threads,workspaces:async()=>(await request()).workspaces,
   thread:read,history:read,
   activity:async(handle)=>{const r=await fetch('/__fixture/activity?handle='+encodeURIComponent(handle));return r.json();},
-  health:async()=>({ok:true}),capabilities:async()=>({voice:true}),
+  health:async()=>({ok:true}),capabilities:()=>mailRequest('/api/capabilities', new URLSearchParams(location.search).has('legacyModules')?{legacyModules:'1'}:undefined),
+  mail:{
+   accounts:()=>mailRequest('/api/mail/accounts'),
+   labels:(account)=>mailRequest('/api/mail/labels',{account}),
+   threads:(filter,page)=>mailRequest('/api/mail/threads',{filter:filter.join(','),page,size:'8'}),
+   thread:(account,id)=>mailRequest('/api/mail/thread',{account,id}),
+   read:(account,threadId)=>mailRequest('/api/mail/read',null,{account,threadId}),
+  },
   usage:async()=>(await request()).usage,
   transcribe:async()=>({text:(await request()).transcript}),
   choice:async(handle,menuId,value)=>{const r=await fetch('/__fixture/choice',{method:'POST',body:JSON.stringify({handle,menuId,value})});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;},
@@ -69,9 +80,19 @@ const server = await createServer({
     transformIndexHtml(html) { return html.replace('<head>', '<head>' + shim); },
     configureServer(vite) {
       vite.middlewares.use(async (req, res, next) => {
-        if (!req.url?.startsWith('/__fixture')) return next();
+        if (!req.url?.startsWith('/__fixture') && !req.url?.startsWith('/api/')) return next();
         try {
           const url = new URL(req.url, 'http://127.0.0.1');
+          if (url.pathname.startsWith('/api/')) {
+            let body;
+            if (req.method === 'POST') {
+              let raw = ''; for await (const part of req) raw += part;
+              body = JSON.parse(raw);
+            }
+            const { demoCall } = await vite.ssrLoadModule('/src/demo.ts');
+            const result = url.pathname === '/api/capabilities' && url.searchParams.has('legacyModules') ? { voice: true } : demoCall('en', req.method, req.url, body);
+            res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(result)); return;
+          }
           if (req.method === 'GET' && ['/__fixture/read', '/__fixture/activity'].includes(url.pathname)) {
             const handle = url.searchParams.get('handle');
             const result = url.pathname.endsWith('/read')
