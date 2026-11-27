@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.75**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.76**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.75,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.76,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.75)
+## Feature list (beta 1.0.76)
 
 ### All modules
 
@@ -88,6 +88,14 @@ Rule for every agent: each beta release updates this file in the release commit:
 - Voice reply as in Coding: hold, release to review, click to send, double-click to cancel. A send
   is never repeated automatically. Opening an unread chat marks it read in Beeper.
 
+### Bluetooth keyboard (paired with the phone, while Orca Glass is open in the Even app)
+
+- Up/Down swipe, Enter clicks, Esc or Backspace goes back, Tab switches module on the home list,
+  Space held is tap-and-hold (voice).
+- A letter in an open Coding session or chat starts a typed reply in the phone's reply box; Enter
+  reviews, Enter again sends once, Shift+Enter adds a line.
+- Typing in the Email label picker searches labels.
+
 ### Not yet built
 
 - Reader for documents. Sign-in for other people's own Google accounts (each
@@ -123,5 +131,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.75: Coding also lists Orca chat sessions (not only terminal panes), read-only because Orca cannot take input for a chat from outside. Email now loads in the background while Coding or Chat is open, so switching to Email shows your mail at once.
+1.0.76: Bluetooth keyboard support on the phone: arrows, Enter and Esc drive the glasses, Space held talks, typing starts a reply (Enter reviews, Enter sends), and typing searches Email labels. Chat replies can be typed too. Read-only Orca chats now say [Read-only] instead of offering tap-and-hold.
 <!-- whatsnew:end -->

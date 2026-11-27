@@ -139,17 +139,27 @@ const providerFilterLabel = () => viewProvider === 'all' ? tr('allOrcaSessions')
 let workspaceNames = new Map<string, string>();
 const providerName = agentLabel;
 
-function selectThread(t: Thread | null) {
-  if (selectedThread?.handle !== t?.handle) {
+// The phone's reply box sends to the Coding session or the Chat chat open on the glasses
+// (Chat added 2026-11-27 for Bluetooth-keyboard typing). Read-only Orca chats have no target.
+type ReplyTarget = { key: string; label: string; send: (text: string) => Promise<void> };
+let replyTarget: ReplyTarget | null = null;
+function setReplyTarget(target: ReplyTarget | null) {
+  if (replyTarget?.key !== target?.key) {
     (document.getElementById('reply-text') as HTMLTextAreaElement).value = '';
     document.getElementById('send-reply')!.hidden = true;
     document.getElementById('reply-status')!.textContent = '';
-    // The open chat has to survive the phone recreating this page with the screen off.
-    void bridge.setLocalStorage('open-thread', t?.handle || '');
   }
+  replyTarget = target;
+  document.getElementById('composer')!.hidden = !target;
+  document.getElementById('reply-target')!.textContent = target?.label ?? '';
+}
+
+function selectThread(t: Thread | null) {
+  // The open chat has to survive the phone recreating this page with the screen off.
+  if (selectedThread?.handle !== t?.handle) void bridge.setLocalStorage('open-thread', t?.handle || '');
   selectedThread = t;
-  document.getElementById('composer')!.hidden = !t;
-  document.getElementById('reply-target')!.textContent = t ? tr('replyTo', t.title, t.handle.slice(-8)) : '';
+  setReplyTarget(t && !t.readOnly ? { key: t.handle, label: tr('replyTo', t.title, t.handle.slice(-8)),
+    send: async text => { await api.say(t.handle, text); } } : null);
 }
 
 // Reader body is 560px wide with no padding. 560px rows fit in the simulator; keep
@@ -271,7 +281,7 @@ function readerHint(s: TextScreen, seconds: number | null | undefined) {
     ? Math.max(...workingLabels().map(word => glassWidth(statusLeft(`. ${word}...`, s.model))))
     : glassWidth(statusLeft(s.activityLabel || readerStatus('unknown'), s.model));
   const room = Math.min(VOICE.width - 6 - left - 10, HINT.width - 6);
-  return nativeRight(statusRight(seconds, !!s.choiceMenu, page, text => glassWidth(text) <= room), HINT.width);
+  return nativeRight(statusRight(seconds, !!s.choiceMenu, page, text => glassWidth(text) <= room, !!s.reader.coding.readOnly), HINT.width);
 }
 
 function flipReader(s: TextScreen, delta: number) {
@@ -520,7 +530,7 @@ function fineStatus(s: TextScreen, page: number): FineStatus {
   const where = s.refreshing ? tr('refreshing') : tr('pageCounter', page + 1, pages);
   const minutes = s.activityState === 'working' && s.reportedSeconds != null ? `${Math.floor(s.reportedSeconds / 60)}m` : '';
   const room = fineLayout(s.fine!).columns - leftCells - 1;
-  const right = [minutes, statusRight(null, !!s.choiceMenu, where, text => fineCells([minutes, text].filter(Boolean).join(' ')) <= room)].filter(Boolean).join(' ');
+  const right = [minutes, statusRight(null, !!s.choiceMenu, where, text => fineCells([minutes, text].filter(Boolean).join(' ')) <= room, !!s.reader.coding.readOnly)].filter(Boolean).join(' ');
   return working ? { model: s.model, scanner: s.statusFrame || 0, left: words, right }
     : { left: s.model ? `${s.model} ${label}` : label, right };
 }
@@ -1193,7 +1203,26 @@ async function applyMailFilter(storageKey: string, stored: string, fromPhone: bo
   }
 }
 
+// Typed label search (Bluetooth keyboard) in the glasses label picker: letters, digits and spaces
+// build the query, Backspace removes one character; the picker redraws 0.4 s after the last key.
+// Returns false for keys it does not handle (arrows, Enter, Esc, and Backspace on an empty query).
+let typedLabelSearch = '';
+let typedLabelTimer: ReturnType<typeof setTimeout> | undefined;
+function typeLabelSearch(key: string, shown: string): boolean {
+  if (!typedLabelSearch && shown) typedLabelSearch = shown;
+  if (key === 'Backspace') {
+    if (!typedLabelSearch) return false;
+    typedLabelSearch = typedLabelSearch.slice(0, -1);
+  } else if (key.length === 1) typedLabelSearch += key;
+  else return false;
+  clearTimeout(typedLabelTimer);
+  const query = typedLabelSearch;
+  typedLabelTimer = setTimeout(() => { void mailLabels(0, 0, false, query.trim()); }, 400);
+  return true;
+}
+
 async function mailLabels(page: number, selected: number, refresh = false, search = '') {
+  if (!search) typedLabelSearch = '';
   const owner = current;
   const revision = moduleRevision;
   try {
@@ -1394,6 +1423,8 @@ async function openChat(item: ChatItem) {
       onResult: sent => { outcome = sent ? 'chatSent' : 'chatNotSent'; } }, true);
   } : undefined;
   let readFailed = false;
+  setReplyTarget(item.readOnly ? null : { key: `chat:${item.id}`, label: tr('replyTo', item.title, moduleLabel('chat')),
+    send: async text => { if (!(await api.chat.send(item.id, text)).ok) throw new Error(tr('chatNotSent')); } });
   // Re-read the features in the background: Ollama may have started since the app connected.
   void api.capabilities().then(applyCapabilities, () => {});
   const source = new ChatReader(item, translating, () => outcome ? tr(outcome) : readFailed ? tr('chatNotMarkedRead') : ' ', hold);
@@ -2143,31 +2174,79 @@ async function main() {
   const draft = document.getElementById('reply-text') as HTMLTextAreaElement;
   const send = document.getElementById('send-reply') as HTMLButtonElement;
   const status = document.getElementById('reply-status')!;
-  let reviewed: { handle: string; text: string } | null = null;
-  draft.addEventListener('input', () => { reviewed = null; send.hidden = true; });
-  document.getElementById('reply-form')!.addEventListener('submit', ev => {
-    ev.preventDefault();
-    if (!selectedThread || sending || !draft.value.trim()) return;
-    reviewed = { handle: selectedThread.handle, text: draft.value.trim() };
-    status.textContent = tr('readyToSend', selectedThread.title, reviewed.text);
+  let reviewed: { key: string; text: string } | null = null;
+  const draftChanged = () => { reviewed = null; send.hidden = true; };
+  draft.addEventListener('input', draftChanged);
+  // Review first, send second: the same two steps whether tapped or typed (Enter, Enter).
+  const reviewDraft = () => {
+    if (!replyTarget || sending || !draft.value.trim()) return;
+    reviewed = { key: replyTarget.key, text: draft.value.trim() };
+    status.textContent = tr('readyToSend', replyTarget.label, reviewed.text);
     send.hidden = false;
-  });
-  send.addEventListener('click', async () => {
-    if (sending || !reviewed || reviewed.handle !== selectedThread?.handle || reviewed.text !== draft.value.trim()) return;
+  };
+  const sendDraft = async () => {
+    const target = replyTarget;
+    if (sending || !target || !reviewed || reviewed.key !== target.key || reviewed.text !== draft.value.trim()) return;
     const message = reviewed;
     reviewed = null;
     sending = true;
     send.hidden = true;
     status.textContent = tr('sending');
     try {
-      await api.say(message.handle, message.text);
-      if (selectedThread?.handle === message.handle) {
+      await target.send(message.text);
+      if (replyTarget?.key === message.key) {
         draft.value = '';
         status.textContent = tr('sentDone');
       }
     } catch (e) {
-      if (selectedThread?.handle === message.handle) status.textContent = (e as Error).message;
+      if (replyTarget?.key === message.key) status.textContent = (e as Error).message;
     } finally { sending = false; }
+  };
+  document.getElementById('reply-form')!.addEventListener('submit', ev => { ev.preventDefault(); reviewDraft(); });
+  send.addEventListener('click', () => { void sendDraft(); });
+  // Bluetooth keyboard paired with the phone (Eugene, 2026-11-27). Keys reach this page only while
+  // it is open in the Even app. In a text box: Enter reviews then sends (Shift+Enter is a new line),
+  // Esc leaves the box. Elsewhere the keys drive the glasses: Up/Down swipe, Enter click, Esc or
+  // Backspace double-click (back), Space held = tap-and-hold (voice), Tab switches module on the home
+  // list. A letter in an open Coding session or chat starts a typed reply in the phone's reply box;
+  // in the Email label picker it searches labels.
+  const glassEvent = (eventType: OsEventTypeList) => onEvent({ sysEvent: { eventType } } as unknown as EvenHubEvent);
+  let spaceHeld = false;
+  window.addEventListener('keydown', (ev: KeyboardEvent) => {
+    const target = ev.target as HTMLElement | null;
+    const editing = !!target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable === true);
+    if (editing) {
+      if (target!.id === 'reply-text' && ev.key === 'Enter' && !ev.shiftKey) {
+        ev.preventDefault();
+        if (send.hidden) reviewDraft(); else void sendDraft();
+      } else if (ev.key === 'Escape') { ev.preventDefault(); target!.blur?.(); }
+      return;
+    }
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const s = current;
+    if (!s) return;
+    if (s.kind === 'list' && s.mailPicker && typeLabelSearch(ev.key, s.mailPicker.search)) { ev.preventDefault(); return; }
+    switch (ev.key) {
+      case 'ArrowUp': glassEvent(OsEventTypeList.SCROLL_TOP_EVENT); break;
+      case 'ArrowDown': glassEvent(OsEventTypeList.SCROLL_BOTTOM_EVENT); break;
+      case 'Enter': glassEvent(OsEventTypeList.CLICK_EVENT); break;
+      case 'Escape': case 'Backspace': glassEvent(OsEventTypeList.DOUBLE_CLICK_EVENT); break;
+      case 'Tab': if (s.kind === 'list' && s.module && !modulePending) cycleModule(s); break;
+      case ' ':
+        if (!ev.repeat && !spaceHeld) { spaceHeld = true; glassEvent(OsEventTypeList.LONG_PRESS_EVENT); }
+        break;
+      default:
+        if (ev.key.length !== 1 || !replyTarget || s.kind !== 'text' || !s.reader || s.voice) return;
+        draft.focus?.();
+        draft.value += ev.key;
+        draftChanged();
+    }
+    ev.preventDefault();
+  });
+  window.addEventListener('keyup', (ev: KeyboardEvent) => {
+    if (ev.key !== ' ' || !spaceHeld) return;
+    spaceHeld = false;
+    glassEvent(OsEventTypeList.LONG_PRESS_RELEASE_EVENT);
   });
   $('conn').addEventListener('submit', async (ev) => {
     ev.preventDefault();

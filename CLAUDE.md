@@ -56,6 +56,16 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.76 (Eugene: Bluetooth keyboard support; 'tap and hold does not work in coding'
+- it was the orchestration row, a read-only Orca chat). Status row of a read-only chat reads
+[Read-only] instead of the hold hint. Keyboard (window keydown/keyup on the phone page, only while
+it is open in the Even app): in a text box Enter reviews then sends, Shift+Enter newline, Esc blurs;
+otherwise Up/Down swipe, Enter click, Esc/Backspace back, Tab cycles module, Space held = hold
+(keyup releases), a letter in an open Coding/Chat reader starts a reply in #reply-text; in the
+Email label picker letters/Backspace build a search (redraw 0.4 s after the last key). The phone
+reply box now has a target for Chat chats too (api.chat.send), none for read-only Orca chats.
+244 tests, build pass. G2/phone check pending (keyboard events in the Even WebView unverified).
+
 2026-11-27 bridge restarted with Eugene's approval for 1.0.75 (old supervisor 3012/server 57676/whisper
 61824; new supervisor 64448, server 64364, whisper 67084 --vad). Local and tailnet healthz ok.
 /api/threads over the tailnet: 27 rows, 2 Orca chats (this orca-glass Claude chat, busy; a Cursor

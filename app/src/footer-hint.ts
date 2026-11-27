@@ -15,9 +15,10 @@ export function compactDuration(seconds?: number | null): string {
   return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, '0')}s`;
 }
 
-export function statusRight(seconds: number | null | undefined, choices: boolean, page: string, fits: (text: string) => boolean = () => true): string {
+// readOnly: an Orca chat the glasses can read but not reply to; '[Read-only]' replaces the hold hint.
+export function statusRight(seconds: number | null | undefined, choices: boolean, page: string, fits: (text: string) => boolean = () => true, readOnly = false): string {
   const timer = compactDuration(seconds);
-  for (const hint of choices ? choiceHints() : tapHints()) {
+  for (const hint of readOnly ? [t('hintReadOnly'), ''] : choices ? choiceHints() : tapHints()) {
     const text = [timer, hint, page].filter(Boolean).join(' ');
     if (fits(text)) return text;
   }

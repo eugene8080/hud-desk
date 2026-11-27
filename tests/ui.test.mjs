@@ -136,6 +136,9 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     back: async () => { event({ textEvent: { eventType: 3 } }); await flush(); },
     scroll: async direction => { event({ textEvent: { eventType: direction === 'up' ? 1 : 2 } }); await flush(); },
     pagehide: () => { windowListeners.get('pagehide')?.(); },
+    // Bluetooth keyboard on the phone: target defaults to the page body (no text box focused).
+    key: async (key, extra = {}) => { windowListeners.get('keydown')?.({ key, target: { tagName: 'BODY' }, preventDefault() {}, ...extra }); await flush(); },
+    keyup: async key => { windowListeners.get('keyup')?.({ key, target: { tagName: 'BODY' }, preventDefault() {} }); await flush(); },
   };
 }
 
@@ -960,6 +963,97 @@ test('working words last five seconds and Braille patterns are distinct', () => 
   assert.match(statusExports.readerStatus('working', 0, 4999), /Processing/);
   assert.match(statusExports.readerStatus('working', 0, 5000), /Thinking\.$/);
   assert.equal(new Set(statusExports.SPINNER.map(s => JSON.stringify(statusExports.statusPixels(s)))).size, 10);
+});
+
+test('Bluetooth keyboard: arrows and Enter drive the glasses, letters type a reply that Enter reviews and sends', async () => {
+  const h = await harness(3, true, 'hold');
+  const cursorRow = () => container(h, 'menu-cursor').content.split('\n').findIndex(row => row.startsWith('>'));
+  const start = cursorRow();
+  await h.key('ArrowDown');
+  assert.equal(h.upgrades.findLast(u => u.containerName === 'menu-cursor').content.split('\n').findIndex(row => row.startsWith('>')), start + 1);
+  // Move to the first session and open it with Enter.
+  while (h.upgrades.findLast(u => u.containerName === 'menu-cursor').content.split('\n').findIndex(row => row.startsWith('>')) < 3) await h.key('ArrowDown');
+  const pages = h.pages.length;
+  await h.key('Enter');
+  assert.ok(h.pages.length > pages);
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'hint'), 'a session reader is open');
+  // The first letter starts a reply in the phone's box (and focuses it, so on a phone the rest,
+  // spaces included, types there natively); Enter in the box reviews, Enter again sends once.
+  await h.key('H');
+  const draft = h.elements.get('reply-text');
+  assert.equal(draft.value, 'H');
+  draft.value = 'Hi there';
+  assert.equal(h.elements.get('composer').hidden, false);
+  const inBox = { target: { tagName: 'TEXTAREA', id: 'reply-text', blur() {} } };
+  await h.key('Enter', inBox);
+  assert.equal(h.elements.get('send-reply').hidden, false);
+  assert.equal(h.sends.length, 0);
+  await h.key('Enter', inBox);
+  assert.deepEqual(h.sends.map(s => s.text), ['Hi there']);
+  // Shift+Enter in the box is a new line, not a send.
+  await h.key('Enter', { ...inBox, shiftKey: true });
+  assert.equal(h.sends.length, 1);
+  // Esc goes back to the list.
+  await h.key('Escape');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'));
+});
+
+test('Bluetooth keyboard: Space held is tap-and-hold, its release ends the recording', async () => {
+  const h = await harness(2, true, 'hold');
+  await h.pick(2);
+  const pages = h.pages.length;
+  await h.key(' ');
+  assert.equal(h.pages.length, pages + 1);
+  assert.equal(h.pages.at(-1).textObject.find(c => c.containerName === 'voice-hint').content, 'Listening… release to review');
+  await h.key(' ', { repeat: true });
+  h.audio();
+  await h.keyup(' ');
+  assert.deepEqual(h.mic, [true, false]);
+  assert.equal(h.transcriptions.length, 1);
+});
+
+test('a read-only Orca chat shows [Read-only] and takes no typed or held reply', async () => {
+  const h = await harness(1, true, 'hold');
+  h.threads.push({ handle: 'chat:0f1e2d3c-4b5a-4968-8776-655443322110', title: 'Fixture Orca chat', agent: 'claude', state: 'idle', readOnly: true });
+  await h.menu(1001);
+  const row = container(h, 'body').content.split('\n').findIndex(line => line.includes('Fixture Orca chat'));
+  await h.pickRow(row + 1);
+  assert.match(container(h, 'hint').content, /\[Read-only\]/);
+  assert.doesNotMatch(container(h, 'hint').content, /Tap&Hold/);
+  assert.equal(h.elements.get('composer').hidden, true);
+  await h.key('x');
+  assert.equal(h.elements.get('reply-text').value, '');
+  const pages = h.pages.length;
+  await h.key(' ');
+  await h.keyup(' ');
+  assert.equal(h.pages.length, pages);
+  assert.deepEqual(h.mic, []);
+});
+
+test('Bluetooth keyboard: typing in a Chat reader replies to that chat through the phone box', async () => {
+  const { chat, sends } = chatFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat });
+  await h.pickRow(2);
+  for (const letter of 'ok') await h.key(letter);
+  assert.equal(h.elements.get('reply-text').value, 'ok');
+  const inBox = { target: { tagName: 'TEXTAREA', id: 'reply-text', blur() {} } };
+  await h.key('Enter', inBox);
+  await h.key('Enter', inBox);
+  assert.deepEqual(sends, [{ id: 'fixture-0', text: 'ok' }]);
+});
+
+test('Bluetooth keyboard: typing in the Email label picker searches labels', async () => {
+  const { fixture } = mailFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] }, storage: { module: 'email' }, mail: fixture });
+  await h.pickRow(1);
+  assert.match(container(h, 'body').content, /Bulletins/);
+  for (const letter of 'bull') await h.key(letter);
+  const timer = [...h.timeouts].find(([, t]) => t.delay === 400);
+  h.timeouts.delete(timer[0]); timer[1].fn(); await h.flush();
+  const picker = container(h, 'body').content;
+  assert.match(picker, /bull/);
+  assert.match(picker, /Bulletins/);
+  assert.doesNotMatch(picker, /\] Inbox/);
 });
 
 test('hold opens a full-screen voice page; release reviews; only explicit send submits once', async () => {
