@@ -58,6 +58,14 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 Eugene chose: destroy the relay droplet (done: hud-relay deleted in DigitalOcean, only
+sg-exit remains; host key removed from ~/.ssh/known_hosts; the SSH key 'hud-desk-relay' stays in his
+DO account and ~/.ssh for a future relay) and start one-command self-host setup for Windows and Mac.
+Run run_79e62279f8cf, Codex workers in child worktrees: setup-win (ctx_f4a43715e810: eho3 pairing
+code carrying publicOrigin, app parse + precedence, scripts/setup-windows.ps1, docs/self-host.md,
+README) and setup-mac (ctx_3ed426c1ad58: scripts/setup-macos.sh, docs/self-host-macos.md). Both
+dry-run only on PSCAP11 (live bridge). Eugene's phone still uses the :8444 test address.
+
 2026-11-27 whitelist test PASSED (Eugene, G2/Android, beta 1.0.93): Bridge address
 https://pscap11.tailf91bf7.ts.net:8444 (not whitelisted) connected. Only the port differed; other
 apps cover different hosts. Self-hosters can type their own Tailscale address; the relay is optional.
