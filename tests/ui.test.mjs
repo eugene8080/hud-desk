@@ -179,7 +179,7 @@ function chatFixture() {
     { own: false, from: 'Fixture sender', date, text: 'Synthetic latest message.\n' + Array.from({ length: 12 }, (_, i) => `Sample line ${i + 1}.`).join('\n') },
     { own: true, from: '', date: date - 60_000, text: 'Synthetic earlier message.' },
   ];
-  const sends = [], lists = [], reads = [];
+  const sends = [], lists = [], reads = [], marked = [];
   const chat = {
     networks: async () => networks,
     list: async (picks, page) => {
@@ -190,8 +190,9 @@ function chatFixture() {
     },
     messages: async id => { reads.push(id); return { messages: [...messages] }; },
     send: async (id, text) => { sends.push({ id, text }); return { ok: true }; },
+    read: async id => { marked.push(id); const row = rows.find(row => row.id === id); if (row) row.unread = false; return { ok: true }; },
   };
-  return { chat, sends, lists, reads, messages, networks, rows };
+  return { chat, sends, lists, reads, marked, messages, networks, rows };
 }
 
 test('Row zero cycles Coding, Email, Chat, then Coding in bridge capability order', async () => {
@@ -233,10 +234,12 @@ test('Chat list uses eight rows, unread markers and a saved filter shared with t
 });
 
 test('Chat reader opens at the newest message start and refreshes past the last page without a write', async () => {
-  const { chat, messages, reads, sends } = chatFixture();
+  const { chat, messages, reads, sends, marked } = chatFixture();
   const h = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat });
   await h.pickRow(2);
   assert.match(container(h, 'body').content, /^> Fixture sender: Synthetic latest message/);
+  // Opening an unread chat marks it read once (Eugene, 2026-11-27).
+  assert.deepEqual(marked, ['fixture-0']);
   await h.scroll('up');
   assert.match(h.upgrades.findLast(item => item.containerName === 'body').content, /^\/ Synthetic earlier message/);
   assert.equal(reads.length, 1);
@@ -246,7 +249,11 @@ test('Chat reader opens at the newest message start and refreshes past the last 
   assert.match(h.upgrades.findLast(item => item.containerName === 'body').content, /^\/ Synthetic refresh result/);
   assert.equal(sends.length, 0);
   await h.back();
-  assert.match(container(h, 'menu-count').content, /5 unread chats/);
+  assert.match(container(h, 'menu-count').content, /4 unread chats/);
+  assert.match(container(h, 'menu-cursor').content.split('\n')[2], /-$/);
+  // A read chat is not marked again.
+  await h.pickRow(2);
+  assert.deepEqual(marked, ['fixture-0']);
 });
 
 test('Shared reader page metadata carries Chat user turns across message continuations', () => {
@@ -255,6 +262,9 @@ test('Shared reader page metadata carries Chat user turns across message continu
     { own: true, from: '', date: 1, text: 'Synthetic first line.\nSecond line.' },
     { own: false, from: 'Fixture sender', date: 2, text: 'Synthetic reply.\n/ Message text.' },
   ] });
+  // HTML line breaks from Beeper show as line breaks (2026-11-27: "right now i see <br>").
+  const broken = chatReaderText({ messages: [{ own: false, from: 'Fixture sender', date: 1, text: 'One<br>Two<BR/>Three<br />Four' }] }).text;
+  assert.equal(broken, '> Fixture sender: One\n  Two\n  Three\n  Four');
   // No blank row between messages (2026-11-27).
   assert.equal(text, '/ Synthetic first line.\n  Second line.\n> Fixture sender: Synthetic reply.\n  / Message text.');
   const [page] = textExports.readerPages(text, str => str.length, 60);
@@ -726,7 +736,7 @@ test('Email restores its saved filter, skips account headings, and retries faile
   await h.pickRow(2);
   assert.equal(attempts, 1);
   assert.equal(h.upgrades.findLast(update => update.containerName === 'voice').content, 'not marked read');
-  assert.deepEqual(Array.from(h.pages.at(-1).menuObject.menuItems, item => item.itemName), ['Font: Native text', 'App Brightness: 15']);
+  assert.deepEqual(Array.from(h.pages.at(-1).menuObject.menuItems, item => item.itemName), ['Font: Native text', 'Background: Lines 1/3', 'App Brightness: 15']);
   h.press(); h.release(); await h.flush();
   assert.equal(h.mic.length, 0);
   await h.scroll('up');
@@ -1454,7 +1464,7 @@ test('contextual actions refresh roster, open workspace picker and display usage
   await h.back(); await h.pick(2);
   // The reader's own menu only switches text size; session-list actions do nothing there.
   assert.equal(JSON.stringify(h.pages.at(-1).menuObject.menuItems.map(i => [i.itemID, i.itemName])),
-    JSON.stringify([[1101, 'Font: Native text'], [1107, 'App Brightness: 15']]));
+    JSON.stringify([[1101, 'Font: Native text'], [1109, 'Background: Lines 1/3'], [1107, 'App Brightness: 15']]));
   const pages = h.pages.length;
   await h.menu(1002);
   assert.equal(h.pages.length, pages);
@@ -2001,11 +2011,11 @@ test('small text draws the whole screen, status row included, as four tiles and 
   // Fonts, the background and both comparisons fit in one list. Terminus 6x12 is the third small face.
   await h.menu(1101);
   assert.deepEqual(menuItems(h), ['Native text ✓', 'Departure 7x14', 'Misc Fixed 6x13', 'Terminus 6x12',
-    'GohuFont 6x11', 'Scientifica 5x11', 'Background: Dots 1/2', 'Compare fonts', 'Compare backgrounds']);
+    'GohuFont 6x11', 'Scientifica 5x11', 'Compare fonts']);
   assert.deepEqual(Object.keys(glyphExports), ['DEPARTURE_MONO', 'TERMINUS', 'GOHU', 'SCIENTIFICA', 'FIXED', 'SHINONOME_K12']);
   const fontCursor = () => h.pages.at(-1).textObject.find(c => c.containerName === 'body').content.split('\n').findIndex(row => row.startsWith('>'));
   await h.scroll('up');
-  assert.equal(fontCursor(), 8); // wraps to the last row, Compare backgrounds
+  assert.equal(fontCursor(), 6); // wraps to the last row, Compare fonts
   await h.scroll('down');
   assert.equal(fontCursor(), 0);
   await h.pick(3);
@@ -2016,7 +2026,7 @@ test('small text draws the whole screen, status row included, as four tiles and 
   assert.equal(JSON.stringify(page.imageObject.map(i => [i.containerID, i.xPosition, i.yPosition, i.width, i.height])),
     JSON.stringify([[2, 0, 0, 288, 144], [3, 288, 0, 288, 144], [4, 0, 144, 288, 144], [5, 288, 144, 288, 144]]));
   assert.equal(JSON.stringify(page.menuObject.menuItems.map(i => i.itemName)),
-    JSON.stringify(['Font: Terminus 6x12', 'App Brightness: 15']));
+    JSON.stringify(['Font: Terminus 6x12', 'Background: Lines 1/3', 'App Brightness: 15']));
   // Every possible label fits the menu without truncation (about 210px in the firmware font).
   for (const f of fineExports.FINE_FONTS) assert.ok(listExports.glassWidth(`Font: ${fineExports.fineLabel(f)}`) <= 210, fineExports.fineLabel(f));
   const layout = fineExports.fineLayout('terminus');
@@ -2079,7 +2089,7 @@ test('small text draws the whole screen, status row included, as four tiles and 
   for (const tile of turned) assert.equal(JSON.stringify(tile.imageData), JSON.stringify(want[Number(tile.containerName.slice(5))]));
   assert.ok(!h.upgrades.some(u => ['body', 'voice', 'hint'].includes(u.containerName)));
   // The display test replaces the tiles; the next swipe restores the page.
-  await h.menu(1101); await h.pick(7); await h.flush();
+  await h.menu(1101); await h.pick(6); await h.flush();
   assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison()));
   await h.scroll('down'); await h.flush();
   const restored = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
@@ -2133,7 +2143,7 @@ test('saved removed reader modes and the saved comparison font fall back to Term
   const h = await moduleHarness({ storage: { 'reader-text': 'native', 'reader-font': 'gohu14' } });
   await h.pick(2);
   const native = container(h, 'body').content;
-  await h.menu(1101);
+  await h.menu(1109);
   await h.pick(8);
   assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus')));
   await h.scroll('up');
@@ -2142,7 +2152,7 @@ test('saved removed reader modes and the saved comparison font fall back to Term
 });
 
 test('user turn background follows wrapped and indented rows across pages without affecting other pixels', async () => {
-  const h = await moduleHarness({ storage: { 'reader-text': 'terminus' } });
+  const h = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-turn-bg': 'dots2' } });
   const { rows, columns, line, textX, textWidth, statusY, dividerY } = fineExports.fineLayout('terminus');
   const text = [
     ...Array(rows - 1).fill('Earlier output'),
@@ -2178,20 +2188,20 @@ test('user turn background follows wrapped and indented rows across pages withou
   assert.equal(tilePixel(earlier, right, 4 + (rows - 2) * line), 0);
 });
 
-test('background picker: Dots 1/2 by default, lines and tube options save, comparison shows all', async () => {
+test('Backgrounds menu: Lines 1/3 by default, every option saves, Compare backgrounds inside it', async () => {
   const { line, textX, textWidth } = fineExports.fineLayout('terminus');
   const right = textX + textWidth - 1;
   const text = '/ Check this.\n> Checked.';
-  const dot = (x, y) => (x + y) % 2 === 0 ? 17 : 0;
   const scan = y => y % 3 === 2;
-  // A value saved by a removed option (Ink 3) falls back to Dots 1/2.
+  // A value saved by a removed option (Ink 3) falls back to Lines 1/3.
   const storage = { 'reader-text': 'terminus', 'reader-turn-bg': '3' };
   const h = await moduleHarness({ storage });
   h.api.thread = async () => ({ text });
   await h.pick(2);
-  for (const [x, y] of [[right, 4], [right, 5], [right - 1, 4]]) assert.equal(tilePixel(sentFineTiles(h), x, y), dot(x, y));
-  // Comparison: one block per option, label left, sample turn and reply right.
-  await h.menu(1101);
+  for (const y of [3, 4, 5, 6]) assert.equal(tilePixel(sentFineTiles(h), right, y), y >= 4 && y % 3 === 0 ? 17 : 0);
+  // Its own row in the long-press menu; the list ends with Compare backgrounds.
+  await h.menu(1109);
+  assert.deepEqual(menuItems(h), ['None', 'Ink 1', 'Lines 1/2', 'Lines 1/3 ✓', 'Dots 1/2', 'Tube turns', 'Tube', '1px frame', 'Compare backgrounds']);
   await h.pick(8);
   const comparison = sentFineTiles(h);
   const block = i => 4 + i * (2 * line + fineExports.BACKGROUND_GAP);
@@ -2204,31 +2214,36 @@ test('background picker: Dots 1/2 by default, lines and tube options save, compa
   assert.ok(lit(4, (x, y) => (x + y) % 2 === 0), 'Dots 1/2');
   assert.ok(lit(5, (_x, y) => !scan(y)), 'Tube turns');
   assert.ok(lit(6, (_x, y) => !scan(y)), 'Tube');
-  for (let i = 0; i < 7; i++) assert.equal(tilePixel(comparison, right, block(i) + line + 1), 0, `reply row ${i}`);
+  // 1px frame at Ink 2: right edge lit on every row of the turn, inside empty.
+  assert.ok(Array.from({ length: line }, (_, r) => tilePixel(comparison, right, block(7) + r) === 34).every(Boolean), '1px frame');
+  assert.equal(tilePixel(comparison, right - 1, block(7) + 1), 0);
+  for (let i = 0; i < 8; i++) assert.equal(tilePixel(comparison, right, block(i) + line + 1), 0, `reply row ${i}`);
   for (const font of fineExports.FINE_FONTS) {
     const { line: fontLine } = fineExports.fineLayout(font);
-    assert.ok(4 + 7 * (2 * fontLine + fineExports.BACKGROUND_GAP) + 8 + fontLine <= 287, font);
+    assert.ok(4 + 8 * (2 * fontLine + fineExports.BACKGROUND_GAP) + 8 + fontLine <= 287, font);
   }
   await h.scroll('down');
-  // Picker: pick Tube.
-  await h.menu(1101);
-  await h.pick(6);
-  assert.deepEqual(menuItems(h), ['None', 'Ink 1', 'Lines 1/2', 'Lines 1/3', 'Dots 1/2 ✓', 'Tube turns', 'Tube']);
+  // Pick Tube: band lit on two rows of three, the whole screen scanned (frame at step 9 on y = 5).
+  await h.menu(1109);
   await h.pick(6);
   assert.equal(h.storage.get('reader-turn-bg'), 'tube');
   const tube = sentFineTiles(h);
-  // Band lit on two rows of three, dark on the scanline row (y = 5).
   assert.equal(tilePixel(tube, right, 4), 17);
   assert.equal(tilePixel(tube, right, 5), 0);
-  // Tube scans the whole screen: the frame dims to 62 % (step 9) on scanline rows only.
   assert.equal(tilePixel(tube, 0, 5), 153);
   assert.equal(tilePixel(tube, 0, 4), 255);
-  // Tube turns: the frame is not scanned.
-  await h.menu(1101);
-  await h.pick(6);
+  // Tube turns leaves the screen frame alone.
+  await h.menu(1109);
   await h.pick(5);
   assert.equal(h.storage.get('reader-turn-bg'), 'tubeturns');
   assert.equal(tilePixel(sentFineTiles(h), 0, 5), 255);
+  // 1px frame.
+  await h.menu(1109);
+  await h.pick(7);
+  assert.equal(h.storage.get('reader-turn-bg'), 'frame');
+  assert.equal(tilePixel(sentFineTiles(h), right, 5), 34);
+  await h.menu(1109);
+  assert.equal(menuItems(h)[7], '1px frame ✓');
   // At App Brightness 1 no background is drawn: no step below Ink 1 text.
   const dim = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-ink': '1', 'reader-turn-bg': 'lines2' } });
   dim.api.thread = async () => ({ text });
@@ -2366,7 +2381,7 @@ test('switching the phone language to Japanese redraws glasses labels and keeps 
     const hint = page.textObject.find(c => c.containerName === 'hint').content.trim();
     assert.match(hint, /^\[長押しで入力\] P1\/1$/);
     assert.ok(listExports.glassWidth(hint) <= 280 - 6);
-    assert.equal(JSON.stringify(page.menuObject.menuItems.map(i => i.itemName)), JSON.stringify(['フォント: 標準フォント', 'アプリの明るさ: 15']));
+    assert.equal(JSON.stringify(page.menuObject.menuItems.map(i => i.itemName)), JSON.stringify(['フォント: 標準フォント', '背景: 横線 1/3', 'アプリの明るさ: 15']));
     assert.equal(statusExports.readerStatus('waiting'), '/入力待ち');
     assert.match(statusExports.readerStatus('working', 0, 5000), /思考中\.$/);
     // The hint still shrinks step by step when the row is crowded.

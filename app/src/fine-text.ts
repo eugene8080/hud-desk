@@ -37,10 +37,12 @@ export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].widt
 // garmin/faces/terminal): a CRT scanline on every third pixel row (rows y % 3 == 2, the face's
 // SCAN_PITCH and phase), dark in the lit band and dimming any text it crosses by 38 % (the face's
 // "on text" 38 %). Tube turns scans your turns only; Tube scans the whole screen, as the face does.
-// Ink 2/3, Dots 1/4 and the 1px frame were dropped; a saved one falls back to Dots 1/2.
-export const TURN_BACKGROUNDS = ['none', '1', 'lines2', 'lines3', 'dots2', 'tubeturns', 'tube'] as const;
+// 1px frame: a thin outline around each of your turns at Ink 2 (back by request, 2026-11-27).
+// Default Lines 1/3 (Eugene, 2026-11-27). Ink 2/3 and Dots 1/4 were dropped; a saved one falls
+// back to the default.
+export const TURN_BACKGROUNDS = ['none', '1', 'lines2', 'lines3', 'dots2', 'tubeturns', 'tube', 'frame'] as const;
 export type TurnBackground = typeof TURN_BACKGROUNDS[number];
-export const DEFAULT_TURN_BACKGROUND: TurnBackground = 'dots2';
+export const DEFAULT_TURN_BACKGROUND: TurnBackground = 'lines3';
 export const SCAN_PITCH = 3;
 const SCAN_TEXT = 0.62;
 const scanRow = (y: number) => y % SCAN_PITCH === SCAN_PITCH - 1;
@@ -54,11 +56,12 @@ export function turnBackgroundLabel(option: TurnBackground): string {
   if (option === 'dots2') return t('backgroundDots', '1/2');
   if (option === 'tubeturns') return t('backgroundTubeTurns');
   if (option === 'tube') return t('backgroundTube');
+  if (option === 'frame') return t('backgroundFrame');
   return t('backgroundInk', option);
 }
 // Which pixels of a band a background lights, in absolute screen coordinates so the pattern
 // stays continuous across rows and fonts with odd line heights.
-const TURN_PATTERNS: Record<Exclude<TurnBackground, 'none'>, (x: number, y: number) => boolean> = {
+const TURN_PATTERNS: Record<Exclude<TurnBackground, 'none' | 'frame'>, (x: number, y: number) => boolean> = {
   '1': () => true,
   lines2: (_x, y) => y % 2 === 0,
   lines3: (_x, y) => y % 3 === 0,
@@ -302,10 +305,18 @@ function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: Tur
   const { textX, textWidth, columns } = region;
   const lines = page.text.split('\n').slice(0, rows);
   // Keep at least one ink step between the letters and the background at low brightness.
-  const ink = Math.max(0, Math.min(inkByte(1), s.ink - inkByte(1)));
+  const ink = Math.max(0, Math.min(inkByte(background === 'frame' ? 2 : 1), s.ink - inkByte(1)));
   if (background !== 'none' && ink > 0) {
     lines.forEach((_, r) => {
-      if (page.userTurns[r]) s.pattern(textX, top + r * line, textWidth, line, ink, TURN_PATTERNS[background]);
+      const turn = page.userTurns[r];
+      if (!turn) return;
+      const y = top + r * line;
+      if (background !== 'frame') { s.pattern(textX, y, textWidth, line, ink, TURN_PATTERNS[background]); return; }
+      // One outline per turn: sides on every row, top on its first row, bottom on its last.
+      s.rect(textX, y, 1, line, ink);
+      s.rect(textX + textWidth - 1, y, 1, line, ink);
+      if (page.userTurns[r - 1] !== turn) s.rect(textX, y, textWidth, 1, ink);
+      if (r === lines.length - 1 || page.userTurns[r + 1] !== turn) s.rect(textX, y + line - 1, textWidth, 1, ink);
     });
   }
   lines.forEach((row, r) => s.text(row, textX, top + r * line, columns));
@@ -366,7 +377,7 @@ export function renderFontComparison(level = INK_MAX): number[][] {
 }
 
 // One block per option: its label on the left, the sample turn and reply to the right, so all
-// seven options fit the screen in every font (Departure 7x14 included).
+// eight options fit the screen in every font (Departure 7x14 included).
 export const BACKGROUND_GAP = 4;
 export function backgroundComparisonLayout(font: FineFont) {
   const { width: cell } = TABLES[font];

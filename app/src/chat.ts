@@ -5,7 +5,10 @@ import type { SessionColumns } from './session-list';
 
 export const CHAT_NETWORKS_KEY = 'chat-networks';
 export const CHAT_TRANSLATE_KEY = 'chat-translate';
-const line = (value: string) => value.replace(/\s+/g, ' ').trim();
+// Beeper's message text can carry HTML line breaks ('<br>', '<br/>', '<br />'); show them as line
+// breaks (Eugene on G2, 2026-11-27: "right now i see <br>").
+export const htmlBreaks = (value: string) => value.replace(/<br\s*\/?>/gi, '\n');
+const line = (value: string) => htmlBreaks(value).replace(/\s+/g, ' ').trim();
 const chatTitle = (chat: ChatItem) => line(chat.title) || t('chatUntitled');
 const withEnglish = (original: string, english?: string | null) => english ? `${original} (${line(english)})` : original;
 type VoiceStatus = 'chatTranscribing' | 'chatNotTranscribed';
@@ -35,7 +38,7 @@ export function chatReaderText(conversation: ChatConversation, statuses = new Ma
     const duration = durationTag(voice?.duration);
     const tag = message.media ? `[${message.media}${duration}${status && !voice?.transcript ? ` · ${t(status)}` : ''}]` : '';
     const translated = translations.get(message.id ?? id ?? '');
-    const caption = withEnglish(message.text, translated?.text);
+    const caption = withEnglish(htmlBreaks(message.text), translated?.text);
     const transcript = voice?.transcript ? withEnglish(voice.transcript, translated?.voice) : '';
     const text = `${who} ${[tag, caption, transcript].filter(Boolean).join(' ').replace(/\r\n?|\n/g, '\n  ')}`;
     lineIndex += text.split('\n').length;

@@ -53,6 +53,10 @@ test('Beeper allowlist refuses other operations and text mutations before creden
   for (const [method, path, body] of [
     ['POST', '/v1/chats'],
     ['POST', `/v1/chats/${encodeURIComponent(chatId)}/read`],
+    ['POST', `/v1/chats/${encodeURIComponent(chatId)}/read`, { messageID: 'fixture' }],
+    ['GET', `/v1/chats/${encodeURIComponent(chatId)}/read`, {}],
+    ['POST', `/v1/chats/${encodeURIComponent(chatId)}/unread`, {}],
+    ['POST', '/v1/chats/%2e%2e/read', {}],
     ['GET', `/v1/chats/${encodeURIComponent(chatId)}`],
     ['GET', '/v1/messages/search'],
     ['PATCH', messagesPath],
@@ -105,12 +109,39 @@ test('Chat routes require private host and bearer, including the send and CORS g
   assert.equal((await request('/api/chat/networks', { headers: { authorization: '' } })).status, 401);
   assert.equal((await request('/api/chat/list', { method: 'OPTIONS', headers: { authorization: '', 'cf-ray': '' } })).status, 403);
   assert.equal((await request('/api/chat/list', { method: 'OPTIONS', headers: { authorization: '' } })).status, 204);
-  for (const path of ['transcribe', 'translate']) {
+  for (const path of ['transcribe', 'translate', 'read']) {
     const route = `/api/chat/${path}`;
     assert.equal((await request(route, { method: 'POST', headers: { 'cf-ray': '' }, body: {} })).status, 403);
     assert.equal((await request(route, { method: 'POST', headers: { authorization: '' }, body: {} })).status, 401);
   }
   assert.equal(fixture.calls.length, 0);
+});
+
+test('Opening a chat marks the whole chat read: one POST with an empty body, list row updated', async t => {
+  const calls = [];
+  const request = await serve(t, { transport: async (url, options) => {
+    calls.push({ method: options.method, path: url.pathname, body: options.body });
+    if (url.pathname === '/v1/accounts') return Response.json([{ accountID: 'fixture', network: 'Signal' }]);
+    if (url.pathname === '/v1/chats') return Response.json({ items: [{ id: chatId, title: 'Sample', accountID: 'fixture', unreadCount: 2, lastActivity: '2026-11-27T00:00:00Z' }], hasMore: false });
+    if (url.pathname === `/v1/chats/${encodeURIComponent(chatId)}/read`) return Response.json({ id: chatId, unreadCount: 0 });
+    return assert.fail(`Unexpected ${options.method} ${url.pathname}`);
+  } });
+  let list;
+  for (let i = 0; i < 10 && !list?.items?.length; i++) list = (await request('/api/chat/list?networks=&page=0')).data;
+  assert.equal(list.items[0].unread, true);
+  const marked = await request('/api/chat/read', { method: 'POST', body: { chatId } });
+  assert.deepEqual(marked.data, { ok: true });
+  assert.deepEqual(calls.filter(call => call.method === 'POST'), [{ method: 'POST', path: `/v1/chats/${encodeURIComponent(chatId)}/read`, body: '{}' }]);
+  assert.equal((await request('/api/chat/list?networks=&page=0')).data.items[0].unread, false);
+  for (const body of [{}, { chatId, messageId: 'fixture' }, { chatId: '' }]) {
+    assert.equal((await request('/api/chat/read', { method: 'POST', body })).status, 400);
+  }
+});
+
+test('HTML line breaks in Beeper text become line breaks', async t => {
+  const request = await serve(t, { transport: () => Response.json({ items: [{ id: 'one', type: 'TEXT', text: 'One<br>Two<br/>Three' }] }) });
+  const { data } = await request(`/api/chat/messages?id=${encodeURIComponent(chatId)}`);
+  assert.equal(data.messages[0].text, 'One\nTwo\nThree');
 });
 
 test('Chat keeps each supported media type and exposes only voice metadata', async t => {

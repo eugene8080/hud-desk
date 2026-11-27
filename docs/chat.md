@@ -62,7 +62,7 @@ The verified weights are 936,291,369 bytes for SenseVoice and 1,721,366 bytes fo
 
 Click row 0 to cycle through the offered modules or select **Chat** on the phone. The first row below it opens **Filter by Network**. Network checkboxes on the phone and the glasses share the same saved selection. The glasses show up to eight chats per page in activity order, with `/` for unread and `-` for read. The count covers the selected networks.
 
-The reader starts at the beginning of the newest message. Swipe up for earlier pages and swipe down on the last page to refresh. Your messages begin with `/ ` and incoming messages begin with `> ` and the sender name. Opening a chat does not mark it read in Beeper.
+The reader starts at the beginning of the newest message. Swipe up for earlier pages and swipe down on the last page to refresh. Your messages begin with `/ ` and incoming messages begin with `> ` and the sender name. Opening an unread chat marks the whole chat read in Beeper once it is on screen (`POST /v1/chats/{chatID}/read`, empty body; Eugene, 2026-11-27). Beeper may send a read receipt to the other person where the network supports it. A failure shows `not marked read` in the status row and the chat stays unread. HTML line breaks in Beeper's text (`<br>`) show as line breaks.
 
 Media uses `[Voice 0:12]`, `[Audio 0:12]`, `[Photo]`, `[Video]`, `[Sticker]`, `[File]` or `[Location]`. Duration appears when Beeper supplies it. Captions follow the tag.
 
@@ -92,6 +92,6 @@ The bridge permits `GET /v1/accounts`, `GET /v1/chats`, `GET` or `POST /v1/chats
 
 FFmpeg converts voice attachments to 16 kHz mono WAV. The bridge removes the temporary input and WAV after processing. Files up to 32 MiB and five minutes are supported. The app receives message metadata and text without asset URLs or paths. Transcripts and translations are cached in bridge memory per chat and message. The two new routes re-read the chat and only process the selected visible messages. Translation sends one local Ollama batch for messages loaded on open, then a batch for new transcripts after each click. Model inference stays on the bridge PC and logs do not contain chat content or asset identifiers.
 
-The reader displays Beeper's latest message batch. Older server-side history, attachment playback, quoted-message replies, editing, and read-state changes are outside this beta. Chats Beeper marks read-only show the reader without voice reply.
+The reader displays Beeper's latest message batch. Older server-side history, attachment playback, quoted-message replies, editing, and marking a chat unread are outside this beta. Chats Beeper marks read-only show the reader without voice reply.
 
 The test suite and Even simulator fixture use synthetic Beeper data. The RTX 5090 smoke test used eSpeak NG-generated speech in Ogg/Opus, M4A/AAC, and MP3. Warm calls including decoding took 0.11–0.13 seconds per 1.3–2.3 second clip. Cold calls took 13–39 seconds. Forced Cantonese tagged 4/4 Cantonese clips correctly with 14 character edits over 29 reference characters. Forced Mandarin tagged 4/4 with 6 edits over 31 characters. Auto tagged only 1/4 of these short Cantonese clips as Cantonese. This small synthetic sample measures the pipeline and is insufficient to estimate real voice-note accuracy.

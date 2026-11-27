@@ -41,6 +41,8 @@ export function readBeeperConfig(config) {
 }
 
 const messagePath = id => `/v1/chats/${encodeURIComponent(id)}/messages`;
+// Mark a whole chat read (https://developers.beeper.com/desktop-api-reference/resources/chats/methods/mark_read).
+const readPath = id => `/v1/chats/${encodeURIComponent(id)}/read`;
 
 const assetPath = '/v1/assets/serve';
 const assetURL = value => typeof value === 'string' && value.length <= 4096 &&
@@ -51,6 +53,12 @@ const assetURL = value => typeof value === 'string' && value.length <= 4096 &&
 function permitted(method, path, body, query) {
   if (method === 'GET' && body === undefined && (path === '/v1/accounts' || path === '/v1/chats')) return undefined;
   if (method === 'GET' && path === assetPath && body === undefined && assetURL(query?.url)) return undefined;
+  // Mark read: the whole chat, no message ID, empty body (opened on the glasses, 2026-11-27).
+  const read = /^\/v1\/chats\/([^/]+)\/read$/.exec(path)?.[1];
+  if (read && method === 'POST' && body && Reflect.ownKeys(body).length === 0) {
+    const id = decodeSegment(read);
+    if (validId(id) && path === readPath(id)) return '{}';
+  }
   const segment = /^\/v1\/chats\/([^/]+)\/messages$/.exec(path)?.[1];
   if (segment) {
     const id = decodeSegment(segment);
@@ -136,7 +144,8 @@ function chatMessage(item, transcript) {
   const attachment = audio ? attachments.find(a => isAudio(a) && a.isVoiceNote) ?? attachments.find(isAudio) : undefined;
   const tag = audio ? (item.type === 'VOICE' || attachment?.isVoiceNote ? 'Voice' : 'Audio')
     : Object.hasOwn(media, item.type) ? media[item.type] : undefined;
-  const caption = text(item.text);
+  // HTML line breaks in Beeper's text become real ones, so the translator and the app see lines.
+  const caption = text(text(item.text).replace(/<br\s*\/?>/gi, '\n'));
   if (!tag && !caption) return null;
   const url = assetURL(attachment?.srcURL) || assetURL(attachment?.id);
   const stored = text(attachment?.transcription?.transcription);
@@ -319,6 +328,14 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech 
         });
       }
       return { items };
+    },
+    // Opening a chat on the glasses marks it read in Beeper (Eugene, 2026-11-27), as Email does.
+    'POST /api/chat/read': async (_params, input) => {
+      if (!input || Object.keys(input).length !== 1 || !validId(input.chatId)) throw badRequest();
+      await request('POST', readPath(input.chatId), { body: {} });
+      // The list shows it read before the next snapshot; a failure here only waits for that refresh.
+      try { const row = chats.read(undefined)?.items.get(input.chatId); if (row) row.unread = false; } catch { /* next snapshot */ }
+      return { ok: true };
     },
     'POST /api/chat/send': async (_params, input) => {
       if (!input || Object.keys(input).length !== 2 || !validId(input.chatId) || !text(input.text)) throw badRequest();

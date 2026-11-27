@@ -98,6 +98,7 @@ export const api = {
     translate: (chatId: string, messageIds: string[]) =>
       call<{ items: ChatTranslation[] }>('POST', '/api/chat/translate', { chatId, messageIds }, 240000),
     send: (chatId: string, text: string) => call<{ ok: boolean }>('POST', '/api/chat/send', { chatId, text }),
+    read: (chatId: string) => call<{ ok: boolean }>('POST', '/api/chat/read', { chatId }),
   },
   mail: {
     accounts: () => call<MailAccount[]>('GET', '/api/mail/accounts'),

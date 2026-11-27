@@ -56,6 +56,24 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.69. Merged Codex worker chat-voice (3ee0d14, merge 716ec39): Chat shows voice
+notes/media tags, a click transcribes the page's voice notes (bridge POST /api/chat/transcribe ->
+Beeper GET /v1/assets/serve -> ffmpeg -> FunASR SenseVoice yue + OpenCC s2hk in a warm Python
+worker, bridge/chat-voice.py), Translate: English via local Ollama (POST /api/chat/translate).
+Coordinator added: opening an unread chat marks it read (POST /api/chat/read -> Beeper POST
+/v1/chats/{id}/read, empty body; Eugene asked); <br> in Beeper text shows as a line break (app +
+bridge); Backgrounds menu as its own long-press row (id 1109) with Lines 1/3 default, 1px frame
+back, Compare backgrounds moved inside. config.local.json beeper block now has asrPython
+(posangwiki venv-funasr), ffmpegPath (winget Gyan.FFmpeg 9.1), asrLanguage yue, asrScript s2hk,
+translationModel qwen3.8:27b. Bridge features need an approved restart. GazeChat retired at
+Eugene's request: scheduled tasks 'Messenger Glass - Mail facade' and '- STT' disabled and their
+processes stopped; tailscale serve :8448 (STT, 8797) and :8449 (mail facade, 8798) removed;
+orca-glass :8443 and the Funnel on 443 (8600) untouched. Not done (outward, confirm first):
+archive GitHub eugene8080/gazechat (and messenger-glass?), close builtproper/gazechat PR #1,
+Even Hub app com.eugene8080.gazechat, revoke Beeper token g2new and the facade's Gmail grant.
+Fusion Pixel 12 zh_HK CJK table (common set, Eugene chose) dispatched to the Codex worker
+(ctx_d4dbfd4e5187).
+
 2026-11-27 beta 1.0.68 (user: chat spacing good; put the Background menu back to try the lined
 options; lines should look like the tube TV of his Garmin terminal watch face,
 claude-usage-widget garmin/faces/terminal: SCAN_PITCH 3, dark rows y % 3 == 2, text on a scanline

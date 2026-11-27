@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.68**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.69**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.68,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.69,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.68)
+## Feature list (beta 1.0.69)
 
 ### All modules
 
@@ -30,10 +30,10 @@ Rule for every agent: each beta release updates this file in the release commit:
   hanging indents on wrapped lines, one Font list (Native text and pixel fonts: Departure 7x14,
   Misc Fixed 6x13, Terminus 6x12, GohuFont 6x11, Scientifica 5x11; Compare fonts screen), App
   Brightness 15 down to 1. Both lists wrap at the ends.
-- With a pixel font, the user's turns sit on a dim background so they stand out (Background:
-  None, Ink 1, Lines 1/2, Lines 1/3, Dots 1/2 (default), Tube turns, Tube). Tube draws CRT
-  scanlines on every third pixel row, across your turns only or the whole screen. A Compare
-  backgrounds screen shows every option.
+- With a pixel font, the user's turns sit on a dim background so they stand out. The reader's
+  long-press menu has a Background menu: None, Ink 1, Lines 1/2, Lines 1/3 (default), Dots 1/2,
+  Tube turns, Tube, 1px frame, and Compare backgrounds. Tube draws CRT scanlines on every third
+  pixel row, across your turns only or the whole screen.
   Native text has no background option in the SDK.
 - Keeps loading with the phone screen off.
 - English and Japanese (switch in the phone app); Japanese in small text uses Shinonome 12x12
@@ -76,9 +76,14 @@ Rule for every agent: each beta release updates this file in the release commit:
   most recent first, `/` unread and `-` read, unread chats counted on row 0.
 - Filter by Network on the glasses and the phone page (shared picks).
 - Reader opens at the newest message; your messages start `/ `, others `> ` with the sender, with
-  no blank row between messages.
+  no blank row between messages and line breaks kept.
+- Voice notes and other media show as tags (`[Voice 0:12]`, `[Photo]`, ...). A click transcribes
+  the voice notes on the page on screen, on the PC (FunASR SenseVoice, tuned for Cantonese, HK
+  Traditional characters).
+- Translate: English (reader menu and phone, off by default) adds an English translation in
+  brackets after messages and transcripts in other languages, made by a local Ollama model.
 - Voice reply as in Coding: hold, release to review, click to send, double-click to cancel. A send
-  is never repeated automatically. Opening a chat does not mark it read in Beeper.
+  is never repeated automatically. Opening an unread chat marks it read in Beeper.
 
 ### Not yet built
 
@@ -88,12 +93,12 @@ Rule for every agent: each beta release updates this file in the release commit:
 ## Paste: store description
 
 <!-- description:start -->
-Read your Orca agent sessions and your email on G2. Speak your next step.
+Read your agent sessions, email and chats on G2. Speak your next step.
 
 Orca Glass connects Even Realities G2 glasses to agents running in Orca on your Windows PC, and to Hermes Agent. Row 0 switches between Coding, Email and Chat.
 
 Coding:
-- Agents: Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent (bots, sessions and scheduled jobs), with the model name and working or waiting status.
+- Agents: Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent, with the model name and working or waiting status.
 - Filter by Agent and Filter by Workspace on the glasses and the phone page. Usage for Codex, Claude and Cursor with reset times.
 - Voice: hold for a full-screen voice page with local Whisper on your PC. Release to review, click to send, double-click to cancel. Answer numbered choices and Hermes clarify questions.
 
@@ -101,9 +106,9 @@ Email (Gmail, when your bridge is set up for it):
 - Read only: no sending, drafts or archive. Opening a thread marks it read.
 - One or more Gmail accounts, one at a time (click the address to switch). Filter by Label on the glasses or the phone, with voice search on the glasses. Seven or eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
 
-Chat (Beeper Desktop, when set up): chats with Filter by Network, voice replies with review.
+Chat (Beeper Desktop, when set up): Filter by Network, voice replies, voice notes transcribed on click (Cantonese tuned), English translation.
 
-Reader for all: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica), your turns on a light background, App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
+Reader for all: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica), backgrounds for your turns, App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
 
 Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge. The packaged connection targets a configured private PC over Tailscale; self-service setup for any PC is not offered yet. Agents and mail access run on your PC, not the glasses. Try the demo without a PC.
 
@@ -115,5 +120,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.68: The reader's Background menu is back, with two tube-TV options: Tube turns draws CRT scanlines over your turns, Tube over the whole screen. Also Lines 1/2, Lines 1/3, Ink 1, Dots 1/2 (default) and None; Compare backgrounds shows them all.
+1.0.69: Chat shows voice notes and media; click to transcribe the voice notes on the page (Cantonese tuned, on your PC). Translate: English adds a translation in brackets. Opening a chat marks it read; line breaks show properly. The reader has a Background menu (Lines 1/3 default, Tube, 1px frame, Compare backgrounds).
 <!-- whatsnew:end -->

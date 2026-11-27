@@ -535,6 +535,7 @@ function readerMenu(screen: TextScreen) {
   const name = readerText === 'native' ? tr('nativeText') : fineLabel(readerText);
   return [
     { id: 1101, label: tr('usingFont', name), run: () => showFonts() },
+    { id: 1109, label: tr('background', turnBackgroundLabel(turnBackground)), run: () => showBackgrounds(screen) },
     { id: 1107, label: tr('brightness', inkLevel), run: () => showBrightness() },
     ...(screen.reader instanceof ChatReader
       ? [{ id: 1108, label: tr(chatTranslate ? 'chatTranslateEnglish' : 'chatTranslateOff'), run: () => setChatTranslation(!chatTranslate) }]
@@ -564,7 +565,7 @@ function showTextPicker(reader: TextScreen, labels: string[], selected: number, 
   return open(Math.floor(at / TEXT_PICKER_ROWS), at % TEXT_PICKER_ROWS);
 }
 
-// Native, every small font largest first, then backgrounds and comparisons.
+// Native, every small font largest first, then the font comparison.
 function showFonts() {
   const reader = current;
   if (reader?.kind !== 'text' || !reader.reader) return;
@@ -572,9 +573,7 @@ function showFonts() {
   const rows = [
     { label: tr('nativeText'), run: () => setReaderText('native', reader) },
     ...fonts.map(font => ({ label: fineLabel(font), run: () => setReaderText(font, reader) })),
-    { label: tr('background', turnBackgroundLabel(turnBackground)), run: () => showBackgrounds(reader) },
     { label: tr('compareFonts'), run: () => openComparison(reader, 'fonts') },
-    { label: tr('compareBackgrounds'), run: () => openComparison(reader, 'backgrounds') },
   ];
   const currentIndex = readerText === 'native' ? 0 : fonts.indexOf(readerText) + 1;
   return showTextPicker(reader, rows.map((row, i) => i === currentIndex ? `${row.label} ✓` : row.label), currentIndex, i => {
@@ -582,12 +581,14 @@ function showFonts() {
   }, true);
 }
 
-// Background for your turns (restored 2026-11-27 so Eugene can try the lined and tube options).
+// Backgrounds menu (Eugene, 2026-11-27): its own row in the reader's long-press menu; every
+// option, then Compare backgrounds (moved here from the Font list).
 function showBackgrounds(reader: TextScreen) {
   const selected = TURN_BACKGROUNDS.indexOf(turnBackground);
-  const labels = TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : ''));
+  const labels = [...TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : '')), tr('compareBackgrounds')];
   let saving = false;
   return showTextPicker(reader, labels, selected, async i => {
+    if (i === TURN_BACKGROUNDS.length) { await openComparison(reader, 'backgrounds').catch(e => diag((e as Error).message)); return; }
     const option = TURN_BACKGROUNDS[i];
     if (saving || !option) return;
     const picker = current;
@@ -1343,7 +1344,8 @@ async function openChat(item: ChatItem) {
     void record({ reply: async text => (await api.chat.send(item.id, text)).ok,
       onResult: sent => { outcome = sent ? 'chatSent' : 'chatNotSent'; } }, true);
   } : undefined;
-  const source = new ChatReader(item, () => chatTranslate, () => outcome ? tr(outcome) : ' ', hold);
+  let readFailed = false;
+  const source = new ChatReader(item, () => chatTranslate, () => outcome ? tr(outcome) : readFailed ? tr('chatNotMarkedRead') : ' ', hold);
   try {
     const screen = await openReader(source, back, () => {
       if (current?.kind !== 'text' || current.reader !== source || current.pageWriting) return;
@@ -1352,6 +1354,15 @@ async function openChat(item: ChatItem) {
       const ids = (screen.voiceLines ?? []).filter(({ line }) => line >= page.firstLine && line <= page.lastLine).map(({ id }) => id);
       void source.transcribe(ids, () => repaintChat(screen).catch(() => {})).catch(() => {});
     });
+    // Opening an unread chat on the glasses marks it read in Beeper (Eugene, 2026-11-27), once,
+    // after it is on screen; a failure shows in the status row and the chat stays unread.
+    if (screen && item.unread) {
+      void Promise.resolve().then(() => api.chat.read(item.id)).then(result => {
+        if (!result.ok) throw new Error('Mark read failed');
+        item.unread = false;
+        moduleCache.delete('chat');
+      }).catch(() => { readFailed = true; });
+    }
     if (screen && current === screen) void translateChat(screen, source);
   } catch {
     if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('chat'), text: tr('chatUnavailable'), onBack: back, onClick: back });
