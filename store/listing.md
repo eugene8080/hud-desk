@@ -159,6 +159,9 @@ spinner on its L frame, and the GitHub README.
   02-architecture, 01-coding-dense, 03-live-diff, 10-outline, 11-usage, 13-chat, 15-chat-translate, 07-email.
 - Portal also updated 2026-11-27: name HUD Desk, tagline 'Agents, inbox, chats. Heads up, hands free.',
   icon `store/icon/hud-desk-icon.png` (ink must be exactly #F4F4F4), tags orca claude codex email chat.
+- Portal privacy attachment: left as it is; Eugene ruled 2026-11-27 "no update to privacy statement
+  needed". The portal regenerates it only through its declaration wizard; the repo copy
+  (`store/privacy-and-terms.md`, `store/HUD-Desk-Privacy-and-Terms.pdf`) is reference only.
 - Usage bars (Eugene asked): built in beta 1.0.91 (renderUsagePage in app/src/fine-text.ts).
 - Kettle photo replaced by the fractal everywhere (Eugene, 2026-11-27); no third-party image remains.
 - Files:
