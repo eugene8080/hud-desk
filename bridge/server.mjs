@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import { extname, join, normalize } from 'node:path';
+import { Readable } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { executable } from './platform.mjs';
 import * as o from './orca.mjs';
@@ -14,6 +15,7 @@ import { MailError } from './gmail.mjs';
 import { allowPrivateHost, createMail, readMailConfig } from './mail.mjs';
 import { BeeperError, createBeeper, readBeeperConfig } from './beeper.mjs';
 import { createImaging, ImageError, readView } from './image.mjs';
+import { relayIdentity, relayOrigin } from './relay-config.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const DIST = join(here, '../app/dist');
@@ -152,6 +154,7 @@ const activityTrace = new Map();
 export function createBridge({
   token = process.env.EHO_TOKEN || secrets.token(),
   mailConfig = local.mail, beeperConfig = local.beeper, privateHosts = local.privateHosts, mailOptions, beeperOptions,
+  relayConfig = null, identity,
 } = {}) {
   const settings = readMailConfig(mailConfig);
   const mail = settings && createMail(settings, { imaging, ...mailOptions });
@@ -160,10 +163,61 @@ export function createBridge({
   const privateHostAllowed = allowPrivateHost(privateHosts);
   const capabilities = async () => ({ voice: voiceAvailable(), images: imaging.available(), imageRead: await imaging.readable(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])],
     ...(chat?.features && { chatFeatures: await chat.features() }) });
-  const server = createServer((req, res) => handle(req, res, token, capabilities, mail, chat, privateHostAllowed));
+  const direct = (req, res) => handle(req, res, token, capabilities, mail, chat, privateHostAllowed);
+  const server = createServer(direct);
+  const origin = relayOrigin(relayConfig);
+  if (origin) {
+    const pairing = identity ?? relayIdentity();
+    // Only traffic authenticated and replay-checked by connectRelay enters this
+    // adapter. Internet callers cannot claim a trusted host with an HTTP header.
+    const trusted = (req, res) => handle(req, res, token, capabilities, mail, chat, () => true);
+    let stopRelay;
+    server.once('listening', async () => {
+      try {
+        const { connectRelay } = await import('./relay-client.mjs');
+        if (server.listening) {
+          stopRelay = connectRelay({ origin, identity: pairing,
+            dispatch: (meta, bytes) => relayRequest(trusted, token, meta, bytes) });
+        }
+      } catch {
+        console.error('Could not start the outbound relay client. Check the relay setup in docs/relay.md.');
+      }
+    });
+    server.once('close', () => stopRelay?.());
+  }
   if (mail) server.once('close', mail.close);
   if (chat) server.once('close', chat.close);
   return server;
+}
+
+async function relayRequest(handler, token, { method, path, contentType }, bytes) {
+  const bad = { status: 400, contentType: 'application/json', bytes: Buffer.from('{"error":"Invalid relay request"}') };
+  if ((method !== 'GET' && method !== 'POST') || typeof path !== 'string' || !path.startsWith('/') ||
+      path.startsWith('//') || path.includes('\\') || /[\r\n\t#]/.test(path)) return bad;
+  const url = new URL(path, 'http://bridge.invalid');
+  if (url.origin !== 'http://bridge.invalid' || (url.pathname !== '/healthz' && !url.pathname.startsWith('/api/'))) return bad;
+  if (method === 'POST' && contentType !== 'application/json' && contentType !== 'application/octet-stream') return bad;
+  if (method === 'GET' && bytes.length) return bad;
+  const req = Object.assign(Readable.from(bytes.length ? [bytes] : []), {
+    method, url: url.pathname + url.search,
+    headers: { authorization: `Bearer ${token}`, 'content-type': contentType },
+  });
+  const headers = new Map();
+  let result;
+  const res = {
+    statusCode: 200,
+    setHeader(name, value) { headers.set(name.toLowerCase(), value); },
+    writeHead(status, values) {
+      this.statusCode = status;
+      for (const [name, value] of Object.entries(values)) this.setHeader(name, value);
+    },
+    end(data = '') {
+      result = { status: this.statusCode, contentType: headers.get('content-type') ?? 'application/octet-stream',
+        bytes: Buffer.from(data) };
+    },
+  };
+  await handler(req, res);
+  return result;
 }
 
 async function handle(req, res, token, capabilities, mail, chat, privateHostAllowed) {
@@ -260,7 +314,7 @@ async function handlePrivate(req, res, url, module, route, token, privateHostAll
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  createBridge().listen(PORT, HOST, () => {
+  createBridge({ relayConfig: config.relay }).listen(PORT, HOST, () => {
     console.log(`evenhub-orca bridge: http://${HOST}:${PORT}/ (pair with npm run pair)`);
     if (voiceAvailable()) warmWhisper().then(() => console.log('Local speech engine ready')).catch(e => console.error(e.message));
   });
