@@ -15,11 +15,11 @@ $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
     -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName 'Orca Glass Bridge' -Action $action -Trigger $trigger `
+Register-ScheduledTask -TaskName 'HUD Desk Bridge' -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings `
     -Description 'Start the Codex-only Orca Glass bridge hidden at Eugene sign-in and recover after failure.' `
     -Force | Out-Null
-$readback = Get-ScheduledTask -TaskName 'Orca Glass Bridge'
+$readback = Get-ScheduledTask -TaskName 'HUD Desk Bridge'
 if ($readback.Actions[0].Execute -ine $conhostPath -or $readback.Actions[0].Arguments -cne $arguments) {
     throw 'Task readback differs from registered headless action.'
 }

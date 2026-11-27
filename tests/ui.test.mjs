@@ -1292,7 +1292,7 @@ test('one layer at a time: Ctrl+, on the session list and Ctrl+Shift+P go back t
   await h.key('ArrowDown');
   await h.key('ArrowDown');
   await h.key('Enter');
-  assert.equal(h.pages.at(-1).textObject[0].content, 'Usage');
+  assert.ok(sameTiles(h, usageTiles([{ name: 'Codex', bars: [{ label: 'week', percent: 25, reset: 'tomorrow' }] }])));
   await h.back();
   assert.ok(ctrlComma(), 'Usage returns to the Ctrl+, list');
   // New Session: step 2 goes back to step 1, step 1 to the Ctrl+, list.
@@ -1991,8 +1991,7 @@ test('contextual actions refresh roster, open workspace picker and display usage
   await h.back();
   h.api.usage = async () => ({ codex: { provider: 'codex', status: 'ok', weekly: { usedPercent: 25, resetDescription: 'tomorrow' } } });
   await h.menu(1003);
-  assert.equal(h.pages.at(-1).textObject[0].content, 'Usage');
-  assert.match(h.pages.at(-1).textObject[1].content, /25%/);
+  assert.ok(sameTiles(h, usageTiles([{ name: 'Codex', bars: [{ label: 'week', percent: 25, reset: 'tomorrow' }] }])));
   await h.back(); await h.pick(2);
   // The reader's own menu only switches text size; session-list actions do nothing there.
   assert.equal(JSON.stringify(h.pages.at(-1).menuObject.menuItems.map(i => [i.itemID, i.itemName])),
@@ -2011,10 +2010,14 @@ test('Usage renders Claude windows and Cursor monthly allowance without mislabel
     cursor: { provider: 'cursor', status: 'ok', monthly: { usedPercent: 2.020596, resetDescription: 'Nov 5' } },
   });
   await h.menu(1003);
-  const text = h.pages.at(-1).textObject[1].content;
-  assert.match(text, /Claude\n  5h 3%/);
-  assert.match(text, /Cursor\n  Monthly 2% \(Nov 5\)/);
-  assert.ok(!text.includes('2.020596'));
+  assert.ok(sameTiles(h, usageTiles([
+    { name: 'Claude', bars: [{ label: '5h', percent: 3, reset: '9:50 AM' }, { label: 'week', percent: 2, reset: '1:00 PM' }] },
+    { name: 'Cursor', bars: [{ label: 'Monthly', percent: 2.020596, reset: 'Nov 5' }] },
+  ])));
+  // Percent shows one decimal place at most.
+  assert.equal(fineExports.usagePercent(2.020596), '2%');
+  assert.equal(fineExports.usagePercent(18.25), '18.3%');
+  assert.equal(fineExports.usagePercent(140), '100%');
 });
 
 
@@ -2280,22 +2283,18 @@ test('Usage top toggle cycles and persists three reset modes without re-fetching
     resetDescription: 'Original label', computerResetDescription: 'Thu 1:12 AM',
   } } }; };
   await h.menu(1003);
-  const page = h.pages.at(-1), count = h.pages.length;
-  assert.equal(page.containerTotalNum, 3);
-  const toggle = page.textObject.find(c => c.containerName === 'usage-reset');
-  assert.match(toggle.content, /Computer time/);
-  assert.ok(page.textObject.find(c => c.containerName === 'body').yPosition >= toggle.yPosition + toggle.height);
+  const count = h.pages.length;
+  const bar = reset => [{ name: 'Codex', bars: [{ label: 'week', percent: 42, reset }] }];
+  assert.ok(sameTiles(h, usageTiles(bar('Thu 1:12 AM'))));
   await h.tap();
-  assert.match(h.upgrades.findLast(u => u.containerName === 'usage-reset').content, /Phone time/);
+  assert.ok(shownTiles(h)[0] && !sameTiles(h, usageTiles(bar('Thu 1:12 AM'))), 'phone mode redraws the reset row');
   await h.tap();
-  assert.match(h.upgrades.findLast(u => u.containerName === 'usage-reset').content, /Absolute time/);
-  assert.match(h.upgrades.findLast(u => u.containerName === 'body').content, /2d5h12m/);
+  assert.ok(sameTiles(h, usageTiles(bar('2d5h12m'), 'Absolute time')));
   await h.tap();
-  assert.match(h.upgrades.findLast(u => u.containerName === 'body').content, /Thu 1:12 AM/);
+  assert.ok(sameTiles(h, usageTiles(bar('Thu 1:12 AM'))));
   assert.deepEqual(saved, [['usage-reset-mode', 'phone'], ['usage-reset-mode', 'absolute'], ['usage-reset-mode', 'computer']]);
   assert.equal(requests, 1);
-  assert.equal(h.pages.length, count);
-  for (const u of h.upgrades.filter(u => u.containerName === 'usage-reset')) assert.ok(!('xPosition' in u || 'width' in u));
+  assert.equal(h.pages.length, count, 'a reset-mode change redraws tiles, never rebuilds the page');
   await h.back();
   assert.match(menuItems(h)[0], /Filter by Agent/);
 });
@@ -2304,8 +2303,7 @@ test('Usage restores its saved reset mode', async () => {
   const h = await harness(2, false, 'tap', '', 0, false, '', 'absolute');
   h.api.usage = async () => ({ cursor: { provider: 'cursor', status: 'ok', monthly: { usedPercent: 2, resetsAt: Date.now() - 1000, resetDescription: 'Old label' } } });
   await h.menu(1003);
-  assert.match(h.pages.at(-1).textObject.find(c => c.containerName === 'usage-reset').content, /Absolute time/);
-  assert.match(h.pages.at(-1).textObject.find(c => c.containerName === 'body').content, /Monthly 2% \(0m\)/);
+  assert.ok(sameTiles(h, usageTiles([{ name: 'Cursor', bars: [{ label: 'Monthly', percent: 2, reset: '0m' }] }], 'Absolute time')));
 });
 
 test('native text widths use measured firmware advances so rows reach the right edge', () => {
@@ -3144,6 +3142,10 @@ const glassImage = (level, mean = 0.2) => {
   return { width: 576, height: 288, data: packed.toString('base64'), mean };
 };
 const shownTiles = h => [0, 1, 2, 3].map(i => h.images.findLast(image => image.containerName === `fine-${i}`)?.imageData);
+// The Usage page as the glasses should show it (Terminus, full ink): title, reset mode, bars.
+const usageTiles = (groups, mode = 'Computer time', note = '') => fineExports.renderUsagePage(
+  { title: 'Usage', reset: `Reset: ${mode}  (Click to change)`, groups, note, none: 'no data' }, 'terminus', 15);
+const sameTiles = (h, tiles) => JSON.stringify(shownTiles(h)) === JSON.stringify(tiles);
 
 test('images: views cycle Original Picture, Zoom, Outline, AI Readout; swipe moves sections then pictures; n inverts; double-click returns', async () => {
   const { fixture, messages } = mailFixture();
@@ -3251,4 +3253,24 @@ test('Chat translation sits on the row under each original line, indented under 
     'House B\n• 1 x 2/F 主人房換鉸\n  (1 x 2/F master bedroom: replace hinge)\n  2. 廚房窗好緊\n     (Kitchen window is stiff)');
   // A line count that does not match (the message changed) leaves the original as it is.
   assert.equal(chat.withEnglishLines('a\nb', ['x']), 'a\nb');
+});
+
+test('Usage bars: fill is proportional to the used share and the page fits every pixel font', () => {
+  const page = p => ({ title: 'Usage', reset: 'Reset: Computer time  (Click to change)', note: '', none: 'no data',
+    groups: [{ name: 'Codex', bars: [{ label: '5h', percent: p, reset: 'Fri 9:00 AM' }] }] });
+  const lit = tiles => tiles.reduce((n, tile) => n + tile.filter(v => v === 255).length, 0);
+  const empty = lit(fineExports.renderUsagePage(page(0), 'terminus', 15));
+  const half = lit(fineExports.renderUsagePage(page(50), 'terminus', 15)) - empty;
+  const full = lit(fineExports.renderUsagePage(page(100), 'terminus', 15)) - empty;
+  assert.ok(half > 0 && full > 0);
+  // The '0%'/'50%'/'100%' digits differ a little; the fill dominates.
+  assert.ok(Math.abs(full / half - 2) < 0.15, `fill ratio ${full / half}`);
+  for (const font of fineExports.FINE_FONTS) {
+    const tiles = fineExports.renderUsagePage({ ...page(37), groups: [
+      { name: 'Codex', bars: [{ label: '5h', percent: 18, reset: 'Fri 9:00 AM' }, { label: 'week', percent: 35, reset: 'Fri 9:00 AM' }] },
+      { name: 'Claude', bars: [{ label: '5h', percent: 12, reset: 'Fri 9:00 AM' }, { label: 'week', percent: 28, reset: 'Fri 9:00 AM' }] },
+      { name: 'Cursor', bars: [{ label: 'Monthly', percent: 24, reset: 'Dec 5' }] },
+    ] }, font, 15);
+    assert.equal(tiles.length, 4, font);
+  }
 });

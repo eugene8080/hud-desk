@@ -18,7 +18,7 @@ export default defineConfig({
         type: 'asset', fileName: 'ATTRIBUTION.txt',
         source: 'Independent Windows/Android fork of Orca Glass by 2ero20ne.\n'
           + 'Original project: https://github.com/2ero20ne/orca-glass\n'
-          + 'Fork: https://github.com/eugene8080/orca-glass\n'
+          + 'Fork: https://github.com/eugene8080/hud-desk\n'
           + 'Copyright (c) 2026 2ero20ne\n'
           + 'Used under the MIT License; see LICENSE.txt.\n'
           + 'Shared CJK glyphs: Fusion Pixel Font by TakWolf, with Shinonome fallbacks.\n'

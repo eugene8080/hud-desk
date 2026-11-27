@@ -56,6 +56,18 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.91 (Eugene: "do all the not done things", Usage bars as drawing code, swap the
+kettle for the fractal, restart the bridge). Usage page is a drawn tile page (renderUsagePage in
+app/src/fine-text.ts; usagePage() model in app/src/main.ts; click redraws via paintFine, no native
+usage-reset container any more). Bridge restarted with his approval: old supervisor 71096/server
+71952/whisper 65728; scheduled task re-registered from its own XML as 'HUD Desk Bridge' (old task
+removed); new supervisor 72036, server 65452, whisper 9024 --vad; local and tailnet healthz ok; the
+AI Readout JPEG fix is now live. GitHub repo renamed eugene8080/orca-glass -> eugene8080/hud-desk
+(old URL 301-redirects; origin updated; local folder D:/dev/orca-glass unchanged). Privacy policy
+rewritten for HUD Desk with Email/Chat/pictures (store/privacy-and-terms.md ->
+store/HUD-Desk-Privacy-and-Terms.pdf). Japanese description rewritten for 1.0.91 (agent
+translation, native review pending). Store fixture: fractal replaces the kettle everywhere. 282 tests.
+
 2026-11-27 beta 1.0.90, renamed **HUD Desk** (Eugene chose it; plugin ID unchanged) and listing refresh
 (Eugene: new description covering everything, new screenshots). Name changed in app.json, glasses
 title row, phone page, pairing text, native-router reply, README, store files; kept in historical

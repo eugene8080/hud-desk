@@ -8,7 +8,7 @@ This is Eugene's Windows/Android fork of [2ero20ne's Orca Glass](https://github.
 
 ## Availability
 
-As of 2026-11-27 the Even Hub **public build is 1.0.36** (Coding only) and the **beta is 1.0.90**. Email, Chat, pictures and the keyboard need the beta. The installed build connects to one configured PC over Tailscale; self-service setup for any PC is not offered yet. Orca and the companion bridge must keep running on the PC.
+As of 2026-11-27 the Even Hub **public build is 1.0.36** (Coding only) and the **beta is 1.0.91**. Email, Chat, pictures and the keyboard need the beta. The installed build connects to one configured PC over Tailscale; self-service setup for any PC is not offered yet. Orca and the companion bridge must keep running on the PC.
 
 See [current work](TODOS.md), [beta setup and release history](docs/beta-install.md) and the [feature list](store/features.md).
 
@@ -16,7 +16,7 @@ See [current work](TODOS.md), [beta setup and release history](docs/beta-install
 
 **Coding (Orca and Hermes agents)**
 - Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent sessions with model and status. Orca chat sessions are listed read-only (the Orca CLI cannot send to a chat).
-- Filter by Agent and by one or more Orca workspaces; rows show `[workspace/Agent]`. Usage for Codex, Claude and Cursor with reset times.
+- Filter by Agent and by one or more Orca workspaces; rows show `[workspace/Agent]`. Usage for Codex, Claude and Cursor drawn as bars, with reset times.
 - Book-style reader: whole-page swipes, `/` your turns, `>` replies, one status row with model, activity animation, timer and page.
 - Hold to talk: local Whisper on the PC, review, then click to send. Numbered prompts open as choices.
 
@@ -54,7 +54,7 @@ still need verification. See [implementation](docs/hermes-bridge.md).
 
 ## Screenshots
 
-Native 576 × 288 simulator captures of beta 1.0.90 with fictional sample data (see the [gallery](store/gallery.html)). The pictures are a kettle product photo and a Mandelbrot set drawn by ffmpeg; the keys page is rendered by the app's own code.
+Native 576 × 288 simulator captures of beta 1.0.91 with fictional sample data (see the [gallery](store/gallery.html)). The picture is a Mandelbrot set drawn by ffmpeg; the keys page is rendered by the app's own code.
 
 | **Reader: Scientifica 5x11 on Tube** | **Architecture map** | **Live coding** |
 | --- | --- | --- |
@@ -63,8 +63,8 @@ Native 576 × 288 simulator captures of beta 1.0.90 with fictional sample data (
 | ![Coding sessions](store/screenshots/04-coding-list.png) | ![Reader: native text](store/screenshots/05-coding-native.png) | ![Voice review](store/screenshots/06-voice.png) |
 | **Email** | **Email with pictures** | **Original Picture** |
 | ![Email](store/screenshots/07-email.png) | ![Email with pictures](store/screenshots/08-email-pictures.png) | ![Original Picture](store/screenshots/09-picture.png) |
-| **Outline** | **Outline of a Mandelbrot set** | **AI Readout** |
-| ![Outline](store/screenshots/10-outline.png) | ![Outline of a Mandelbrot set](store/screenshots/11-fractal.png) | ![AI Readout](store/screenshots/12-ai-readout.png) |
+| **Outline** | **Usage bars** | **AI Readout** |
+| ![Outline](store/screenshots/10-outline.png) | ![Usage bars](store/screenshots/11-usage.png) | ![AI Readout](store/screenshots/12-ai-readout.png) |
 | **Chat** | **Filter by Network** | **Chat translation** |
 | ![Chat](store/screenshots/13-chat.png) | ![Filter by Network](store/screenshots/14-chat-networks.png) | ![Chat translation](store/screenshots/15-chat-translate.png) |
 | **Keyboard keys** | **Compare backgrounds** | **Compare fonts** |

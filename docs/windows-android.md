@@ -75,7 +75,7 @@ addresses prevent startup order from changing which service a probe reaches.
 The sole cloudflared launch is in `tunnel/watch.mjs`, which explicitly reads
 `tunnel/quick.yml`. `npm start` and both OS startup entrypoints
 (`scripts/start-windows.ps1`, `scripts/start-macos.sh`) run `scripts/start.mjs`
-and this same watcher. The Windows scheduled task `Orca Glass Bridge` invokes
+and this same watcher. The Windows scheduled task `HUD Desk Bridge` invokes
 `scripts/start-windows.ps1`; no separate Orca Glass Startup shortcut was found
 on PSCAP11. No launch-line override is needed. The watcher checks local and
 tunnel `/healthz` and obtains the URL from stderr, not metrics; there are no

@@ -25,7 +25,7 @@ import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, renderKeysPage, renderTextPage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
+import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, renderKeysPage, renderTextPage, renderUsagePage, type UsagePage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, imageNumbers, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, ChatReader, chatColumns, CHAT_NETWORKS_KEY, CHAT_TRANSLATE_KEY } from './chat';
@@ -58,7 +58,6 @@ const VOICE_DIVIDER = { ...DIVIDER, containerID: 4, containerName: 'voice-divide
 const FINE_CAPTURE = { containerID: 1, containerName: 'fine-input', xPosition: 0, yPosition: 0, width: 576, height: 288 };
 const FINE_TILE_IDS = FINE_TILES.map((tile, i) => ({ ...tile, containerID: 2 + i, containerName: `fine-${i}` }));
 const FINE_NATIVE_ROW = { containerID: 6, containerName: 'fine-native', xPosition: 4, yPosition: 2, width: 568, height: 28 };
-const USAGE_RESET = { containerID: 3, containerName: 'usage-reset', xPosition: 0, yPosition: 28, width: 576, height: 28 };
 const LIST_ITEM_BYTES = 63;
 const LIST_MAX = 20;
 const TEXT_BYTES = 999;
@@ -66,7 +65,7 @@ const POLL_MS = 1000;
 
 type Screen =
   | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: (up?: Up) => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; firstItem?: number; mailItems?: MailThread[]; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
-  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; compareSelected?: number; imageView?: ImageView; keysPage?: boolean; menuActions?: { id: number; label: string; run: (up?: Up) => unknown }[]; onClick?: () => void; onBack?: () => void; };
+  | { kind: 'text'; title: string; text: string; usagePage?: UsagePage; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; compareSelected?: number; imageView?: ImageView; keysPage?: boolean; menuActions?: { id: number; label: string; run: (up?: Up) => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
 let current: Screen | null = null;
@@ -451,9 +450,9 @@ async function show(s: Screen, reloadText = false) {
   const previous = current;
   current = s;
   const content = s.kind === 'text' ? (s.voice ? voiceBodyText(s) : bodyText(s)) : '';
-  const fine = s.kind === 'text' && !!s.fine && (!!s.reader || !!s.comparison || !!s.imageView || !!s.keysPage);
+  const fine = s.kind === 'text' && !!s.fine && (!!s.reader || !!s.comparison || !!s.imageView || !!s.keysPage || !!s.usagePage);
   const uploadText = !fine && (reloadText || (s.kind === 'text' && !!s.reader && s.text.length > 900) || new TextEncoder().encode(content).length > 999);
-  const head = new TextContainerProperty({ ...HEAD, ...(s.kind === 'text' && s.usageMode ? { height: 28 } : {}), ...(s.kind === 'text' && s.reader ? { xPosition: 16, yPosition: 2, width: 544, height: 28, zOrderIndex: 1 } : {}), content: clipBytes(screenTitle(s), TEXT_BYTES), isEventCapture: 0 });
+  const head = new TextContainerProperty({ ...HEAD, ...(s.kind === 'text' && s.reader ? { xPosition: 16, yPosition: 2, width: 544, height: 28, zOrderIndex: 1 } : {}), content: clipBytes(screenTitle(s), TEXT_BYTES), isEventCapture: 0 });
   // Firmware retains Display off, Brightness and Close alongside these actions.
   const menu = s.menuActions ? { menuObject: new MenuContainerProperty({
     menuItems: s.menuActions!.map(action => new MenuItemProperty({ itemID: action.id, itemName: action.label })),
@@ -483,10 +482,9 @@ async function show(s: Screen, reloadText = false) {
           ] }),
         }
       : {
-          containerTotalNum: s.reader ? 7 : s.usageMode ? 3 : 2,
+          containerTotalNum: s.reader ? 7 : 2,
           ...menu,
-          textObject: [head, new TextContainerProperty({ ...BODY, ...(s.usageMode ? { yPosition: 64, height: 224 } : {}), ...(s.reader ? { xPosition: 8, yPosition: READER_TOP, width: 560, paddingLength: 0, zOrderIndex: 2, height: READER_HEIGHT, textColor: textBrightness() } : {}), content: uploadText ? '' : content, isEventCapture: 1 }),
-            ...(s.usageMode ? [new TextContainerProperty({ ...USAGE_RESET, content: tr('resetLine', resetModeLabel(s.usageMode)), isEventCapture: 0 })] : []),
+          textObject: [head, new TextContainerProperty({ ...BODY, ...(s.reader ? { xPosition: 8, yPosition: READER_TOP, width: 560, paddingLength: 0, zOrderIndex: 2, height: READER_HEIGHT, textColor: textBrightness() } : {}), content: uploadText ? '' : content, isEventCapture: 1 }),
             ...(s.reader ? [
               new TextContainerProperty({ ...HINT, content: readerHint(s, s.reportedSeconds), textColor: textBrightness(), isEventCapture: 0, paddingLength: 0, zOrderIndex: 6 }),
               new TextContainerProperty({ ...VOICE, content: readerStatusLeft(s), textColor: textBrightness(), isEventCapture: 0, paddingLength: 0, zOrderIndex: 5 }),
@@ -560,6 +558,7 @@ async function show(s: Screen, reloadText = false) {
 async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boolean> {
   const t0 = Date.now();
   const tiles = s.keysPage ? renderKeysPage(tr('keysAll').split('\n'), s.fine!, inkLevel)
+    : s.usagePage ? renderUsagePage(s.usagePage, s.fine!, inkLevel)
     : s.imageView ? imageViewTiles(s.imageView)
     : s.comparison === 'fonts' ? renderFontComparison(inkLevel, (s.compareSelected ?? 0) - 1, true)
     : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel, turnHalo, s.compareSelected)
@@ -2700,19 +2699,16 @@ async function record(target: VoiceTarget, hold = false) {
   }, 1500);
 }
 
-function usageText(u: Usage, mode: ResetMode) {
+// The Usage page as bars: one group per provider, one bar per window (5h, week, month).
+function usagePage(u: Usage, mode: ResetMode): UsagePage {
   const all = Object.entries(u).filter(([, v]) => v && typeof v === 'object' && 'provider' in v);
   const ok = all.filter(([, v]) => v.status === 'ok');
   const ng = all.filter(([, v]) => v.status !== 'ok').map(([name]) => name);
-  const lines = ok.map(([name, v]) => {
-    const percent = (value: number) => Math.round(value * 10) / 10;
-    const s = v.session ? `5h ${percent(v.session.usedPercent)}% (${formatReset(v.session, mode)})` : '';
-    const w = v.weekly ? `${tr('weekly')} ${percent(v.weekly.usedPercent)}% (${formatReset(v.weekly, mode)})` : '';
-    const m = v.monthly ? `${tr('monthly')} ${percent(v.monthly.usedPercent)}% (${formatReset(v.monthly, mode)})` : '';
-    return `${providerName(v.provider || name)}\n  ${[s, w, m].filter(Boolean).join(' / ') || tr('noInfo')}`;
-  });
-  if (ng.length) lines.push(tr('unavailable', ng.join(', ')));
-  return lines.join('\n');
+  const groups = ok.map(([name, v]) => ({ name: providerName(v.provider || name), bars: ([
+    ['5h', v.session], [tr('weekly'), v.weekly], [tr('monthly'), v.monthly],
+  ] as const).filter(([, limit]) => !!limit).map(([label, limit]) => ({ label, percent: limit!.usedPercent, reset: formatReset(limit!, mode) })) }));
+  return { title: tr('usageTitle'), reset: tr('resetLine', resetModeLabel(mode)), groups,
+    note: ng.length ? tr('unavailable', ng.join(', ')) : '', none: tr('noInfo') };
 }
 
 // Back: home, or the menu that opened it (pageUp.usage; kept while a reset-mode change redraws it).
@@ -2721,8 +2717,8 @@ function usage() {
   return guard(tr('usageTitle'), async () => {
     const u = await api.usage();
     let writing = false;
-    const screen: Extract<Screen, { kind: 'text' }> = { kind: 'text', title: tr('usageTitle'),
-      usageMode: usageResetMode, text: usageText(u, usageResetMode), onBack: leave,
+    const screen: Extract<Screen, { kind: 'text' }> = { kind: 'text', title: tr('usageTitle'), text: '',
+      fine: smallFont, usagePage: usagePage(u, usageResetMode), onBack: leave,
       onClick: () => { void update(true); } };
     const update = async (cycle = false) => {
       if (current !== screen || writing || (!cycle && screen.reading)) return;
@@ -2733,17 +2729,11 @@ function usage() {
           await bridge.setLocalStorage('usage-reset-mode', next);
           usageResetMode = next;
           phone?.render();
-          screen.usageMode = next;
-          if (current !== screen) return;
-          await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: USAGE_RESET.containerID, containerName: USAGE_RESET.containerName,
-            content: tr('resetLine', resetModeLabel(next)) }));
         }
         if (current !== screen) return;
-        const text = usageText(u, usageResetMode);
-        if (text !== screen.text) {
-          screen.offset = undefined;
-          await updateText(screen.title, text);
-        }
+        // Redraw the page; paintFine sends only the tiles that changed (the reset row, the times).
+        screen.usagePage = usagePage(u, usageResetMode);
+        await paintFine(screen, 0);
       } catch (e) { diag((e as Error).message); }
       finally { writing = false; }
     };
@@ -3063,7 +3053,7 @@ function redrawForLanguage() {
   if (s.kind === 'list' && s.mailPicker) { void mailLabels(s.mailPicker.page, s.selected ?? 0, false, s.mailPicker.search); return; }
   if (s.kind === 'list' && s.chatPicker) { void chatNetworks(s.chatPicker.page, s.selected, s.chatPicker.networks); return; }
   if (s.kind === 'list' && (s.workspacePicker || s.agentPicker)) { refreshGlasses(); return; }
-  if (s.kind === 'text' && s.usageMode) { void usage(); return; }
+  if (s.kind === 'text' && s.usagePage) { void usage(); return; }
   if (s.kind === 'text' && s.reader && !s.voice) {
     s.activityLabel = s.reader.statusText?.() ?? readerStatus(s.activityState || 'unknown', s.statusFrame || 0, Date.now() - (s.statusStartedAt ?? Date.now()));
     s.fineLabel = undefined;
@@ -3125,7 +3115,7 @@ async function main() {
     setResetMode: async mode => {
       await bridge.setLocalStorage('usage-reset-mode', mode);
       usageResetMode = mode;
-      if (current?.kind === 'text' && current.usageMode) void usage();
+      if (current?.kind === 'text' && current.usagePage) void usage();
     },
     agentName: providerName,
   });

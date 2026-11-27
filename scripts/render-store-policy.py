@@ -11,7 +11,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'store/privacy-and-terms.md'
-OUTPUT = ROOT / 'store/Orca-Glass-Privacy-and-Terms.pdf'
+OUTPUT = ROOT / 'store/HUD-Desk-Privacy-and-Terms.pdf'
 INK = colors.HexColor('#20282b')
 MUTED = colors.HexColor('#546468')
 ACCENT = colors.HexColor('#24665e')
@@ -49,14 +49,15 @@ for block in re.split(r'\n\s*\n', source.strip()):
         # Source labels and URLs deliberately stay separate, with live links.
         lines = []
         for line in block.splitlines():
-            escaped = escape(line)
+            # **Label.** at the start of a paragraph (Email, Chat, ...) renders bold.
+            escaped = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', escape(line))
             if line.startswith('https://'):
                 escaped = f'<link href="{escaped}" color="#24665e">{escaped}</link>'
             lines.append(escaped)
         story.append(Paragraph('<br/>'.join(lines), styles[style]))
 
 doc = SimpleDocTemplate(str(OUTPUT), pagesize=A4, leftMargin=44, rightMargin=44,
-                        topMargin=42, bottomMargin=52, title='Orca Glass - Privacy Policy and Terms of Use',
+                        topMargin=42, bottomMargin=52, title='HUD Desk - Privacy Policy and Terms of Use',
                         author='Quiet Signal', subject='Self-hosted app; no developer collection of app data')
 doc.build(story, onFirstPage=footer, onLaterPages=footer)
 print(OUTPUT)

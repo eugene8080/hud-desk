@@ -77,7 +77,7 @@ PC origin/self-service limitation remains in the current manifest and descriptio
 - App name: **Orca Glass**
 - Tagline: **Read your Orca sessions. Speak your next step.**
 - Description: [exact portal text](description.txt), under 2,000 characters.
-- Windows source/setup: https://github.com/eugene8080/orca-glass/tree/windows-android-codex
+- Windows source/setup: https://github.com/eugene8080/hud-desk/tree/windows-android-codex
 - Chosen creator: Quiet Signal (Personal Information now complete in portal).
 - Language: English.
 - Attribution: based on 2ero20ne's MIT-licensed Orca Glass. The upstream developer name, privacy URL and Mac-only instructions do not describe this fork.
@@ -155,11 +155,12 @@ spinner on its L frame, and the GitHub README.
 - Upload the TRANSPARENT originals in `store/screenshots/native/` (green + alpha, as the simulator's
   screenshot function writes them; Even Hub's submission docs ask for that function). The portal lays
   them over its Environment photo; the opaque copies in `store/screenshots/` show as a black box (seen
-  2026-11-27). The portal keeps at most 8. Uploaded 2026-11-27, in this order: 02-architecture,
-  01-coding-dense, 03-live-diff, 11-fractal, 09-picture, 13-chat, 15-chat-translate, 07-email.
+  2026-11-27). The portal keeps at most 8. Uploaded 2026-11-27 (second set, no kettle), in this order:
+  02-architecture, 01-coding-dense, 03-live-diff, 10-outline, 11-usage, 13-chat, 15-chat-translate, 07-email.
 - Portal also updated 2026-11-27: name HUD Desk, tagline 'Agents, inbox, chats. Heads up, hands free.',
   icon `store/icon/hud-desk-icon.png` (ink must be exactly #F4F4F4), tags orca claude codex email chat.
-- Usage bars (Eugene asked): the glasses Usage page is text only; bars would be new drawing code. Not done.
+- Usage bars (Eugene asked): built in beta 1.0.91 (renderUsagePage in app/src/fine-text.ts).
+- Kettle photo replaced by the fractal everywhere (Eugene, 2026-11-27); no third-party image remains.
 - Files:
 
 | File | Shows |
@@ -172,10 +173,10 @@ spinner on its L frame, and the GitHub README.
 | `06-voice.png` | Voice review: Fictional transcript; tap to send, double-tap to cancel. |
 | `07-email.png` | Email: One mailbox, Filter by Label, read marks and times. |
 | `08-email-pictures.png` | Email with pictures: A fictional newsletter; [Image] rows open the picture. |
-| `09-picture.png` | Original Picture: A kettle product photo converted for the G2's 16 green levels. |
-| `10-outline.png` | Outline: The same photo as thin edges. |
-| `11-fractal.png` | Outline of a Mandelbrot set: A picture made by ffmpeg, sent in a Telegram chat, shown as Outline. |
-| `12-ai-readout.png` | AI Readout: The local vision model's description of the kettle photo (its real answer). |
+| `09-picture.png` | Original Picture: A Mandelbrot set (drawn by ffmpeg) converted for the G2's 16 green levels. |
+| `10-outline.png` | Outline: The same picture as thin edges. |
+| `11-usage.png` | Usage bars: Codex, Claude and Cursor allowances drawn as bars, with reset times (beta 1.0.91). |
+| `12-ai-readout.png` | AI Readout: The local vision model's description of the fractal (its real answer). |
 | `13-chat.png` | Chat: Beeper chats with [day/app]: WhatsApp, Signal, Telegram. |
 | `14-chat-networks.png` | Filter by Network: Choose which chat apps show. |
 | `15-chat-translate.png` | Chat translation: A Cantonese list keeps its bullets; English under each line. |
@@ -183,8 +184,8 @@ spinner on its L frame, and the GitHub README.
 | `17-backgrounds.png` | Compare backgrounds: Every background for your turns; choose in place. |
 | `18-compare-fonts.png` | Compare fonts: Native text and the pixel fonts, large to small; choose in place. |
 
-- Kettle: `.local/store-assets/kettle.jpg` (gitignored), a COSORI product photo Eugene chose from a
-  chat; the AI Readout text is the local model's answer, cached in `.local/store-assets/kettle-readout.txt`.
+- Picture: `.local/store-assets/fractal.png` (gitignored, ffmpeg mandelbrot source); the AI Readout
+  text is the local model's answer, cached in `.local/store-assets/fractal-readout.txt`.
 - Capture: `node scripts/store-preview.mjs` (8792) and the simulator started with
   `node app/node_modules/@evenrealities/evenhub-simulator/bin/index.js 'http://127.0.0.1:8792/?code=demo&lang=en' --automation-port 9899`
   (not the `.cmd` shim: cmd cuts the URL at `&` and drops the automation port), both in named

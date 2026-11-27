@@ -2,15 +2,15 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.90**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.91**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.89,
-  updated 2026-11-26). It is the agent's translation; a native review is still pending.
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.91,
+  updated 2026-11-27). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
   characters (`npm run beta:update` refuses longer text).
@@ -144,7 +144,7 @@ HUD Desk (renamed from Orca Glass) connects G2 to agents in Orca on your Windows
 
 Coding:
 - Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent sessions with model and status; Orca chat sessions read-only.
-- Filter by Agent and Workspace. Usage for Codex, Claude and Cursor.
+- Filter by Agent and Workspace. Usage bars for Codex, Claude and Cursor.
 - Hold to talk: local Whisper on your PC, review, then send. Answer numbered choices.
 
 Email (Gmail):
@@ -164,7 +164,7 @@ Reader: book-style pages in Native text or pixel fonts, down to Scientifica 5x11
 
 Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge on your PC over Tailscale; self-service setup for any PC is not offered yet. Agents, mail, chats, voice and AI run on your PC. Try the demo without a PC.
 
-Source/setup: https://github.com/eugene8080/orca-glass/tree/windows-android-codex
+Source/setup: https://github.com/eugene8080/hud-desk/tree/windows-android-codex
 Independent fork of 2ero20ne's Orca Glass under MIT.
 Original: https://github.com/2ero20ne/orca-glass
 <!-- description:end -->
@@ -172,5 +172,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.90: The app is now HUD Desk (formerly Orca Glass): Coding, Email and Chat on G2. In the Scientifica 5x11 font, Chinese and Japanese characters take three cells so they no longer overlap. AI Readout now reads progressive JPEG photos. New store description and 15 screenshots.
+1.0.91: Usage on the glasses is now drawn as bars: one bar per window (5h, week, month) with the percent and reset time; click still switches Computer, Phone and Absolute time. The project is now on GitHub as eugene8080/hud-desk (old links redirect).
 <!-- whatsnew:end -->

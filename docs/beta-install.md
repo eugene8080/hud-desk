@@ -320,7 +320,7 @@ automatic sign-in startup is configured below. To remove only this proxy:
 
 ## Windows automatic startup
 
-2026-11-02: registered Task Scheduler task **Orca Glass Bridge** for PSCAP11's
+2026-11-02: registered Task Scheduler task **HUD Desk Bridge** for PSCAP11's
 `eugen` user, triggered at that user's Windows sign-in. It runs PowerShell and the
 existing bridge/tunnel supervisor hidden, with normal user privileges, no stored
 password, no execution time limit, and no battery restriction. Failure recovery
@@ -342,7 +342,7 @@ listing (two Codex sessions). No input was sent. A real reboot/sign-in trigger
 and failure-recovery timing were not tested. No change to native Even Terminal,
 existing Tailscale routes, or provider restrictions.
 
-To disable startup: `Disable-ScheduledTask -TaskName 'Orca Glass Bridge'`.
+To disable startup: `Disable-ScheduledTask -TaskName 'HUD Desk Bridge'`.
 This disables future starts; it does not terminate the running bridge.
 
 ## First registration

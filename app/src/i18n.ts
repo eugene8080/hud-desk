@@ -47,7 +47,7 @@ const en = {
   badCode: 'NG Invalid pairing code (one line starting with eho1.)',
   pageIntro: 'View, reply to and start <a href="https://github.com/stablyai/orca">Orca</a> agent sessions on your PC from G2. <b>Setup on your PC is required.</b>',
   setupTitle: 'Getting started (on your PC)',
-  setupSteps: '<li>Install Orca on your PC</li><li>Ask Codex to "set up HUD Desk" (skill: <a href="https://github.com/eugene8080/orca-glass">github.com/eugene8080/orca-glass</a>)</li><li>On Home, tap the connection bar, paste the pairing code it gives you and save</li>',
+  setupSteps: '<li>Install Orca on your PC</li><li>Ask Codex to "set up HUD Desk" (skill: <a href="https://github.com/eugene8080/hud-desk">github.com/eugene8080/hud-desk</a>)</li><li>On Home, tap the connection bar, paste the pairing code it gives you and save</li>',
   opsTitle: 'On the glasses',
   opsList: '<li>Conversation: hold to talk directly; release to review. Click to send or double-click to cancel. No Reply menu is required. Double-click while recording to cancel.</li><li>Single click in a conversation does nothing. Double-click to return to sessions.</li><li>Scroll naturally within the text block.</li><li>Scrolling pauses updates. Return to the session list and reopen the session to resume.</li>',
   codeLabel: 'Pairing code (run <code>npm run pair</code> on your PC and paste)',
@@ -315,7 +315,7 @@ const ja: Record<Key, string> = {
   badCode: 'NG 接続コードの形式が違います(eho1. で始まる1行)', // upstream
   pageIntro: 'G2 から PC 上の <a href="https://github.com/stablyai/orca">Orca</a> のエージェントを見る・返信する・起動するアプリです。<b>PC 側の準備が必要です。</b>', // upstream (Mac -> PC)
   setupTitle: 'はじめに(PC 側の準備)', // upstream (Mac -> PC)
-  setupSteps: '<li>PC に Orca を入れておく</li><li>Codex に「HUD Desk をセットアップして」と頼む(スキル: <a href="https://github.com/eugene8080/orca-glass">github.com/eugene8080/orca-glass</a>)</li><li>ホームで接続バーをタップし、表示された接続コードを貼って保存</li>',
+  setupSteps: '<li>PC に Orca を入れておく</li><li>Codex に「HUD Desk をセットアップして」と頼む(スキル: <a href="https://github.com/eugene8080/hud-desk">github.com/eugene8080/hud-desk</a>)</li><li>ホームで接続バーをタップし、表示された接続コードを貼って保存</li>',
   opsTitle: 'グラスでの操作', // upstream
   opsList: '<li>会話画面: 長押ししてそのまま話し、離すと内容を確認できます。クリックで送信、ダブルクリックで中止します。返信メニューは不要です。録音中もダブルクリックで中止できます。</li><li>会話画面でのクリックは何もしません。ダブルクリックでセッション一覧に戻ります。</li><li>テキストはそのままスクロールできます。</li><li>スクロール中は更新が止まります。セッション一覧に戻って開き直すと再開します。</li>',
   codeLabel: '接続コード(PC で <code>npm run pair</code> を実行して貼り付け)', // upstream (Mac -> PC)

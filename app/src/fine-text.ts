@@ -524,6 +524,62 @@ export function captionTiles(tiles: number[][], caption: string, font: FineFont,
   return s.tiles();
 }
 
+// Usage page drawn as bars (Eugene, 2026-11-27: "fix the usage bars as drawing code"). Title on the
+// left and the reset mode on the right over a thin rule; per provider a name row, then one row per
+// window: label, an outlined bar (dotted track, solid fill for the used share), the percent and the
+// reset time. A provider with no windows shows `none` under its name.
+export type UsageBar = { label: string; percent: number; reset: string };
+export type UsageGroup = { name: string; bars: UsageBar[] };
+export type UsagePage = { title: string; reset: string; groups: UsageGroup[]; note: string; none: string };
+export const usagePercent = (value: number) => `${Math.round(Math.min(100, Math.max(0, value)) * 10) / 10}%`;
+export function renderUsagePage(page: UsagePage, font: FineFont, level = INK_MAX): number[][] {
+  const s = new Surface(font, inkByte(level));
+  s.frame();
+  const { width: cw, height: ch } = TABLES[font];
+  const { columns, textX } = fineLayout(font);
+  const dim = Math.max(inkByte(1), Math.round(s.ink * 0.3 / 17) * 17);
+  const bottom = SCREEN.height - FRAME - 2;
+  let y = TOP;
+  const resetCells = Math.max(0, Math.min(fineCells(page.reset, font), columns - fineCells(page.title, font) - 1));
+  s.text(page.title, textX, y, columns - resetCells - 1);
+  s.text(page.reset, textX + (columns - resetCells) * cw, y, resetCells);
+  y += ch + 1;
+  s.rect(textX, y, columns * cw, 1, dim);
+  y += 3;
+  // Columns: one-cell indent, label, bar, percent ('100%' right-aligned in 6 cells), reset time.
+  const labelCells = Math.max(2, ...page.groups.flatMap(g => g.bars.map(b => fineCells(b.label, font)))) + 1;
+  const pctCells = 5;
+  const barCells = Math.max(10, Math.floor((columns - 1 - labelCells - pctCells) * 0.55));
+  const resetX = textX + (1 + labelCells + barCells + pctCells + 1) * cw;
+  const resetRoom = Math.max(0, columns - (1 + labelCells + barCells + pctCells + 1));
+  // Bar rows get 5px more than a text row so the bars read as bars, not underlines.
+  const row = (draw: () => void, step = ch) => { if (y + ch > bottom) return false; draw(); y += step; return true; };
+  for (const group of page.groups) {
+    if (!row(() => s.text(group.name, textX, y, columns))) break;
+    if (!group.bars.length && !row(() => s.text(page.none, textX + cw, y, columns - 1))) break;
+    for (const bar of group.bars) {
+      const drawn = row(() => {
+        s.text(bar.label, textX + cw, y, labelCells - 1);
+        // The bar: 1px outline, a dotted track (every other pixel at the rule level) and the used
+        // share filled solid, one pixel inside the outline.
+        const bx = textX + (1 + labelCells) * cw, bw = barCells * cw - cw, by = y + 1, bh = Math.max(6, ch - 1);
+        s.rect(bx, by, bw, 1); s.rect(bx, by + bh - 1, bw, 1); s.rect(bx, by, 1, bh); s.rect(bx + bw - 1, by, 1, bh);
+        s.pattern(bx + 2, by + 2, bw - 4, bh - 4, dim, (px, py) => (px + py) % 2 === 0);
+        const fill = Math.round((bw - 4) * Math.min(100, Math.max(0, bar.percent)) / 100);
+        if (fill > 0) s.rect(bx + 2, by + 2, fill, bh - 4);
+        const pct = usagePercent(bar.percent);
+        const pc = Math.min(fineCells(pct, font), pctCells);
+        s.text(pct, textX + (1 + labelCells + barCells + pctCells - pc) * cw, y, pc);
+        s.text(bar.reset, resetX, y, resetRoom);
+      }, ch + 5);
+      if (!drawn) break;
+    }
+    y += 4;
+  }
+  if (page.note) row(() => s.text(page.note, textX, y, columns));
+  return s.tiles();
+}
+
 // The keys page (Eugene, 2026-11-27: "can you fit everything there? If not make it rendered image
 // page"): every key in two columns in the pixel font, a heading row per group ('# Group') with a
 // thin rule under it, then 'action<TAB>keys' rows with the keys at the right of the column. A group

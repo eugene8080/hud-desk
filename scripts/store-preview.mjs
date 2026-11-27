@@ -87,19 +87,19 @@ const usage = {
 };
 // Email, Chat and pictures (2026-11-27 store refresh). All fictional: a newsletter with pictures,
 // a renovation checklist chat in Chinese with line-by-line English, and a product photo (below).
-// The picture: a product photo of a kettle (Eugene chose it for the listing, 2026-11-27), kept in the
-// gitignored .local/store-assets. Every view comes from the bridge's own picture code; the AI Readout
+// The picture: a Mandelbrot set drawn by ffmpeg (Eugene swapped it in for a kettle product photo,
+// 2026-11-27, so the listing carries no third-party image), kept in the gitignored .local/store-assets. Every view comes from the bridge's own picture code; the AI Readout
 // is the local vision model's answer, cached next to the photo so later starts do not ask again.
-const pictureFile = new URL('../.local/store-assets/kettle.jpg', import.meta.url);
-const readoutFile = new URL('../.local/store-assets/kettle-readout.txt', import.meta.url);
+const pictureFile = new URL('../.local/store-assets/fractal.png', import.meta.url);
+const readoutFile = new URL('../.local/store-assets/fractal-readout.txt', import.meta.url);
 const local = (() => { try { return JSON.parse(readFileSync(new URL('../bridge/config.local.json', import.meta.url), 'utf8')); } catch { return {}; } })();
 const imaging = createImaging({ ffmpeg: local.ffmpegPath ?? local.beeper?.ffmpegPath, model: local.visionModel ?? local.beeper?.translationModel });
 const pictureBytes = readFileSync(pictureFile);
 const load = async () => pictureBytes;
-const views = { fit: await imaging.render('kettle', load, { view: 'fit' }),
-  outline: await imaging.render('kettle', load, { view: 'outline' }), zoom: [] };
-const firstZoom = await imaging.render('kettle', load, { view: 'zoom', region: 0 });
-for (let region = 0; region < firstZoom.regions; region++) views.zoom.push(await imaging.render('kettle', load, { view: 'zoom', region }));
+const views = { fit: await imaging.render('picture', load, { view: 'fit' }),
+  outline: await imaging.render('picture', load, { view: 'outline' }), zoom: [] };
+const firstZoom = await imaging.render('picture', load, { view: 'zoom', region: 0 });
+for (let region = 0; region < firstZoom.regions; region++) views.zoom.push(await imaging.render('picture', load, { view: 'zoom', region }));
 const fractalBytes = readFileSync(new URL('../.local/store-assets/fractal.png', import.meta.url));
 const fractalLoad = async () => fractalBytes;
 const fractal = { fit: await imaging.render('fractal', fractalLoad, { view: 'fit' }),
@@ -108,19 +108,19 @@ const fractalZoom = await imaging.render('fractal', fractalLoad, { view: 'zoom',
 for (let region = 0; region < fractalZoom.regions; region++) fractal.zoom.push(await imaging.render('fractal', fractalLoad, { view: 'zoom', region }));
 let readout;
 try { readout = readFileSync(readoutFile, 'utf8'); } catch {
-  readout = (await imaging.render('kettle', load, { view: 'read' })).text;
+  readout = (await imaging.render('picture', load, { view: 'read' })).text;
   writeFileSync(readoutFile, readout);
 }
 const now = Date.now();
 const mailThreads = [
-  { account: 'work', id: 'news', from: 'Field Notes Daily', subject: 'Morning briefing: gear pick and trail map', date: now - 25 * 60000, unread: true, count: 1 },
+  { account: 'work', id: 'news', from: 'Field Notes Daily', subject: 'Morning briefing: picture of the week', date: now - 25 * 60000, unread: true, count: 1 },
   { account: 'work', id: 'plan', from: 'Workshop Desk', subject: 'Workshop schedule for Thursday', date: now - 3 * 3600000, unread: true, count: 2 },
   { account: 'work', id: 'pack', from: 'Trail Team', subject: 'Revised packing list', date: now - 7 * 3600000, unread: false, count: 1 },
   { account: 'work', id: 'room', from: 'Facilities', subject: 'A new meeting room', date: now - 26 * 3600000, unread: false, count: 1 },
   { account: 'work', id: 'map', from: 'Survey Office', subject: 'Map corrections', date: now - 50 * 3600000, unread: false, count: 3 },
 ];
 const mailText = {
-  news: 'Field Notes Daily\n[[img:0]]\nGood morning. This week: a kettle worth the counter space, the new trail map, and the spring workshop list is open.\n\nGear pick of the week\n[[img:1]]\nA gooseneck kettle with temperature presets: slow pour for coffee, and it holds the heat for an hour.\n\nToday\n• Trail map: corrected routes for the east loop\n• Workshop sign-ups close on Friday\n• Volunteer meeting at 4 pm',
+  news: 'Field Notes Daily\n[[img:0]]\nGood morning. This week: a fractal to stare at, the new trail map, and the spring workshop list is open.\n\nPicture of the week\n[[img:1]]\nA Mandelbrot set at 1,000 iterations: zoom into any edge and the coastline never ends.\n\nToday\n• Trail map: corrected routes for the east loop\n• Workshop sign-ups close on Friday\n• Volunteer meeting at 4 pm',
 };
 const chats = [
   { id: 'site', title: 'Renovation: House B', date: now - 20 * 60000, unread: true, network: 'WhatsApp' },
@@ -136,7 +136,6 @@ const chatMessages = {
   site: [
     { id: 's1', own: true, from: '', date: now - 40 * 60000, text: 'Can you list what still needs fixing?' },
     { id: 's2', own: false, from: 'Site team', date: now - 20 * 60000, text: siteList },
-    { id: 's3', own: false, from: 'Site team', date: now - 19 * 60000, text: 'Photo of the new kettle for the pantry', media: 'Photo', image: true },
   ],
   gen: [
     { id: 'g0', own: false, from: 'Mira', date: now - 3 * 3600000 - 60000, text: 'Rendered the whole set at 1600x800 tonight.' },
@@ -167,7 +166,7 @@ export const api={
     labels:async()=>[{id:'INBOX',name:'Inbox',unread:2},{id:'Label_1',name:'Newsletters',unread:1},{id:'Label_2',name:'Projects',unread:1}],
     threads:async(filter,page,size=8)=>({items:page?[]:${JSON.stringify(mailThreads)}.slice(0,size),hasMore:false,unread:2,loading:false}),
     thread:async(account,id)=>{const row=${JSON.stringify(mailThreads)}.find(t=>t.id===id);const text=${JSON.stringify(mailText)}[id]||'The updated notes are ready for the next meeting.';
-      return {subject:row.subject,messages:[{id:id+'-1',from:row.from,to:'me@example.com',cc:'',date:row.date,text,images:id==='news'?[{remote:0,name:'Field Notes Daily'},{remote:1,name:'Gear pick of the week'}]:undefined}]};},
+      return {subject:row.subject,messages:[{id:id+'-1',from:row.from,to:'me@example.com',cc:'',date:row.date,text,images:id==='news'?[{remote:0,name:'Field Notes Daily'},{remote:1,name:'Picture of the week'}]:undefined}]};},
     read:async()=>({ok:true}),modify:async()=>({ok:true}),
     compose:async()=>({to:'"Field Notes Daily" <desk@example.com>',cc:'',subject:'Re: Morning briefing'}),
     image:async(account,message,ref,request={})=>view(request),
