@@ -2368,8 +2368,14 @@ test('small text draws the whole screen, status row included, as four tiles and 
   assert.ok(!h.upgrades.some(u => ['body', 'voice', 'hint'].includes(u.containerName)));
   // The display test replaces the tiles; the next swipe restores the page.
   await h.menu(1101); await h.pick(6); await h.flush();
-  assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison()));
+  // The comparison opens with '>' on the font in use; a swipe moves it; a double-click returns.
+  const terminus = fineExports.FINE_FONTS.indexOf('terminus');
+  assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison(15, terminus)));
   await h.scroll('down'); await h.flush();
+  const moved = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
+  const next = fineExports.renderFontComparison(15, terminus + 1);
+  for (const [name, data] of moved) assert.equal(JSON.stringify(data), JSON.stringify(next[Number(name.slice(5))]));
+  await h.back(); await h.flush();
   const restored = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
   for (const [name, data] of restored) assert.equal(JSON.stringify(data), JSON.stringify(want[Number(name.slice(5))]));
   // App Brightness is steps 15 down to 1, ten rows a page, with no blank row and no 0.
@@ -2423,8 +2429,9 @@ test('saved removed reader modes and the saved comparison font fall back to Term
   const native = container(h, 'body').content;
   await h.menu(1109);
   await h.pick(0);
-  assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus')));
-  await h.scroll('up');
+  assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, false,
+    fineExports.TURN_BACKGROUNDS.indexOf('lines3'))));
+  await h.back();
   assert.equal(h.pages.at(-1).containerTotalNum, 7);
   assert.equal(container(h, 'body').content, native);
 });
@@ -2508,7 +2515,7 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
     const { line: fontLine } = fineExports.fineLayout(font);
     assert.ok(4 + count * (fontLine + fineExports.backgroundGap(font)) + 8 + fontLine <= 287, font);
   }
-  await h.scroll('down');
+  await h.back();
   // Page two: Dots 1/8, the Tube options, 1px frame and the terminal-style options; pick Tube.
   await h.menu(1109);
   for (let i = 0; i < 5; i++) await h.scroll('down');
@@ -2552,6 +2559,38 @@ test('terminal-style backgrounds: left bar, underline and dim replies light noth
     if (at(plain, x, y) !== 255) { assert.equal(at(dim, x, y), 0); continue; }
     assert.equal(at(dim, x, y), y < 4 + line ? 255 : 136, `${x},${y}`);
   }
+});
+
+test('the comparison pages choose directly: swipe moves the mark, click uses it, double-click leaves it unchanged', async () => {
+  const h = await moduleHarness({ storage: { 'reader-text': 'terminus' } });
+  h.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
+  await h.pick(2);
+  await h.menu(1109);
+  await h.pick(0);
+  const options = fineExports.TURN_BACKGROUNDS;
+  // Opens on Lines 1/3 (the default); up twice wraps past None to Underline... then one down.
+  await h.scroll('up');
+  await h.scroll('up');
+  await h.scroll('up');
+  await h.scroll('down');
+  const expected = (options.indexOf('lines3') - 2 + options.length) % options.length;
+  // Only changed tiles are sent again: the newest copy of each tile is what the glasses show.
+  const shown = [0, 1, 2, 3].map(i => h.images.findLast(image => image.containerName === `fine-${i}`).imageData);
+  assert.equal(JSON.stringify(shown), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, false, expected)));
+  await h.tap();
+  assert.equal(h.storage.get('reader-turn-bg'), options[expected]);
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'fine-input'), 'back in the reader');
+  // Fonts: a click uses the marked font; a double-click changes nothing.
+  await h.menu(1101);
+  await h.pick(6);
+  await h.scroll('down');
+  await h.back();
+  assert.equal(h.storage.get('reader-text'), 'terminus');
+  await h.menu(1101);
+  await h.pick(6);
+  await h.scroll('down');
+  await h.tap();
+  assert.equal(h.storage.get('reader-text'), fineExports.FINE_FONTS[fineExports.FINE_FONTS.indexOf('terminus') + 1]);
 });
 
 test('Halo keeps the background dark next to every letter, and is a saved toggle in the Background menu', async () => {

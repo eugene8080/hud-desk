@@ -463,16 +463,17 @@ export const FONT_SAMPLE = 'Quick brown fox 0O1lI| {}[] -> != ─┼─ ⠋';
 export const FONT_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789';
 // Japanese mode shows kana, kanji and full-width punctuation on the second line instead.
 export const FONT_SAMPLE_JA = 'あいうえお アイウエオ 日本語の表示、漢字。「東雲」 ABC abc 0123';
-export function renderFontComparison(level = INK_MAX): number[][] {
+// selected: the row marked '>' (Eugene, 2026-11-27: choose directly on the comparison pages).
+export function renderFontComparison(level = INK_MAX, selected = -1): number[][] {
   const s = new Surface(FINE_FONTS[0], inkByte(level));
   s.frame();
   const nameCells = Math.max(...FINE_FONTS.map(font => fineLabel(font).length)) + 2;
   let y = TOP;
-  for (const font of FINE_FONTS) {
+  for (const [i, font] of FINE_FONTS.entries()) {
     s.font = font;
     const layout = fineLayout(font);
     const sample = getLang() === 'ja' ? FONT_SAMPLE_JA : FONT_SAMPLE;
-    s.text(`${fineLabel(font).padEnd(nameCells)}${sample}`, layout.textX, y, layout.columns);
+    s.text(`${i === selected ? '>' : ' '}${fineLabel(font).padEnd(nameCells)}${sample}`, layout.textX, y, layout.columns);
     y += TABLES[font].height + 2;
   }
   s.font = FINE_FONTS[0];
@@ -494,10 +495,11 @@ export function backgroundGap(font: FineFont): number {
 export function backgroundComparisonLayout(font: FineFont) {
   const { width: cell } = TABLES[font];
   const { columns, textX, textWidth } = fineLayout(font);
-  const labelCells = Math.max(...TURN_BACKGROUNDS.map(option => fineCells(turnBackgroundLabel(option)))) + 1;
+  // One cell for the '>' of the selected row, the label, one cell of space.
+  const labelCells = Math.max(...TURN_BACKGROUNDS.map(option => fineCells(turnBackgroundLabel(option)))) + 2;
   return { labelCells, sample: { textX: textX + labelCells * cell, textWidth: textWidth - labelCells * cell, columns: columns - labelCells } };
 }
-export function renderBackgroundComparison(font: FineFont, level = INK_MAX, halo = false): number[][] {
+export function renderBackgroundComparison(font: FineFont, level = INK_MAX, halo = false, selected = -1): number[][] {
   const s = new Surface(font, inkByte(level));
   const { line, columns, textX, textWidth, rows } = fineLayout(font);
   const { labelCells, sample: region } = backgroundComparisonLayout(font);
@@ -509,8 +511,8 @@ export function renderBackgroundComparison(font: FineFont, level = INK_MAX, halo
   const gap = backgroundGap(font);
   s.frame();
   let y = TOP;
-  for (const option of TURN_BACKGROUNDS) {
-    s.text(turnBackgroundLabel(option), textX, y, labelCells);
+  for (const [i, option] of TURN_BACKGROUNDS.entries()) {
+    s.text(`${i === selected ? '>' : ' '}${turnBackgroundLabel(option)}`, textX, y, labelCells);
     drawTurnRows(s, option === 'dimreplies' ? reply : sample, y, option, region, halo);
     if (option === 'tube') s.scanlines(region.textX, y, region.textWidth, line);
     y += line + gap;

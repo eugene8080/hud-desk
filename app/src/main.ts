@@ -65,7 +65,7 @@ const POLL_MS = 1000;
 
 type Screen =
   | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; firstItem?: number; mailItems?: MailThread[]; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
-  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
+  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; compareSelected?: number; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
 let current: Screen | null = null;
@@ -497,8 +497,8 @@ async function show(s: Screen, reloadText = false) {
 // when the screen changed meanwhile; throws if the glasses reject a tile.
 async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boolean> {
   const t0 = Date.now();
-  const tiles = s.comparison === 'fonts' ? renderFontComparison(inkLevel)
-    : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel, turnHalo)
+  const tiles = s.comparison === 'fonts' ? renderFontComparison(inkLevel, s.compareSelected)
+    : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel, turnHalo, s.compareSelected)
     : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel, backgroundFor(snapshot), turnHalo);
   let sent = 0;
   for (let i = 0; i < tiles.length; i++) {
@@ -655,9 +655,37 @@ function showBrightness() {
 }
 
 // Both comparisons use the reader's tiles and return to the same page on a swipe.
+// Choose on the comparison page itself (Eugene, 2026-11-27): a swipe moves the '>' (wrapping),
+// a click uses the marked font or background and returns to the reader, a double-click returns
+// unchanged. Opens on the current choice.
 function openComparison(reader: TextScreen, comparison: Comparison) {
   const back = () => { void show(reader).catch(e => diag((e as Error).message)); };
-  return show({ kind: 'text', title: ' ', text: '', fine: reader.fine ?? smallFont, comparison, onBack: back });
+  const fonts = comparison === 'fonts';
+  const compareSelected = fonts ? Math.max(0, FINE_FONTS.indexOf(readerText === 'native' ? smallFont : readerText))
+    : Math.max(0, TURN_BACKGROUNDS.indexOf(turnBackground));
+  const screen: TextScreen = { kind: 'text', title: ' ', text: '', fine: reader.fine ?? smallFont, comparison, compareSelected, onBack: back };
+  let choosing = false;
+  screen.onClick = () => {
+    if (choosing || current !== screen) return;
+    choosing = true;
+    const i = screen.compareSelected ?? 0;
+    const pick = fonts ? setReaderText(FINE_FONTS[i], reader) : chooseBackground(TURN_BACKGROUNDS[i], reader);
+    void pick.catch(e => diag((e as Error).message)).finally(() => { choosing = false; });
+  };
+  return show(screen);
+}
+
+function moveComparison(s: TextScreen, step: number) {
+  const count = s.comparison === 'fonts' ? FINE_FONTS.length : TURN_BACKGROUNDS.length;
+  s.compareSelected = ((s.compareSelected ?? 0) + step + count) % count;
+  // Only the tiles whose rows changed are sent again.
+  readerWrites = readerWrites.then(async () => { if (current === s) await paintFine(s, 0); }).catch(e => diag((e as Error).message));
+}
+
+async function chooseBackground(option: TurnBackground, reader: TextScreen) {
+  if (!await bridge.setLocalStorage('reader-turn-bg', option)) throw new Error(tr('backgroundSaveFailed'));
+  turnBackground = option;
+  await show(reader);
 }
 
 // Switch fonts in place and keep the reader near the same text: the first
@@ -2362,7 +2390,7 @@ function onEvent(e: EvenHubEvent) {
     return;
   }
   if (s.kind === 'text' && (type === OsEventTypeList.SCROLL_TOP_EVENT || type === OsEventTypeList.SCROLL_BOTTOM_EVENT)) {
-    if (s.comparison) s.onBack?.();
+    if (s.comparison) moveComparison(s, type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
     else if (s.reader) flipReader(s, type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
     else s.reading = true;
     return;

@@ -56,6 +56,12 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.80 (Eugene: choose directly in the font and background preview pages).
+Comparison screens keep compareSelected; swipe moves the '>' (wraps), click uses it (fonts via
+setReaderText, backgrounds via chooseBackground) and returns to the reader, double-click returns
+unchanged. Only changed tiles re-send. 255 tests, build pass. Next: image support (Chat photos,
+Email images, Coding screenshots), bridge restart approved by Eugene for it.
+
 2026-11-27 beta 1.0.79 (Eugene picked all four terminal-style options after asking what early
 terminals used): Left bar (2px at Ink 5 in the first text column, replacing '/'; Departure fills
 the width, so no margin bar), Underline (1px at Ink 4 under the letters), Dim replies (non-user
