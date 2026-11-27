@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-26. Current beta: **1.0.63**. Public: **1.0.36**.
+Updated: 2026-11-26. Current beta: **1.0.64**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.63,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.64,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.63)
+## Feature list (beta 1.0.64)
 
 ### All modules
 
@@ -67,9 +67,18 @@ Rule for every agent: each beta release updates this file in the release commit:
   removed and hard-wrapped plain text is reflowed to the glasses' width.
 - Mail routes answer only over the private Tailscale address, never through the public tunnel.
 
+### Chat (Beeper; only when the bridge has a Beeper set-up)
+
+- Chats from the networks Beeper Desktop connects (WhatsApp, Signal, Telegram, ...), eight a page,
+  most recent first, `/` unread and `--` read, unread chats counted on row 0.
+- Filter by Network on the glasses and the phone page (shared picks).
+- Reader opens at the newest message; your messages start `/ `, others `> ` with the sender.
+- Voice reply as in Coding: hold, release to review, click to send, double-click to cancel. A send
+  is never repeated automatically. Opening a chat does not mark it read in Beeper.
+
 ### Not yet built
 
-- Chat through Beeper, Reader for documents. Sign-in for other people's own Google accounts (each
+- Reader for documents. Sign-in for other people's own Google accounts (each
   user runs the bridge with a mail set-up on their own PC today).
 
 ## Paste: store description
@@ -77,7 +86,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 <!-- description:start -->
 Read your Orca agent sessions and your email on G2. Speak your next step.
 
-Orca Glass connects Even Realities G2 glasses to agents running in Orca on your Windows PC, and to Hermes Agent. Row 0 of the home screen switches between Coding and Email.
+Orca Glass connects Even Realities G2 glasses to agents running in Orca on your Windows PC, and to Hermes Agent. Row 0 switches between Coding, Email and Chat.
 
 Coding:
 - Agents: Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent (bots, sessions and scheduled jobs), with the model name and working or waiting status.
@@ -88,7 +97,9 @@ Email (Gmail, when your bridge is set up for it):
 - Read only: no sending, drafts or archive. Opening a thread marks it read.
 - One or more Gmail accounts. Filter by email address and Filter by Label on the glasses or the phone, with voice search on the glasses. Eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
 
-Reader for both: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica), your turns on a light background, App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
+Chat (Beeper Desktop, when set up): chats with Filter by Network, voice replies with review.
+
+Reader for all: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica), your turns on a light background, App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
 
 Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge. The packaged connection targets a configured private PC over Tailscale; self-service setup for any PC is not offered yet. Agents and mail access run on your PC, not the glasses. Try the demo without a PC.
 
@@ -100,5 +111,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.63: In the reader, your turns sit on a light background with a pixel font; Compare backgrounds in the Font list shows the options (None, Ink 1-3, 1px frame) and Background: saves your choice. Email marks unread threads / and read threads --. Removed fonts: Misc Fixed 9x15, GohuFont 8x14 and Shinonome 6x12 (Japanese still shows in every small font).
+1.0.64: Chat module, when the bridge has Beeper Desktop set up: [Chat] on row 0 lists your chats (eight a page, / unread, -- read) with Filter by Network on the glasses and the phone. A chat opens at the newest message; hold to reply by voice, release to review, click to send, double-click to cancel.
 <!-- whatsnew:end -->

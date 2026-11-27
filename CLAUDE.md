@@ -56,6 +56,15 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-26 beta 1.0.64: Chat module (Codex worker d481b54 + base merge 7528dc8, merged 4e7f417).
+Bridge bridge/beeper.mjs: Beeper Desktop API on 127.0.0.1:23373, token file .local/beeper-token.txt,
+allowlist GET /v1/accounts, GET /v1/chats, GET/POST /v1/chats/{id}/messages (POST text only);
+routes /api/chat/* behind the token and private-host gate; offered only with a `beeper` block.
+App: [Chat] on row 0, Filter by Network (glasses + phone), reader, voice reply with review; no
+automatic replay; opening does not mark read. 215 tests, build pass; simulator synthetic only.
+Live: needs Eugene's Orca Glass Beeper token, a `beeper` block in config.local.json and a bridge
+restart (ask). Never send to a real chat in testing; the first real send is Eugene's own.
+
 2026-11-26 Cursor tab names are global now (Eugene: "meant to be a global setting, not for this repo").
 pc-settings dace6b8 (Codex worker ctx_f9d7691874ce, fast-forwarded to origin/main): user-level Cursor
 beforeSubmitPrompt hook ~/.cursor/hooks/pc-settings-orca-title.py, installed and live-verified on

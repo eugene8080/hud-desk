@@ -1,6 +1,6 @@
 Read your Orca agent sessions and your email on G2. Speak your next step.
 
-Orca Glass connects Even Realities G2 glasses to agents running in Orca on your Windows PC, and to Hermes Agent. Row 0 of the home screen switches between Coding and Email.
+Orca Glass connects Even Realities G2 glasses to agents running in Orca on your Windows PC, and to Hermes Agent. Row 0 switches between Coding, Email and Chat.
 
 Coding:
 - Agents: Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent (bots, sessions and scheduled jobs), with the model name and working or waiting status.
@@ -11,7 +11,9 @@ Email (Gmail, when your bridge is set up for it):
 - Read only: no sending, drafts or archive. Opening a thread marks it read.
 - One or more Gmail accounts. Filter by email address and Filter by Label on the glasses or the phone, with voice search on the glasses. Eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
 
-Reader for both: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica), your turns on a light background, App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
+Chat (Beeper Desktop, when set up): chats with Filter by Network, voice replies with review.
+
+Reader for all: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica), your turns on a light background, App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
 
 Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge. The packaged connection targets a configured private PC over Tailscale; self-service setup for any PC is not offered yet. Agents and mail access run on your PC, not the glasses. Try the demo without a PC.
 
