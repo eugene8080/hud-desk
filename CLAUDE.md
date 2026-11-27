@@ -56,6 +56,12 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 chat-voice worktree retired (Eugene asked): branch merged (1.0.74), worker terminal and
+three idle shells closed, contents removed, git worktree pruned, local branch deleted (origin branch
+kept). The now-empty folder C:/Users/eugen/orca/workspaces/orca-glass/chat-voice stays locked by
+another process (most likely Orca itself), so Orca still lists it; remove it from Orca's sidebar or
+it clears after an Orca restart. Orca was not restarted by the agent.
+
 2026-11-27 beta 1.0.74: merged the Fusion Pixel 12 zh_HK CJK table (Codex worker ctx_d4dbfd4e5187,
 caceaa3, merge 2035a92): 6,557 Fusion glyphs, 1 alias (㩒 -> 撳), 32 Shinonome fallbacks; table
 355,723 B raw / 104,865 B gzipped; Latin tables byte-identical; OFL licence bundled
