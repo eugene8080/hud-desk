@@ -74,7 +74,7 @@ The simulator omits OS contextual entries. See [store listing notes](store/listi
 
 ## Development
 
-Requirements: Node.js 20+, installed/running Orca, and local Whisper for voice. Email needs a Gmail OAuth client ([docs/email.md](docs/email.md)); Chat needs Beeper Desktop with its API on ([docs/chat.md](docs/chat.md)); pictures and voice notes need ffmpeg; Translate and AI Readout need Ollama with a vision-capable model. Windows is the primary verified environment; macOS setup is documented separately. The installed beta and earlier Quick Tunnel prototype use different network routes.
+Requirements: Node.js 22+. The development build's Coding module supports Orca or [plain Claude Code and Codex CLI sessions](docs/local-agents.md). Voice needs local Whisper. Email needs a Gmail OAuth client ([docs/email.md](docs/email.md)); Chat needs Beeper Desktop with its API on ([docs/chat.md](docs/chat.md)); pictures and voice notes need ffmpeg; Translate and AI Readout need Ollama with a vision-capable model. Windows is the primary verified environment; macOS setup is documented separately. The installed beta and earlier Quick Tunnel prototype use different network routes.
 
 **Windows**
 

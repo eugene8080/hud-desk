@@ -191,8 +191,8 @@ let workspaceNames = new Map<string, string>();
 const providerName = agentLabel;
 
 // The phone's reply box sends to the Coding session or the Chat chat open on the glasses
-// (Chat added 2026-11-27 for Bluetooth-keyboard typing). Read-only Orca chats have no target.
-type ReplyTarget = { key: string; label: string; send: (text: string) => Promise<void> };
+// (Chat added 2026-11-27 for Bluetooth-keyboard typing).
+type ReplyTarget = { key: string; label: string; readOnly?: boolean; send: (text: string) => Promise<void> };
 let replyTarget: ReplyTarget | null = null;
 function setReplyTarget(target: ReplyTarget | null) {
   if (replyTarget?.key !== target?.key) {
@@ -201,7 +201,7 @@ function setReplyTarget(target: ReplyTarget | null) {
     document.getElementById('reply-status')!.textContent = '';
   }
   replyTarget = target;
-  document.getElementById('composer')!.hidden = !target;
+  document.getElementById('composer')!.hidden = !target || !!target.readOnly;
   document.getElementById('reply-target')!.textContent = target?.label ?? '';
 }
 
@@ -209,7 +209,7 @@ function selectThread(t: Thread | null) {
   // The open chat has to survive the phone recreating this page with the screen off.
   if (selectedThread?.handle !== t?.handle) void bridge.setLocalStorage('open-thread', t?.handle || '');
   selectedThread = t;
-  setReplyTarget(t && !t.readOnly ? { key: t.handle, label: tr('replyTo', t.title, t.handle.slice(-8)),
+  setReplyTarget(t ? { key: t.handle, label: tr('replyTo', t.title, t.handle.slice(-8)), readOnly: t.readOnly,
     send: async text => { await api.say(t.handle, text); } } : null);
 }
 
@@ -221,9 +221,11 @@ const readerChars = (text: string) => text.replace(/\s/g, '').length; // wrappin
 let chatTranslate = false;
 // Hidden or inert when the bridge PC lacks the engine (no FunASR/ffmpeg, Ollama or model missing).
 let chatFeatures: ChatFeatures = { transcribe: true, translate: true };
+let orcaAvailable = true;
 const translating = () => chatTranslate && chatFeatures.translate;
-function applyCapabilities(capabilities: { chatFeatures?: ChatFeatures; imageRead?: boolean } | null) {
+function applyCapabilities(capabilities: { chatFeatures?: ChatFeatures; imageRead?: boolean; orca?: boolean } | null) {
   imageReadOffered = capabilities?.imageRead !== false;
+  if (capabilities) orcaAvailable = capabilities.orca !== false;
   const next = capabilities?.chatFeatures;
   if (!next) return;
   const changed = next.transcribe !== chatFeatures.transcribe || next.translate !== chatFeatures.translate;
@@ -1131,7 +1133,7 @@ function home(page = positions.coding.page, selected = positions.coding.cursor, 
     const allThreads = await api.threads().catch(e => { if (mounted || current !== owner || revision !== moduleRevision) return null; throw e; });
     if (!allThreads) return; // The cached rows remain usable during a refresh failure.
     if (current !== owner || revision !== moduleRevision) return;
-    // Hermes Agent lists only Hermes sessions; All Orca sessions and each Orca agent
+    // Hermes Agent lists only Hermes sessions; the Coding filters
     // exclude Hermes. Each side applies its own workspace selection.
     const selection = activeWorkspaces();
     const threads = allThreads.filter(t => (hermesView() ? t.agent === 'hermes' : t.agent !== 'hermes' && (viewProvider === 'all' || t.agent === viewProvider))
@@ -1159,7 +1161,7 @@ function home(page = positions.coding.page, selected = positions.coding.cursor, 
       onNextPage: page + 1 < pageCount ? () => home(page + 1, 1) : undefined,
       menuActions: [
         { id: 1001, label: tr('refreshSessions'), run: () => home(page, 1) },
-        { id: 1002, label: tr('menuNewSession'), run: (up?: Up) => { enterPage('newSession', up); return newSession(); } },
+        ...(orcaAvailable ? [{ id: 1002, label: tr('menuNewSession'), run: (up?: Up) => { enterPage('newSession', up); return newSession(); } }] : []),
         { id: 1003, label: tr('menuUsage'), run: (up?: Up) => { enterPage('usage', up); return usage(); } },
       ],
       items: actions.map(a => a.label),
@@ -1565,7 +1567,6 @@ function workspaceOptions(page = 0, selected = 0) {
 
 function thread(t: Thread, note = '') {
   visit({ key: `coding:${t.handle}`, label: t.title, module: 'coding', open: () => thread(t) }, true);
-  selectThread(t);
   const load = async () => {
     const snapshot = await api.thread(t.handle);
     const saved = await api.history(t.handle).catch(() => null);
@@ -1576,17 +1577,18 @@ function thread(t: Thread, note = '') {
       return { state: 'unknown', elapsedSeconds: null };
     });
     const text = readerContent(conversationText, snapshot.menu, snapshot.progress, t.agent === 'claude' && state.state === 'working');
-    return { text, conversationText, choiceMenu: snapshot.menu, model: (useSaved ? saved!.model : undefined) || snapshot.model, activityState: state.state, reportedSeconds: state.state === 'working' ? state.elapsedSeconds ?? null : null, activityLabel: activityLabel(state.state), savedHistory: useSaved };
+    if ('readOnly' in state && typeof state.readOnly === 'boolean') t.readOnly = state.readOnly;
+    return { text, conversationText, choiceMenu: snapshot.menu, model: (useSaved ? saved!.model : undefined) || snapshot.model || t.model, activityState: state.state, reportedSeconds: state.state === 'working' ? state.elapsedSeconds ?? null : null, activityLabel: activityLabel(state.state), savedHistory: useSaved };
   };
-  // An Orca chat is read-only (Orca has no send-to-chat command): no hold-to-reply.
   const source = { title: `${t.title}${note ? `  ${note}` : ''}`, load, coding: t,
-    hold: t.readOnly ? undefined : () => { void record({ thread: t }, true); },
+    hold: () => { if (!t.readOnly) void record({ thread: t }, true); },
     image: (n: number, request?: ImageRequest) => api.historyImage(t.handle, n, request) };
   return guard(t.title, async () => {
-    await openReader(source, home, () => {
+    const screen = await openReader(source, home, () => {
       if (current?.kind === 'text' && current.choiceMenu) void replies(t);
       else openPageImage(current);
     });
+    if (screen && current === screen) selectThread(t);
   }, home);
 }
 
@@ -1896,7 +1898,7 @@ async function startMailDraft(mode: MailMode, thread?: MailThread) {
 // Coding and Chat: r opens the reply on the glasses; the phone's reply box holds the text.
 async function startReplyDraft() {
   const target = replyTarget;
-  if (!target || composing) return;
+  if (!target || target.readOnly || composing) return;
   const key = `reply:${target.key}`;
   const draft = drafts.get(key) ?? { key, title: target.label, sendId: newSendId(), focus: 'body' as const,
     fields: { ...emptyFields(), body: (document.getElementById('reply-text') as HTMLTextAreaElement).value } };
@@ -2113,7 +2115,7 @@ function commandItems(origin: Screen): FinderItem[] {
     return Promise.resolve(action.run(up)).then(() => { if (current === list) return back(); });
   } });
   if (activeModule === 'coding') items.push(
-    { label: tr('menuNewSession'), run: up => { enterPage('newSession', up); return newSession(); } },
+    ...(orcaAvailable ? [{ label: tr('menuNewSession'), run: (up: Up) => { enterPage('newSession', up); return newSession(); } }] : []),
     { label: tr('menuUsage'), run: up => { enterPage('usage', up); return usage(); } },
     { label: tr('filterAgent'), run: up => { enterPage('agents', up); return viewOptions(); } },
     { label: tr('filterWorkspace'), run: up => { enterPage('workspaces', up); return workspaceOptions(); } });
@@ -2238,7 +2240,7 @@ function ideKey(ev: KeyboardEvent): boolean {
       else if (s.kind === 'list' && s.module) s.menuActions?.find(action => action.id === 1001)?.run();
       return true;
     case 'n':
-      if (activeModule === 'coding') { enterPage('newSession'); void newSession(); }
+      if (activeModule === 'coding' && orcaAvailable) { enterPage('newSession'); void newSession(); }
       else if (activeModule === 'email') void startMailDraft('new');
       return true;
   }
@@ -2347,7 +2349,7 @@ function gmailKey(ev: KeyboardEvent, s: Screen, glassEvent: (type: OsEventTypeLi
   }
   const email = activeModule === 'email' && (!!moduleList || !!reader?.reader?.mail);
   if (!email) {
-    if (key === 'r' && reader && replyTarget) { void startReplyDraft(); return true; }
+    if (key === 'r' && reader && replyTarget && !replyTarget.readOnly) { void startReplyDraft(); return true; }
     return false;
   }
   if (key === 'c') { void startMailDraft('new'); return true; }
@@ -2423,7 +2425,12 @@ function startReaderUpdates(screen: Screen | null): (() => Promise<void>) | unde
     if (screen.activityState !== activity.state) { screen.statusFrame = 0; screen.statusStartedAt = Date.now(); }
     screen.activityState = activity.state;
     const seconds = activity.state === 'working' ? activity.elapsedSeconds ?? null : null;
-    if (screen.reportedSeconds !== seconds) {
+    const readOnlyChanged = 'readOnly' in activity && typeof activity.readOnly === 'boolean' && t.readOnly !== activity.readOnly;
+    if (readOnlyChanged) {
+      t.readOnly = activity.readOnly;
+      selectThread(t);
+    }
+    if (screen.reportedSeconds !== seconds || readOnlyChanged) {
       screen.reportedSeconds = seconds;
       try { await inputHint(); } catch (e) { diag((e as Error).message); }
       if (current !== screen) { reading = false; return; }
@@ -2483,7 +2490,7 @@ function history(t: Thread) {
     if (current !== previous) return;
     const title = ['codex-transcript', 'claude-transcript', 'cursor-transcript', 'opencode-transcript', 'pi-transcript', 'hermes-transcript'].includes(r.source || '') ? tr('conversationHistory') : tr('terminalOnly');
     const text = r.text || r.reason || tr('noOlderOutput');
-    await show({ kind: 'text', title, text, tail: true, reader: { title, load: async () => ({ text }), coding: t, hold: () => { void record({ thread: t }, true); } },
+    await show({ kind: 'text', title, text, tail: true, reader: { title, load: async () => ({ text }), coding: t, hold: () => { if (!t.readOnly) void record({ thread: t }, true); } },
       onBack: () => thread(t) });
   }, () => thread(t));
 }
@@ -3136,14 +3143,14 @@ async function main() {
   draft.addEventListener('input', draftChanged);
   // Review first, send second: the same two steps whether tapped or typed (Enter, Enter).
   const reviewDraft = () => {
-    if (!replyTarget || sending || !draft.value.trim()) return;
+    if (!replyTarget || replyTarget.readOnly || sending || !draft.value.trim()) return;
     reviewed = { key: replyTarget.key, text: draft.value.trim() };
     status.textContent = tr('readyToSend', replyTarget.label, reviewed.text);
     send.hidden = false;
   };
   const sendDraft = async () => {
     const target = replyTarget;
-    if (sending || !target || !reviewed || reviewed.key !== target.key || reviewed.text !== draft.value.trim()) return;
+    if (sending || !target || target.readOnly || !reviewed || reviewed.key !== target.key || reviewed.text !== draft.value.trim()) return;
     const message = reviewed;
     reviewed = null;
     sending = true;

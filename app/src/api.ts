@@ -58,7 +58,7 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, tim
   return data as T;
 }
 
-export type Thread = { handle: string; title: string; agent: string; state: 'idle' | 'busy' | 'unknown'; workspaceId?: string; workspaceName?: string; workspaceLabel?: string; lastOutputAt?: number; hermesGroup?: 'bot' | 'session' | 'job'; readOnly?: boolean };
+export type Thread = { handle: string; title: string; agent: string; state: 'idle' | 'busy' | 'unknown'; workspaceId?: string; workspaceName?: string; workspaceLabel?: string; lastOutputAt?: number; hermesGroup?: 'bot' | 'session' | 'job'; readOnly?: boolean; model?: string };
 export type ChoiceMenu = { id: string; question: string; options: { value: string; label: string; description?: string }[] };
 export type Provider = { id: string; models: string[]; ok: boolean; note: string };
 export type Workspace = { id: string; name: string; lastActivityAt?: number; hermes?: 'bot' | 'session' | 'job' };
@@ -107,7 +107,7 @@ export type ChatConversation = { messages: ChatMessage[] };
 export type ChatTranslation = { id: string; text?: string | null; textLines?: (string | null)[] | null; voice?: string | null };
 
 export const api = {
-  capabilities: () => call<{ voice: boolean; modules?: string[]; chatFeatures?: ChatFeatures; imageRead?: boolean }>('GET', '/api/capabilities'),
+  capabilities: () => call<{ voice: boolean; modules?: string[]; chatFeatures?: ChatFeatures; imageRead?: boolean; orca?: boolean; localAgents?: Record<string, { resume: boolean }> }>('GET', '/api/capabilities'),
   chat: {
     networks: () => call<string[]>('GET', '/api/chat/networks'),
     list: (networks: string[], page: number) => call<ChatPage>('GET', `/api/chat/list?${new URLSearchParams({ networks: networks.join(','), page: String(page) })}`),
@@ -139,7 +139,7 @@ export const api = {
   },
   health: () => call<{ ok: boolean }>('GET', '/healthz'),
   threads: () => call<Thread[]>('GET', '/api/threads'),
-  activity: (handle: string) => call<{ state: Activity; elapsedSeconds?: number | null }>('GET', `/api/activity?handle=${encodeURIComponent(handle)}`),
+  activity: (handle: string) => call<{ state: Activity; elapsedSeconds?: number | null; readOnly?: boolean }>('GET', `/api/activity?handle=${encodeURIComponent(handle)}`),
   historyImage: (handle: string, index: number, request: ImageRequest = {}) =>
     call<ImageAnswer>('GET', `/api/history/image?${new URLSearchParams({ handle, index: String(index), ...viewQuery(request) })}`, undefined, 200000),
   history: (handle: string) => call<{ text: string; model?: string; source?: string; limited?: boolean; messageCount?: number; reason?: string }>('GET', `/api/history?handle=${encodeURIComponent(handle)}`),

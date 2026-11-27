@@ -1,10 +1,11 @@
 // Read-only adapter for Orca's recorded pane -> provider transcript association.
 // Never infer identity from a working directory or choose the newest transcript.
 import { DatabaseSync } from 'node:sqlite';
+import { existsSync } from 'node:fs';
 import { open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
 import { formatMessages, modelLabel, modelName } from './reader-text.mjs';
-import { cursorChatsDir, opencodeDatabase, orcaProfileDir, piSessionRoots, transcriptRoots } from './platform.mjs';
+import { cursorChatsDir, opencodeDatabase, orcaProfileDir, orcaUserDataDir, piSessionRoots, transcriptRoots } from './platform.mjs';
 
 const profile = orcaProfileDir();
 const cache = new Map();
@@ -25,6 +26,38 @@ export function transcriptBinding(session, terminal) {
   const provider = record.providerSession;
   if (!/^[a-f0-9-]{36}$/i.test(provider?.id || '') || !provider.transcriptPath) return null;
   return { id: provider.id, path: provider.transcriptPath, cwd: provider.cwd, provider: terminal.agentIdentity };
+}
+
+// Match provider IDs only for rows this Orca instance already lists. Terminal
+// bindings retain the pane/incarnation checks used by the history reader.
+export function orcaProviderSessions(terminals, chats, {
+  profileDb = join(profile, 'profile-state.db'),
+  agentDb = join(orcaUserDataDir(), 'agent-session-domain.db'),
+} = {}) {
+  const bindings = [];
+  if (terminals.length && existsSync(profileDb)) {
+    const db = new DatabaseSync(profileDb, { readOnly: true });
+    try {
+      const row = db.prepare("SELECT payload FROM profile_state_documents WHERE domain = 'workspaceSession'").get();
+      const session = row && JSON.parse(row.payload);
+      if (session) for (const terminal of terminals) {
+        const binding = transcriptBinding(session, terminal);
+        if (binding) bindings.push(binding);
+      }
+    } finally { db.close(); }
+  }
+  const localChats = chats.filter(chat => !chat.hostId || chat.hostId === 'local');
+  if (localChats.length && existsSync(agentDb)) {
+    const db = new DatabaseSync(agentDb, { readOnly: true });
+    try {
+      const find = db.prepare('SELECT adopted_native_id AS id FROM agent_session_records WHERE session_id = ?');
+      for (const chat of localChats) {
+        const id = find.get(chat.orcaSessionId)?.id;
+        if (typeof id === 'string') bindings.push({ provider: chat.agent, id });
+      }
+    } finally { db.close(); }
+  }
+  return bindings;
 }
 
 // Cursor's agent CLI: Orca records only the chat ID for the pane (no path or
@@ -323,6 +356,10 @@ export async function readTranscriptImage(terminal, index) {
   const found = await transcriptFile(terminal);
   if (!found || ['cursor', 'opencode', 'pi'].includes(found.binding.provider)) throw new Error('No saved transcript with images for this terminal');
   const { file, binding } = found;
+  return readTranscriptImageFile(file, binding, index);
+}
+
+export async function readTranscriptImageFile(file, binding, index) {
   await readTranscript(file, binding);
   const ref = cache.get(`${file}:${binding.id}:${binding.provider || 'codex'}`)?.images?.[index - 1];
   if (!ref) throw new Error('Image not found');
