@@ -56,6 +56,13 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.89 (Eugene: the translated 'WINDOW MECHANISM REPAIR' list 'lost all its
+formatting'; wants the translation on the next row). Bridge /api/chat/translate: message text is split
+into lines; only lines with non-ASCII characters go to the model, without their bullet/number (one
+batched request); answer textLines (English or null per line), cached per message text. App
+withEnglishLines: each line, then '(English)' on the next row indented under the line's text; voice
+transcripts keep the whole-text '(English)'. 279 tests, build pass. Bridge part needs an approved restart.
+
 2026-11-27 beta 1.0.88 (Eugene: '<ul><li> and others' in a WhatsApp group via Beeper). Beeper's
 message text carries the chat app's formatting as HTML. bridge/chat-text.mjs chatHtmlToText: ul/ol/li
 ('• ', 'N. ' with start=, nested indent), p/div/h*/tr/pre/br line breaks, blockquote '> ', mx-reply

@@ -217,6 +217,7 @@ test('Chat batches translation, keeps English and blocks remote Ollama models be
   const source = '巴士已經到站。';
   const items = [
     { id: 'english', type: 'TEXT', text: 'Synthetic English.' },
+    { id: 'list', type: 'TEXT', text: 'House B<ul><li>1 x 2/F 主人房換鉸</li><li>1 x 1/F corridor window</li></ul>' },
     { id: 'voice', type: 'AUDIO', attachments: [{ type: 'audio', transcription: { transcription: source, language: 'yue' } }] },
     { id: 'english-voice', type: 'VOICE', attachments: [{ type: 'audio', transcription: { transcription: 'Already English.', language: 'en-US' } }] },
   ];
@@ -237,17 +238,20 @@ test('Chat batches translation, keeps English and blocks remote Ollama models be
       assert.equal(pathname, '/api/chat');
       assert.equal(body.think, false);
       assert.equal(body.stream, false);
-      assert.deepEqual(JSON.parse(body.messages[1].content), ['Synthetic English.', source]);
-      return Response.json({ message: { content: '[null, "The bus has arrived."]' } });
+      // Only lines with non-ASCII letters, without their bullet; English lines are not sent.
+      assert.deepEqual(JSON.parse(body.messages[1].content), ['1 x 2/F 主人房換鉸', source]);
+      return Response.json({ message: { content: '["1 x 2/F master bedroom: replace hinge", "The bus has arrived."]' } });
     },
   });
-  const post = () => request('/api/chat/translate', { method: 'POST', body: { chatId, messageIds: ['english', 'voice', 'english-voice', 'absent'] } });
-  const expected = { items: [{ id: 'english', text: null }, { id: 'voice', voice: 'The bus has arrived.' }, { id: 'english-voice' }] };
+  const post = () => request('/api/chat/translate', { method: 'POST', body: { chatId, messageIds: ['english', 'list', 'voice', 'english-voice', 'absent'] } });
+  const expected = { items: [{ id: 'english', textLines: [null] },
+    { id: 'list', textLines: [null, '1 x 2/F master bedroom: replace hinge', null] },
+    { id: 'voice', voice: 'The bus has arrived.' }, { id: 'english-voice' }] };
   assert.deepEqual((await post()).data, expected);
   assert.deepEqual((await post()).data, expected);
   assert.deepEqual(calls, ['/api/show', '/api/chat']);
   remote = true;
-  items[0].text = 'Synthetic edit.';
+  items[0].text = '新的文字';
   assert.equal((await post()).status, 502);
   assert.deepEqual(calls, ['/api/show', '/api/chat', '/api/show']);
 });

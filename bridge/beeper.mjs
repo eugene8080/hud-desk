@@ -140,6 +140,10 @@ const isAudio = attachment => attachment?.type === 'audio' || attachment?.isVoic
   /^audio\//i.test(text(attachment?.mimeType));
 // A photo or sticker attachment the glasses can show (Beeper attachment type 'img' or an image MIME).
 const isImage = attachment => attachment?.type === 'img' || /^image\//i.test(text(attachment?.mimeType));
+// A list marker or indent before a line's content (kept out of the translation request).
+const LINE_PREFIX = /^\s*(?:[•\-*]|\d{1,3}[.)]|>)?\s*/u;
+// A line worth translating: it has letters outside plain ASCII (Chinese, Japanese, accented, ...).
+const FOREIGN = /[^\x00-\x7f]/u;
 const english = lang => /^(en(?:[-_].+)?|english)$/i.test(lang ?? '');
 
 function chatMessage(item, transcript) {
@@ -312,6 +316,10 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech 
       if (!row?.imageUrl) throw new BeeperError('image-unavailable', 404);
       return imaging.render(`chat:${messageKey(chatId, messageId)}`, () => request('GET', assetPath, { query: { url: row.imageUrl } }), view);
     },
+    // Message text is translated line by line (Eugene, 2026-11-27: a translated list "lost all its
+    // formatting"): only lines with non-ASCII letters go to the model, without their bullet or number,
+    // and the answer is textLines, one English line or null per original line, so the app can put
+    // each translation on the row under its line. Voice transcripts are translated whole, as before.
     'POST /api/chat/translate': async (_params, input) => {
       if (!input || Object.keys(input).length !== 2 || !validId(input.chatId) || !Array.isArray(input.messageIds) ||
           input.messageIds.length > 200 || !input.messageIds.every(validId)) throw badRequest();
@@ -320,13 +328,26 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech 
       const rows = (await messages(chatId)).map(row => row.message).filter(message => ids.has(message.id));
       const items = rows.map(({ id }) => ({ id }));
       const entries = [];
+      const lineSets = new Map(); // item index -> { key, source, lines: (string|null)[] }
       rows.forEach((message, i) => {
-        for (const [field, source] of [['text', message.text], ['voice', !english(message.voice?.language) && message.voice?.transcript]]) {
-          if (!source) continue;
-          const key = messageKey(chatId, message.id);
-          const cached = translations.get(key)?.[field];
-          if (cached?.source === source) items[i][field] = cached.value;
-          else entries.push({ i, key, field, source });
+        const key = messageKey(chatId, message.id);
+        if (message.text) {
+          const cached = translations.get(key)?.textLines;
+          if (cached?.source === message.text) items[i].textLines = cached.value;
+          else {
+            const lines = message.text.split('\n');
+            lineSets.set(i, { key, source: message.text, lines: lines.map(() => null) });
+            lines.forEach((line, n) => {
+              const content = line.replace(LINE_PREFIX, '').trim();
+              if (FOREIGN.test(content)) entries.push({ i, key, field: 'line', line: n, source: content });
+            });
+          }
+        }
+        const voice = !english(message.voice?.language) && message.voice?.transcript;
+        if (voice) {
+          const cached = translations.get(key)?.voice;
+          if (cached?.source === voice) items[i].voice = cached.value;
+          else entries.push({ i, key, field: 'voice', source: voice });
         }
       });
       if (entries.length) {
@@ -341,10 +362,15 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech 
           translating.set(key, pending);
         }
         (await pending).forEach((value, index) => {
-          const { i, key, field, source } = entries[index];
+          const { i, key, field, source, line } = entries[index];
+          if (field === 'line') { lineSets.get(i).lines[line] = value; return; }
           retain(translations, key, { ...translations.get(key), [field]: { source, value } });
           items[i][field] = value;
         });
+      }
+      for (const [i, { key, source, lines }] of lineSets) {
+        retain(translations, key, { ...translations.get(key), textLines: { source, value: lines } });
+        items[i].textLines = lines;
       }
       return { items };
     },

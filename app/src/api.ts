@@ -103,7 +103,8 @@ export type ChatMessage = {
   image?: boolean;
 };
 export type ChatConversation = { messages: ChatMessage[] };
-export type ChatTranslation = { id: string; text?: string | null; voice?: string | null };
+// textLines (1.0.89): the English for each line of the message text, null where none is needed.
+export type ChatTranslation = { id: string; text?: string | null; textLines?: (string | null)[] | null; voice?: string | null };
 
 export const api = {
   capabilities: () => call<{ voice: boolean; modules?: string[]; chatFeatures?: ChatFeatures; imageRead?: boolean }>('GET', '/api/capabilities'),

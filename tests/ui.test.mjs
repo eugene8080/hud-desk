@@ -3226,3 +3226,11 @@ test('mail pictures sit where the HTML shows them; unplaced ones follow the text
   for (let i = 0; i < 6; i++) { body += container(h, 'body').content + '\n'; await h.scroll('down'); }
   assert.match(body, /Top story\n\[Image 1: Bloomberg\]\nMarkets\n\[Image 2: chart\.png\]\nEnd\n\[Image 3\]/);
 });
+
+test('Chat translation sits on the row under each original line, indented under its bullet', () => {
+  const chat = chatModule({});
+  assert.equal(chat.withEnglishLines('House B\n• 1 x 2/F 主人房換鉸\n  2. 廚房窗好緊', [null, '1 x 2/F master bedroom: replace hinge', 'Kitchen window is stiff']),
+    'House B\n• 1 x 2/F 主人房換鉸\n  (1 x 2/F master bedroom: replace hinge)\n  2. 廚房窗好緊\n     (Kitchen window is stiff)');
+  // A line count that does not match (the message changed) leaves the original as it is.
+  assert.equal(chat.withEnglishLines('a\nb', ['x']), 'a\nb');
+});

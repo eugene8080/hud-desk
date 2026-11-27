@@ -11,6 +11,19 @@ export const htmlBreaks = (value: string) => value.replace(/<br\s*\/?>/gi, '\n')
 const line = (value: string) => htmlBreaks(value).replace(/\s+/g, ' ').trim();
 const chatTitle = (chat: ChatItem) => line(chat.title) || t('chatUntitled');
 const withEnglish = (original: string, english?: string | null) => english ? `${original} (${line(english)})` : original;
+// Each original line, then its English on the next row, in brackets, indented under the line's text
+// (after a bullet or number), so a translated list keeps its shape (Eugene, 2026-11-27).
+export function withEnglishLines(original: string, english?: (string | null)[] | null): string {
+  if (!english?.length) return original;
+  const lines = original.split('\n');
+  if (english.length !== lines.length) return original;
+  return lines.flatMap((row, n) => {
+    const translated = english[n];
+    if (!translated) return [row];
+    const prefix = /^\s*(?:[•\-*]|\d{1,3}[.)]|>)?\s*/u.exec(row)?.[0] ?? '';
+    return [row, `${' '.repeat([...prefix].length)}(${line(translated)})`];
+  }).join('\n');
+}
 type VoiceStatus = 'chatTranscribing' | 'chatNotTranscribed';
 // images: message ids of the [Photo N] / [Sticker N] rows, N from 1 (2026-11-27).
 type ChatContent = ReaderContent & { voiceLines: { id: string; line: number }[]; images: string[] };
@@ -48,7 +61,8 @@ export function chatReaderText(conversation: ChatConversation, statuses = new Ma
     const media = message.media ?? (picture ? 'Photo' : '');
     const tag = media ? `[${media}${picture}${duration}${status && !voice?.transcript ? ` · ${t(status)}` : ''}]` : '';
     const translated = translations.get(message.id ?? id ?? '');
-    const caption = withEnglish(htmlBreaks(message.text), translated?.text);
+    const caption = translated?.textLines ? withEnglishLines(htmlBreaks(message.text), translated.textLines)
+      : withEnglish(htmlBreaks(message.text), translated?.text);
     const transcript = voice?.transcript ? withEnglish(voice.transcript, translated?.voice) : '';
     const text = `${who} ${[tag, caption, transcript].filter(Boolean).join(' ').replace(/\r\n?|\n/g, '\n  ')}`;
     lineIndex += text.split('\n').length;
@@ -96,6 +110,7 @@ export class ChatReader implements ReaderSource<ChatContent> {
           const cached = this.translations.get(id);
           if (cached) translations.set(id, { id,
             text: before?.text === message.text ? cached.text : undefined,
+            textLines: before?.text === message.text ? cached.textLines : undefined,
             voice: before?.voice?.transcript === voice?.transcript ? cached.voice : undefined,
           });
         }
