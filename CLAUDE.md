@@ -56,6 +56,17 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.75. (1) Eugene: G2 did not show this Orca chat or other worktree sessions. Cause:
+this coordinator runs as an Orca CHAT (ORCA_STRUCTURED_SESSION=1, session 73dad998...), and the bridge
+listed only `orca terminal list` panes. bridge/orca-chats.mjs adds chats from `orca agent list`
+(handle chat:<orcaSessionId>, readOnly) and reads them with `orca agent read <id> --limit 100`
+(messages only, tools dropped, source orca-chat). Orca 1.4.277 CLI has no send-to-chat command, so
+sends/choices to a chat are refused and the app has no hold-to-reply for it. Live check (no restart):
+2 chats listed (this one, a Cursor chat), this one read as 30 messages, send refused. (2) Email
+preloads in the background when Email is offered and not on screen (2 s after connect, then every
+3 min; incomplete cold pages re-read every 3 s up to 5 times; empty cold answers not cached); not in
+demo. 239 tests, build pass. Bridge part (chats) live after the next approved restart.
+
 2026-11-27 chat-voice worktree retired (Eugene asked): branch merged (1.0.74), worker terminal and
 three idle shells closed, contents removed, git worktree pruned, local branch deleted (origin branch
 kept). The now-empty folder C:/Users/eugen/orca/workspaces/orca-glass/chat-voice stays locked by

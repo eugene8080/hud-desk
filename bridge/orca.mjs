@@ -10,6 +10,13 @@ import { terminalProvider } from './terminal-provider.mjs';
 import { progressSummary } from './progress.mjs';
 import { workspaceLabels } from './workspace-label.mjs';
 import { hermes, isHermes, hermesCatalog } from './hermes.mjs';
+import { chatActivity, chatSessionId, chatText, chatThreads, isChat } from './orca-chats.mjs';
+
+const CHAT_READ_ONLY = 'Orca chats are read-only on the glasses: Orca has no command to send into a chat.';
+async function readChat(handle) {
+  const read = await orca(['agent', 'read', chatSessionId(handle), '--limit', '100']);
+  return { text: chatText(read.entries), source: 'orca-chat', state: chatActivity(read.state) };
+}
 
 const run = promisify(execFile);
 const ORCA = orcaExecutable();
@@ -39,9 +46,11 @@ function stateFromTitle(title) {
 
 export async function listThreads() {
   const hermesDiscovery = hermes.discover();
-  const [{ terminals, visualLayouts }, { worktrees }] = await Promise.all([
+  const [{ terminals, visualLayouts }, { worktrees }, agents] = await Promise.all([
     orca(['terminal', 'list', '--include-visual-layouts']),
     orca(['worktree', 'ps']),
+    // Chats (not terminal panes) come only from the agent list; a failure there keeps the terminals.
+    orca(['agent', 'list']).then(r => r.agents, () => []),
   ]);
   const names = sessionTitles(visualLayouts, worktrees);
   const threads = terminals
@@ -66,6 +75,7 @@ export async function listThreads() {
       })(),
       lastOutputAt: t.lastOutputAt,
     }]; })
+    .concat(chatThreads(agents, worktrees))
     .sort((a, b) => (b.lastOutputAt || 0) - (a.lastOutputAt || 0));
   await hermesDiscovery;
   return (await hermes.merge(threads, terminals)).sort((a, b) => (b.lastOutputAt || 0) - (a.lastOutputAt || 0));
@@ -171,6 +181,7 @@ async function agentOf(handle) {
 
 export async function readThread(handle) {
   if (isHermes(handle)) return hermes.read(handle);
+  if (isChat(handle)) { const { text } = await readChat(handle); return { text, menu: null, progress: '' }; }
   await requireLiveTerminal(handle);
   const { terminal } = await orca(['terminal', 'read', '--terminal', handle, '--screen']);
   const lines = terminal.tail || [];
@@ -189,6 +200,7 @@ export async function readThread(handle) {
 
 export async function readHistory(handle) {
   if (isHermes(handle)) return hermes.read(handle);
+  if (isChat(handle)) { const { text, source } = await readChat(handle); return { text, source }; }
   const live = await requireLiveTerminal(handle);
   let reason = 'No verified saved conversation is associated with this terminal.';
   try {
@@ -219,6 +231,10 @@ export async function requireLiveTerminal(handle) {
 
 export async function activity(handle) {
   if (isHermes(handle)) return hermes.activity(handle);
+  if (isChat(handle)) {
+    const read = await orca(['agent', 'read', chatSessionId(handle), '--limit', '1']);
+    return { state: chatActivity(read.state), elapsedSeconds: null };
+  }
   const terminal = await requireLiveTerminal(handle);
   const [{ worktrees }, screen] = await Promise.all([
     orca(['worktree', 'ps']),
@@ -232,6 +248,7 @@ export async function activity(handle) {
 
 export async function choose(handle, id, value) {
   if (isHermes(handle)) return hermes.choose(handle, id, value);
+  if (isChat(handle)) throw new Error(CHAT_READ_ONLY);
   const snapshot = await readThread(handle);
   const digit = validateChoice(snapshot.menu, id, value);
   // Recheck immediately before input. Orca has no atomic compare-and-send API;
@@ -242,7 +259,7 @@ export async function choose(handle, id, value) {
 
 // 番号付きの選択肢(❯ 1. Yes / 2. … )が画面に出ているか
 export async function hasNumberedMenu(handle) {
-  if (isHermes(handle)) return false;
+  if (isHermes(handle) || isChat(handle)) return false;
   const { terminal } = await orca(['terminal', 'read', '--terminal', handle, '--screen']);
   const tail = (terminal.tail || []).slice(-25);
   // 返答中の箇条書き「1. 2.」と区別するため、選択中の印 ❯ が付いた番号行を必須にする
@@ -253,6 +270,7 @@ export async function hasNumberedMenu(handle) {
 
 export async function sendToThread(handle, text, enter) {
   if (isHermes(handle)) return hermes.send(handle, text, enter);
+  if (isChat(handle)) throw new Error(CHAT_READ_ONLY);
   await requireLiveTerminal(handle);
   const args = ['terminal', 'send', '--terminal', handle, '--text', text];
   if (enter) args.push('--enter');

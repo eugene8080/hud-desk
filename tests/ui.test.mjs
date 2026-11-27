@@ -70,6 +70,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     thread: async h => ({ text: `Content ${h}` }),
     history: async () => ({ text: 'Older terminal output' }),
     capabilities: async () => ({ voice, ...(options.capabilities ?? {}) }),
+    health: async () => ({ ok: true }),
     mail: options.mail,
     chat: options.chat,
     transcribe: async pcm => { transcriptions.push(pcm); return { text: 'A voice test.' }; },
@@ -91,8 +92,11 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
   const sdk = new Proxy({ ImageRawDataUpdateResult: { success: 'success' }, waitForEvenAppBridge: async () => bridge, AudioInputSource: { Glasses: 0 }, OsEventTypeList: { CLICK_EVENT: 0, SCROLL_TOP_EVENT: 1, SCROLL_BOTTOM_EVENT: 2, DOUBLE_CLICK_EVENT: 3, SYSTEM_EXIT_EVENT: 7, ABNORMAL_EXIT_EVENT: 6, LONG_PRESS_EVENT: 9, LONG_PRESS_RELEASE_EVENT: 10 } }, { get: (target, key) => target[key] ?? Property });
   const imports = {
     '@evenrealities/even_hub_sdk': sdk,
-    './api': { api, setDemo() {}, setApiLang() {}, currentBase: () => '' },
-    './pairing': { parseCode: () => null },
+    './api': { api, setDemo() {}, setApiLang() {}, setConnection() {}, currentBase: () => '' },
+    // options.paired: run as a paired (non-demo) app; the stored code must then be 'eho1.fixture.code'.
+    './pairing': options.paired
+      ? { parseCode: code => code === 'eho1.fixture.code' ? { topic: 'fixture', token: 'code' } : null, resolveBase: async () => 'https://bridge.fixture.test' }
+      : { parseCode: () => null },
     // Real dictionary; the page-filling DOM step is a no-op without a document.
     './i18n': { ...i18nExports, applyPage() {} },
     './text': textExports,
@@ -553,6 +557,27 @@ test('a failed first Email load replaces the loading row with Email unavailable'
   assert.match(container(h, 'body').content, /Email unavailable/);
   assert.doesNotMatch(container(h, 'body').content, /Loading/);
   assert.equal(h.timers.size, 0);
+});
+
+test('Email preloads in the background while Coding is on screen, then opens from the cached page', async () => {
+  const { fixture, requests } = mailFixture();
+  const h = await moduleHarness({ paired: true, capabilities: { modules: ['coding', 'email'] }, storage: { code: 'eho1.fixture.code' }, mail: fixture });
+  assert.match(container(h, 'head').content, /^\[Coding\]/);
+  assert.equal(requests.length, 0);
+  // First background load two seconds after connecting.
+  const first = [...h.timeouts].find(([, t]) => t.delay === 2000);
+  assert.ok(first, 'preload scheduled');
+  h.timeouts.delete(first[0]); first[1].fn(); await h.flush();
+  assert.equal(requests.length, 1);
+  assert.match(container(h, 'head').content, /^\[Coding\]/); // Coding stays on screen
+  assert.ok([...h.timeouts.values()].some(t => t.delay === 180000), 'next preload in three minutes');
+  // Switching to Email paints the cached threads before any new request.
+  const pages = h.pages.length;
+  await h.tap();
+  const settle = [...h.timeouts].find(([, t]) => t.delay === 400);
+  h.timeouts.delete(settle[0]); settle[1].fn(); await h.flush();
+  assert.ok(h.pages.length > pages);
+  assert.match(h.pages.find((page, i) => i >= pages && page.textObject.some(c => c.containerName === 'body' && /Field survey/.test(c.content))) ? 'cached' : '', /cached/);
 });
 
 test('Email rows mark unread with / and read with -, and both fit the cursor gutter', () => {

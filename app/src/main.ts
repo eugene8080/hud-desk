@@ -1002,6 +1002,51 @@ async function selectMailAccount(id: string) {
 }
 
 // loadingShown: the rows on screen are the loading screen, so a failure replaces them.
+type MailListResult = Awaited<ReturnType<Mail['list']>>;
+// The Email list rows for one page; the screen and the background preload both use it.
+function mailListContent(result: MailListResult, page: number, loadingRow: boolean): ModuleListContent {
+  const lead = mailLeadRows(result.mailbox, result.filterColumn);
+  const columns = [...lead, ...result.items.map(item => mailColumns(item))];
+  if (loadingRow) columns.push({ marker: '', title: tr('mailLoadingMore'), right: '', busy: true });
+  return { columns, count: tr('mailUnread', result.unread),
+    items: columns.map(row => `${row.marker || ' '} ${row.title} ${row.right}`),
+    onPreviousPage: page > 0 ? () => mailHome(page - 1, -1) : undefined,
+    onNextPage: result.hasMore ? () => mailHome(page + 1, 1) : undefined,
+    menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
+    onPick: i => { if (!pickMailLead(i, result.mailbox) && result.items[i - lead.length]) void openMail(result.items[i - lead.length]); },
+  };
+}
+
+// Email loads in the background while Coding or Chat is on screen (Eugene, 2026-11-27: "the emails
+// already start loading even if the chat and the code are open"). The page is cached, so a switch
+// to Email paints it at once and then refreshes it in place. It also keeps the bridge's Gmail cache
+// warm. First load shortly after connecting; then every three minutes; a cold, incomplete page is
+// read again after a few seconds (at most five times). Nothing runs while Email is on screen.
+const MAIL_PRELOAD_FIRST_MS = 2000, MAIL_PRELOAD_MS = 3 * 60_000, MAIL_PRELOAD_RETRY_MS = 3000, MAIL_PRELOAD_RETRIES = 5;
+let mailPreloadTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleMailPreload(delay = MAIL_PRELOAD_MS, attempt = 0) {
+  clearTimeout(mailPreloadTimer);
+  mailPreloadTimer = setTimeout(() => { void preloadMail(attempt); }, delay);
+}
+// The demo has no bridge to warm and no latency to hide.
+let demoConnection = false;
+const onEmail = () => activeModule === 'email';
+async function preloadMail(attempt = 0) {
+  if (!modules.includes('email') || demoConnection) return;
+  if (onEmail()) { scheduleMailPreload(); return; }
+  const page = positions.email.page;
+  const filterRevision = mailFilterRevision;
+  try {
+    const result = await mail.list(page);
+    if (onEmail() || filterRevision !== mailFilterRevision) { scheduleMailPreload(); return; }
+    const incomplete = result.loading ?? (result.items.length < result.size && result.hasMore);
+    // An empty cold answer is not cached: Email would open on an empty list.
+    if (result.items.length || !incomplete) moduleCache.set('email', { page, content: mailListContent(result, page, false) });
+    if (incomplete && attempt < MAIL_PRELOAD_RETRIES) { scheduleMailPreload(MAIL_PRELOAD_RETRY_MS, attempt + 1); return; }
+  } catch { /* Email unavailable now; opening it shows why, and the next preload tries again. */ }
+  scheduleMailPreload();
+}
+
 async function mailHome(page = positions.email.page, selected = positions.email.cursor, mounted?: SessionMenuScreen, retry = 0, loadingShown = false) {
   clearTimeout(mailRetryTimer);
   selectThread(null);
@@ -1025,17 +1070,9 @@ async function mailHome(page = positions.email.page, selected = positions.email.
     const loading = () => result.loading ?? (result.items.length < result.size && result.hasMore);
     while (page > 0 && !result.items.length && !result.hasMore && !loading() && active()) result = await mail.list(--page);
     if (!active()) return;
-    const lead = mailLeadRows(result.mailbox, result.filterColumn);
-    const columns = [...lead, ...result.items.map(item => mailColumns(item))];
     // An incomplete page keeps a moving-dot row below its threads while it fills in.
-    if (loading() && retry < MAIL_RETRIES && result.items.length < result.size) columns.push({ marker: '', title: tr('mailLoadingMore'), right: '', busy: true });
-    const shown = await showModuleList('email', page, selected, { columns, count: tr('mailUnread', result.unread),
-      items: columns.map(row => `${row.marker || ' '} ${row.title} ${row.right}`),
-      onPreviousPage: page > 0 ? () => mailHome(page - 1, -1) : undefined,
-      onNextPage: result.hasMore ? () => mailHome(page + 1, 1) : undefined,
-      menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
-      onPick: i => { if (!pickMailLead(i, result.mailbox) && result.items[i - lead.length]) void openMail(result.items[i - lead.length]); },
-    }, mounted);
+    const shown = await showModuleList('email', page, selected,
+      mailListContent(result, page, loading() && retry < MAIL_RETRIES && result.items.length < result.size), mounted);
     if (loading() && retry < MAIL_RETRIES) {
       mailRetryTimer = setTimeout(() => {
         // Only while this list is still on screen with the same module and filter.
@@ -1296,7 +1333,7 @@ function thread(t: Thread, note = '') {
   const load = async () => {
     const snapshot = await api.thread(t.handle);
     const saved = await api.history(t.handle).catch(() => null);
-    const useSaved = ['codex-transcript', 'claude-transcript', 'cursor-transcript', 'opencode-transcript', 'pi-transcript', 'hermes-transcript'].includes(saved?.source || '');
+    const useSaved = ['codex-transcript', 'claude-transcript', 'cursor-transcript', 'opencode-transcript', 'pi-transcript', 'hermes-transcript', 'orca-chat'].includes(saved?.source || '');
     const conversationText = useSaved ? saved!.text : snapshot.text;
     const state = await api.activity(t.handle).catch(e => {
       diag(`Activity request failed: ${(e as Error).message}`);
@@ -1305,7 +1342,9 @@ function thread(t: Thread, note = '') {
     const text = readerContent(conversationText, snapshot.menu, snapshot.progress, t.agent === 'claude' && state.state === 'working');
     return { text, conversationText, choiceMenu: snapshot.menu, model: (useSaved ? saved!.model : undefined) || snapshot.model, activityState: state.state, reportedSeconds: state.state === 'working' ? state.elapsedSeconds ?? null : null, activityLabel: activityLabel(state.state), savedHistory: useSaved };
   };
-  const source = { title: `${t.title}${note ? `  ${note}` : ''}`, load, coding: t, hold: () => { void record({ thread: t }, true); } };
+  // An Orca chat is read-only (Orca has no send-to-chat command): no hold-to-reply.
+  const source = { title: `${t.title}${note ? `  ${note}` : ''}`, load, coding: t,
+    hold: t.readOnly ? undefined : () => { void record({ thread: t }, true); } };
   return guard(t.title, async () => {
     await openReader(source, home, () => { if (current?.kind === 'text' && current.choiceMenu) void replies(t); });
   }, home);
@@ -1952,6 +1991,7 @@ async function connect() {
   $('code').value = code;
   const t0 = Date.now();
   setDemo(code === 'demo');
+  demoConnection = code === 'demo';
   if (code === 'demo') {
     diag(tr('diagOk', 0, tr('viaDemo'), '-', 3));
     return openSavedOrHome({ state: 'demo' });
@@ -1994,6 +2034,7 @@ async function openSavedOrHome(connection: Connection, known?: Thread[]) {
   activeModule = modules.includes(stored) ? stored : 'coding';
   mail = new Mail(await bridge.getLocalStorage(MAIL_LABELS_KEY), await bridge.getLocalStorage(MAIL_ACCOUNTS_KEY), saveMailPref);
   chat = new Chat(await bridge.getLocalStorage(CHAT_NETWORKS_KEY));
+  if (modules.includes('email') && !demoConnection) scheduleMailPreload(MAIL_PRELOAD_FIRST_MS);
   chatTranslate = await bridge.getLocalStorage(CHAT_TRANSLATE_KEY) === 'en';
   phone?.connection(connection);
   if (activeModule === 'email') return mailHome();
