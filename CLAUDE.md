@@ -56,6 +56,14 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.77 (Eugene: remove Lines 1/8; add Dots 1/4, Dots 1/8, Tube x dim, Tube xx dim).
+14 options: None, Ink 5/8, 1/2, 1/4, Lines 1/3 (default), 1/4, Dots 1/3, 1/4, 1/8, Tube 1/2, 1/4,
+1/8, Tube, 1px frame. Dots 1/4 (id dots14) staggers the quarter (Ink 1/4 is the square 2x2 grid of
+the same density); Dots 1/8 = Bayer 2/16. Tube x/xx dim are Tube dim with a 1/4- and 1/8-lit band;
+the Tube dims are labelled by band fraction (Tube 1/2 = old Tube dim) because 'Background: Tube xx
+dim' measured 218 px, past the ~210 px menu row. Saved lines8 falls back to Lines 1/3. Background
+menu: page 1 Compare..Dots 1/8, page 2 the Tubes and 1px frame. 244 tests, build pass. G2 pending.
+
 2026-11-27 beta 1.0.76 (Eugene: Bluetooth keyboard support; 'tap and hold does not work in coding'
 - it was the orchestration row, a read-only Orca chat). Status row of a read-only chat reads
 [Read-only] instead of the hold hint. Keyboard (window keydown/keyup on the phone page, only while

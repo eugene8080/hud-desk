@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.76**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.77**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.76,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.77,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.76)
+## Feature list (beta 1.0.77)
 
 ### All modules
 
@@ -32,8 +32,9 @@ Rule for every agent: each beta release updates this file in the release commit:
   Brightness 15 down to 1. Both lists wrap at the ends.
 - With a pixel font, the user's turns sit on a dim background so they stand out. The reader's
   long-press menu has a Background menu: Compare backgrounds, None, Ink 5/8, 1/2 and 1/4, Lines
-  1/3 (default), 1/4 and 1/8, Dots 1/3, Tube dim, Tube and 1px frame. Tube draws CRT scanlines on
-  every third pixel row across the whole screen; Tube dim scans your turns over a half-lit band.
+  1/3 (default) and 1/4, Dots 1/3, 1/4 and 1/8, Tube 1/2, 1/4 and 1/8, Tube and 1px frame.
+  Tube draws CRT scanlines on every third pixel row across the whole screen; Tube 1/2, 1/4 and
+  1/8 scan your turns over a half-, quarter- and eighth-lit band.
   The 1px frame puts consecutive messages of yours in one frame.
   Native text has no background option in the SDK.
 - Keeps loading with the phone screen off.
@@ -131,5 +132,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.76: Bluetooth keyboard support on the phone: arrows, Enter and Esc drive the glasses, Space held talks, typing starts a reply (Enter reviews, Enter sends), and typing searches Email labels. Chat replies can be typed too. Read-only Orca chats now say [Read-only] instead of offering tap-and-hold.
+1.0.77: More reader backgrounds for your turns: Dots 1/4 (staggered rows of dots) and Dots 1/8, and the scanline band in three strengths, Tube 1/2 (was Tube dim), Tube 1/4 and Tube 1/8. Lines 1/8 is removed; if you had it, the reader goes back to Lines 1/3.
 <!-- whatsnew:end -->

@@ -43,11 +43,18 @@ export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].widt
 // "on text" 38 %). Tube turns scans your turns only; Tube scans the whole screen, as the face does.
 // Tube dim scans your turns only: every third row dark, a half-lit (checker) band. Tube turns and
 // Tube wide were removed in the second pass (2026-11-27).
+// Third pass (Eugene, 2026-11-27): Lines 1/8 removed; Dots 1/4, Dots 1/8, Tube x dim and Tube xx
+// dim added. Ink 1/4 already lights one pixel in each 2x2 on a square grid, so Dots 1/4 staggers
+// the same quarter: every second row, the dots of alternate rows offset by one pixel (diagonal
+// rows of dots). Dots 1/8 is the Bayer 2/16, which staggers the same way. Tube x dim and xx dim
+// are Tube dim with a quarter-lit and an eighth-lit band. Ids dots14/dots18 because 'dots4' is
+// an older saved value that maps to Ink 1/4. Labels name the lit fraction of the band, Tube 1/2
+// (was Tube dim), 1/4, 1/8: 'Background: Tube xx dim' is 218 px, past the menu's ~210 px.
 // 1px frame: a thin outline at Ink 2 around your turns; consecutive messages of yours share one
 // frame, including blank rows between them (Eugene, 2026-11-27).
 // Default Lines 1/3 (Eugene, 2026-11-27). Ink 2/3 were dropped; a saved one falls back to the default.
-export const TURN_BACKGROUNDS = ['none', 'ink58', 'ink12', 'ink14', 'lines3', 'lines4', 'lines8', 'dots3',
-  'tubedim', 'tube', 'frame'] as const;
+export const TURN_BACKGROUNDS = ['none', 'ink58', 'ink12', 'ink14', 'lines3', 'lines4', 'dots3', 'dots14',
+  'dots18', 'tubedim', 'tubexdim', 'tubexxdim', 'tube', 'frame'] as const;
 // Saved values from earlier betas that map onto an option that still exists.
 const RENAMED: Record<string, TurnBackground> = { dots2: 'ink12', dots4: 'ink14' };
 export type TurnBackground = typeof TURN_BACKGROUNDS[number];
@@ -60,7 +67,8 @@ const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 const dither = (k: number) => (x: number, y: number) => BAYER4[y & 3][x & 3] < k;
 // Tube variants: scanline pitch and the lit fraction of the band's other rows (16 = solid).
 const TUBES: Partial<Record<TurnBackground, { pitch: number; fill: number }>> = {
-  tubedim: { pitch: 3, fill: 8 }, tube: { pitch: 3, fill: 16 },
+  tubedim: { pitch: 3, fill: 8 }, tubexdim: { pitch: 3, fill: 4 }, tubexxdim: { pitch: 3, fill: 2 },
+  tube: { pitch: 3, fill: 16 },
 };
 export function parseTurnBackground(value: string | null | undefined): TurnBackground {
   return TURN_BACKGROUNDS.find(option => option === value) ?? (value ? RENAMED[value] : undefined) ?? DEFAULT_TURN_BACKGROUND;
@@ -72,9 +80,12 @@ export function turnBackgroundLabel(option: TurnBackground): string {
   if (option === 'ink14') return t('backgroundInk', '1/4');
   if (option === 'lines3') return t('backgroundLines', '1/3');
   if (option === 'lines4') return t('backgroundLines', '1/4');
-  if (option === 'lines8') return t('backgroundLines', '1/8');
   if (option === 'dots3') return t('backgroundDots', '1/3');
-  if (option === 'tubedim') return t('backgroundTubeDim');
+  if (option === 'dots14') return t('backgroundDots', '1/4');
+  if (option === 'dots18') return t('backgroundDots', '1/8');
+  if (option === 'tubedim') return t('backgroundTubeBand', '1/2');
+  if (option === 'tubexdim') return t('backgroundTubeBand', '1/4');
+  if (option === 'tubexxdim') return t('backgroundTubeBand', '1/8');
   if (option === 'tube') return t('backgroundTube');
   if (option === 'frame') return t('backgroundFrame');
   return t('backgroundInk', option);
@@ -89,9 +100,12 @@ const TURN_PATTERNS: Record<Exclude<TurnBackground, 'none' | 'frame'>, (x: numbe
   ink14: dither(4),
   lines3: (_x, y) => y % 3 === 0,
   lines4: (_x, y) => y % 4 === 0,
-  lines8: (_x, y) => y % 8 === 0,
   dots3: dither(5),
+  dots14: (x, y) => y % 2 === 0 && x % 2 === (y >> 1) % 2,
+  dots18: dither(2),
   tubedim: tubeLit(TUBES.tubedim!),
+  tubexdim: tubeLit(TUBES.tubexdim!),
+  tubexxdim: tubeLit(TUBES.tubexxdim!),
   tube: tubeLit(TUBES.tube!),
 };
 // The panel is 4-bit: 16 steps, numbered 0 through 15. Full white is 15, which is
@@ -357,7 +371,7 @@ function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: Tur
     });
   }
   lines.forEach((row, r) => s.text(row, textX, top + r * line, columns));
-  // Tube dim: the scanlines cross the letters of your turns too. (Tube scans the whole screen
+  // Tube dim, x dim, xx dim: the scanlines cross the letters of your turns too. (Tube scans the whole screen
   // afterwards, in renderFineScreen and the comparison.)
   const tube = TUBES[background];
   if (tube && background !== 'tube') {
