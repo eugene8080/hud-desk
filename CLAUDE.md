@@ -65,7 +65,9 @@ fetchPublicImage: https on 443 only, no IP literals or credentials, DNS checked 
 lookup (private, loopback, link-local, CGNAT incl. tailnet refused), re-checked per redirect (3),
 10 MB, 15 s. Fetched only when opened (the sender may see that it was opened). On his Bloomberg mail:
 26 img tags, 10 story pictures kept and placed, 6 sli.bloomberg.com ad slots skipped; banner converts
-crisp. 276 tests, build pass. Bridge part needs an approved restart.
+crisp. 276 tests, build pass. Bridge restarted with Eugene's approval (old supervisor
+71716/server 70740/whisper 44092; new supervisor 13584, server 69656, whisper 53264 --vad); healthz ok;
+live: his Bloomberg mail lists 10 pictures with 10 in-place markers, the first opens.
 
 2026-11-27 beta 1.0.86 (Eugene: Coding [session/agent] not right-aligned and titles cut off, Email
 titles cut off, Chat dates not right-aligned; wants [27Nov/Signal]). Symptoms = the compact fallback,
