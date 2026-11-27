@@ -13,7 +13,7 @@ import { transcribe, voiceAvailable, warmWhisper } from './whisper.mjs';
 import { MailError } from './gmail.mjs';
 import { allowPrivateHost, createMail, readMailConfig } from './mail.mjs';
 import { BeeperError, createBeeper, readBeeperConfig } from './beeper.mjs';
-import { createImaging, ImageError } from './image.mjs';
+import { createImaging, ImageError, readView } from './image.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const DIST = join(here, '../app/dist');
@@ -24,7 +24,9 @@ const config = JSON.parse(readFileSync(join(here, 'config.json'), 'utf8'));
 const localFile = join(here, 'config.local.json');
 const local = existsSync(localFile) ? JSON.parse(readFileSync(localFile, 'utf8')) : {};
 // Images on the glasses (2026-11-27): ffmpeg from PATH, `ffmpegPath`, or the Chat voice set-up's path.
-const imaging = createImaging({ ffmpeg: local.ffmpegPath ?? local.beeper?.ffmpegPath });
+// The Read view uses the local Ollama vision model: `visionModel`, else the Chat translation model.
+const imaging = createImaging({ ffmpeg: local.ffmpegPath ?? local.beeper?.ffmpegPath,
+  model: local.visionModel ?? local.beeper?.translationModel });
 Object.assign(config, local);
 
 function authorized(req, token) {
@@ -102,7 +104,7 @@ const routes = {
   'GET /api/history/image': (q) => {
     const index = Number(q.get('index'));
     if (!Number.isSafeInteger(index) || index < 1) throw new ImageError('bad request', 400);
-    return imaging.render(null, () => o.readHistoryImage(q.get('handle'), index));
+    return imaging.render(null, () => o.readHistoryImage(q.get('handle'), index), readView(key => q.get(key)));
   },
   'POST /api/choice': (_q, b) => o.choose(b.handle, b.menuId, b.value),
   'GET /api/replies': (q) => config.replies.filter(r => r.enter).map((r) => pick(r.label, langOf(q))),
@@ -156,7 +158,7 @@ export function createBridge({
   const beeperSettings = readBeeperConfig(beeperConfig);
   const chat = beeperSettings && createBeeper(beeperSettings, { imaging, ...beeperOptions });
   const privateHostAllowed = allowPrivateHost(privateHosts);
-  const capabilities = async () => ({ voice: voiceAvailable(), images: imaging.available(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])],
+  const capabilities = async () => ({ voice: voiceAvailable(), images: imaging.available(), imageRead: await imaging.readable(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])],
     ...(chat?.features && { chatFeatures: await chat.features() }) });
   const server = createServer((req, res) => handle(req, res, token, capabilities, mail, chat, privateHostAllowed));
   if (mail) server.once('close', mail.close);

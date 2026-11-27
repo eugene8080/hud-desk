@@ -1,4 +1,4 @@
-import { api, type ChatConversation, type ChatItem, type ChatTranslation } from './api';
+import { api, type ImageRequest, type ChatConversation, type ChatItem, type ChatTranslation } from './api';
 import { t } from './i18n';
 import { mailDate, mailFilterColumn, type ReaderContent, type ReaderSource } from './mail';
 import type { SessionColumns } from './session-list';
@@ -71,10 +71,10 @@ export class ChatReader implements ReaderSource<ChatContent> {
   }
 
   // Photo or sticker N of the chat, from Beeper through the bridge.
-  readonly image = async (n: number) => {
+  readonly image = async (n: number, request?: ImageRequest) => {
     const id = this.content().images[n - 1];
     if (!id) throw new Error('not found');
-    return api.chat.image(this.chat.id, id);
+    return api.chat.image(this.chat.id, id, request);
   };
 
   async load() {

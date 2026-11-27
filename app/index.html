@@ -59,6 +59,8 @@
       </nav>
     </header>
     <main id="page-home">
+      <!-- Shown while the page has no keyboard focus (2026-11-27): one tap here connects the keyboard. -->
+      <button type="button" id="key-focus" class="card" hidden data-i18n="keyFocusTap">Keyboard not connected yet: tap here once to use the Bluetooth keyboard.</button>
       <div class="seg" id="module-switch" role="group" aria-label="Module" data-i18n-aria="moduleSelect" hidden></div>
       <section class="card">
         <button type="button" id="conn-toggle" class="status"><span id="conn-dot" class="dot"></span><span id="conn-text" data-i18n="connConnecting">Connecting…</span><span id="conn-chevron">▾</span></button>

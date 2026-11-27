@@ -1,4 +1,4 @@
-import { api, type GlassImage, type MailAccount, type MailConversation, type MailLabel, type MailThread } from './api';
+import { api, type ImageAnswer, type ImageRequest, type MailAccount, type MailConversation, type MailLabel, type MailThread } from './api';
 import { getLang, t } from './i18n';
 import { glassWidth, MENU_RIGHT, menuTitle, type SessionColumns } from './session-list';
 
@@ -13,7 +13,7 @@ export type ReaderSource<Content extends ReaderContent = ReaderContent> = {
   // The Email thread a mail reader shows: keyboard actions (archive, reply, ...) apply to it.
   mail?: MailThread;
   // Image N of the text's [Image N] / [Photo N] / [Sticker N] rows (2026-11-27).
-  image?: (n: number) => Promise<GlassImage>;
+  image?: (n: number, request?: ImageRequest) => Promise<ImageAnswer>;
 };
 
 // The numbers of the image rows in a reader text, in order (each once).
@@ -295,10 +295,10 @@ export class Mail {
         images = content.images;
         return content;
       },
-      image: async n => {
+      image: async (n, request) => {
         const ref = images[n - 1];
         if (!ref) throw new Error('not found');
-        return api.mail.image(thread.account, ref.message, ref.part);
+        return api.mail.image(thread.account, ref.message, ref.part, request);
       },
       statusText: () => failed ? t('mailNotMarkedRead') : ' ',
       afterDisplay: async () => {

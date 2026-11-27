@@ -3,6 +3,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { before } from './mail.mjs';
+import { readView } from './image.mjs';
 import { createChatSpeech, MAX_ASSET_BYTES } from './chat-voice.mjs';
 import { DEFAULT_TRANSLATION_MODEL, localModelName, translateEnglish, translationAvailable } from './chat-translate.mjs';
 
@@ -300,12 +301,14 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech 
     },
     // A photo or sticker for the glasses (2026-11-27): the asset from Beeper, dithered by imaging.
     'POST /api/chat/image': async (_params, input) => {
-      if (!input || Object.keys(input).length !== 2 || !validId(input.chatId) || !validId(input.messageId)) throw badRequest();
+      const extra = Object.keys(input ?? {}).filter(key => !['chatId', 'messageId', 'view', 'region'].includes(key));
+      if (!input || extra.length || !validId(input.chatId) || !validId(input.messageId)) throw badRequest();
       if (!imaging) throw new BeeperError('images-unavailable', 503);
       const { chatId, messageId } = input;
+      const view = readView(key => input[key]);
       const row = (await messages(chatId)).find(row => row.message.id === messageId);
       if (!row?.imageUrl) throw new BeeperError('image-unavailable', 404);
-      return imaging.render(`chat:${messageKey(chatId, messageId)}`, () => request('GET', assetPath, { query: { url: row.imageUrl } }));
+      return imaging.render(`chat:${messageKey(chatId, messageId)}`, () => request('GET', assetPath, { query: { url: row.imageUrl } }), view);
     },
     'POST /api/chat/translate': async (_params, input) => {
       if (!input || Object.keys(input).length !== 2 || !validId(input.chatId) || !Array.isArray(input.messageIds) ||

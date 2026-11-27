@@ -16,7 +16,7 @@ import {
   type EvenAppBridge,
   type EvenHubEvent,
 } from '@evenrealities/even_hub_sdk';
-import { api, currentBase, setApiLang, setConnection, setDemo, type ChatFeatures, type ChatItem, type GlassImage, type ChoiceMenu, type MailAction, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
+import { api, currentBase, setApiLang, setConnection, setDemo, type ChatFeatures, type ChatItem, type GlassImage, type ImageAnswer, type ImageRequest, type ChoiceMenu, type MailAction, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
 import { parseCode, resolveBase } from './pairing';
 import { applyPage, detectLang, getLang, setLang, t as tr } from './i18n';
 import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth, type ReaderPage } from './text';
@@ -25,7 +25,7 @@ import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
+import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, renderKeysPage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, imageNumbers, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, ChatReader, chatColumns, CHAT_NETWORKS_KEY, CHAT_TRANSLATE_KEY } from './chat';
@@ -66,7 +66,7 @@ const POLL_MS = 1000;
 
 type Screen =
   | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; firstItem?: number; mailItems?: MailThread[]; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
-  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; compareSelected?: number; imageView?: ImageView; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
+  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; compareSelected?: number; imageView?: ImageView; keysPage?: boolean; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
 let current: Screen | null = null;
@@ -103,8 +103,13 @@ let viewProvider = 'all';
 // Reader text: the firmware's native font, or small text drawn as image tiles.
 type ReaderText = 'native' | FineFont;
 // The full-screen picture viewer (2026-11-27): image n of count from the reader's source.
-type ImageView = { n: number; count: number; numbers: number[]; load: (n: number) => Promise<GlassImage>;
-  image?: GlassImage; invert: boolean; note: string };
+type ImageMode = 'fit' | 'zoom' | 'outline' | 'read';
+const IMAGE_VIEWS: ImageMode[] = ['fit', 'zoom', 'outline', 'read'];
+const IMAGE_VIEW_LABEL = { fit: 'imageViewFit', zoom: 'imageViewZoom', outline: 'imageViewOutline', read: 'imageViewRead' } as const;
+type ImageView = { n: number; count: number; numbers: number[]; load: (n: number, request?: ImageRequest) => Promise<ImageAnswer>;
+  mode: ImageMode; region: number; regions: number; image?: GlassImage; text?: string; textPage: number; invert?: boolean; note: string };
+// Read is offered when the bridge has a vision model (bridges before 1.0.83 do not say: offered).
+let imageReadOffered = true;
 type Comparison = 'fonts' | 'backgrounds';
 const DEFAULT_SMALL_FONT: FineFont = 'terminus';
 const REMOVED_FONTS = ['fixed9', 'gohu14', 'shinonome'];
@@ -180,7 +185,8 @@ let chatTranslate = false;
 // Hidden or inert when the bridge PC lacks the engine (no FunASR/ffmpeg, Ollama or model missing).
 let chatFeatures: ChatFeatures = { transcribe: true, translate: true };
 const translating = () => chatTranslate && chatFeatures.translate;
-function applyCapabilities(capabilities: { chatFeatures?: ChatFeatures } | null) {
+function applyCapabilities(capabilities: { chatFeatures?: ChatFeatures; imageRead?: boolean } | null) {
+  imageReadOffered = capabilities?.imageRead !== false;
   const next = capabilities?.chatFeatures;
   if (!next) return;
   const changed = next.transcribe !== chatFeatures.transcribe || next.translate !== chatFeatures.translate;
@@ -276,6 +282,9 @@ function statusLeft(label: string, model?: string) {
   return label[0] !== '/' && label.length > 2 ? `${prefix}    ${label.slice(2)}` : prefix + label;
 }
 const readerStatusLeft = (s: TextScreen, label = s.activityLabel!) => s.reader?.coding ? statusLeft(label, s.model) : label;
+// A note in the status row (Find, Sent, Starred): two blank cells first, because a Coding reader
+// draws the first character as its activity icon and drops two characters (G2 1.0.82: "nd" for "Find").
+const statusNote = (text: string) => `  ${text}`;
 const statusIconX = (model?: string) => VOICE.xPosition + (model ? glassWidth(`${model} `) : 0);
 
 // Right part: '[Tap&hold] Pg77/78', right-aligned in its own layer on the same
@@ -403,7 +412,7 @@ async function show(s: Screen, reloadText = false) {
   const previous = current;
   current = s;
   const content = s.kind === 'text' ? (s.voice ? voiceBodyText(s) : bodyText(s)) : '';
-  const fine = s.kind === 'text' && !!s.fine && (!!s.reader || !!s.comparison || !!s.imageView);
+  const fine = s.kind === 'text' && !!s.fine && (!!s.reader || !!s.comparison || !!s.imageView || !!s.keysPage);
   const uploadText = !fine && (reloadText || (s.kind === 'text' && !!s.reader && s.text.length > 900) || new TextEncoder().encode(content).length > 999);
   const head = new TextContainerProperty({ ...HEAD, ...(s.kind === 'text' && s.usageMode ? { height: 28 } : {}), ...(s.kind === 'text' && s.reader ? { xPosition: 16, yPosition: 2, width: 544, height: 28, zOrderIndex: 1 } : {}), content: clipBytes(screenTitle(s), TEXT_BYTES), isEventCapture: 0 });
   // Firmware retains Display off, Brightness and Close alongside these actions.
@@ -505,7 +514,8 @@ async function show(s: Screen, reloadText = false) {
 // when the screen changed meanwhile; throws if the glasses reject a tile.
 async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boolean> {
   const t0 = Date.now();
-  const tiles = s.imageView ? imageViewTiles(s.imageView)
+  const tiles = s.keysPage ? renderKeysPage(tr('keysAll').split('\n'), s.fine!, inkLevel)
+    : s.imageView ? imageViewTiles(s.imageView)
     : s.comparison === 'fonts' ? renderFontComparison(inkLevel, (s.compareSelected ?? 0) - 1, true)
     : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel, turnHalo, s.compareSelected)
     : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel, backgroundFor(snapshot), turnHalo);
@@ -571,7 +581,7 @@ function readerMenu(screen: TextScreen) {
     // Straight into the comparison pages, where the choice is made (Eugene, 2026-11-27).
     { id: 1101, label: tr('usingFont', name), run: () => openComparison(screen, 'fonts') },
     { id: 1109, label: tr('background', turnBackgroundLabel(turnBackground)), run: () => openComparison(screen, 'backgrounds') },
-    { id: 1107, label: tr('brightness', inkLevel), run: () => showBrightness() },
+    { id: 1107, label: tr('brightness', inkLevel), run: () => showBrightness(screen) },
     ...(screen.reader instanceof ChatReader && chatFeatures.translate
       ? [{ id: 1108, label: tr(chatTranslate ? 'chatTranslateEnglish' : 'chatTranslateOff'), run: () => setChatTranslation(!chatTranslate) }]
       : []),
@@ -602,8 +612,7 @@ function showTextPicker(reader: TextScreen, labels: string[], selected: number, 
 
 // Steps 15 down to 1, ten per page. A swipe past either end wraps to the other.
 // Click one and the reader comes back at that ink.
-function showBrightness() {
-  const reader = current;
+function showBrightness(reader: Screen | null = current) {
   if (reader?.kind !== 'text' || !reader.reader) return;
   const levels = Array.from({ length: 15 }, (_, i) => 15 - i);
   const at = Math.max(0, levels.indexOf(inkLevel));
@@ -661,21 +670,34 @@ function nativeCompareRow(s: TextScreen) {
 // A click on a reader page opens the first picture on that page; a swipe goes to the next or
 // previous picture of the conversation, a click shows it in negative, a double-click returns.
 function imageViewTiles(view: ImageView): number[][] {
-  if (!view.image) return renderFineScreen({ text: view.note || tr('imageLoading', view.n, view.count), userTurns: [], firstLine: 0, lastLine: 0 },
-    smallFont, { left: '', right: '' }, inkLevel, 'none');
+  const position = view.count > 1 ? ` · ${view.numbers.indexOf(view.n) + 1}/${view.count}` : '';
+  const label = tr(IMAGE_VIEW_LABEL[view.mode]);
+  if (view.mode === 'read' && view.text !== undefined && !view.note) {
+    // The local AI's reading, in the pixel font, a page at a time.
+    const { textWidth, rows } = fineLayout(smallFont);
+    const pages = readerPages(view.text, fineMeasure(smallFont), textWidth, rows, Infinity);
+    const page = pages[Math.min(view.textPage, pages.length - 1)];
+    return renderFineScreen(page, smallFont, { left: `${label}${position}`, right: pages.length > 1 ? `Pg${view.textPage + 1}/${pages.length}` : '' }, inkLevel, 'none');
+  }
+  if (!view.image || view.note) return renderFineScreen({ text: view.note || tr('imageLoading', view.numbers.indexOf(view.n) + 1, view.count), userTurns: [], firstLine: 0, lastLine: 0 },
+    smallFont, { left: `${label}${position}`, right: '' }, inkLevel, 'none');
   const bytes = Uint8Array.from(atob(view.image.data), ch => ch.charCodeAt(0));
   const top = inkByte(inkLevel);
-  return FINE_TILES.map(tile => {
+  // Negative: the n key, else automatic for a mostly white picture (never for outlines).
+  const invert = view.mode !== 'outline' && (view.invert ?? view.image.mean > 0.6);
+  const tiles = FINE_TILES.map(tile => {
     const out = new Array<number>(tile.width * tile.height);
     for (let y = 0; y < tile.height; y++) for (let x = 0; x < tile.width; x++) {
       const i = (tile.yPosition + y) * 576 + tile.xPosition + x;
       const packed = bytes[i >> 1] ?? 0;
       let level = i & 1 ? packed & 15 : packed >> 4;
-      if (view.invert) level = 15 - level;
+      if (invert) level = 15 - level;
       out[y * tile.width + x] = Math.round(level * top / 15);
     }
     return out;
   });
+  const section = view.mode === 'zoom' && view.regions > 1 ? ` ${view.region + 1}/${view.regions}` : '';
+  return captionTiles(tiles, `${label}${section}${position}`, smallFont, inkLevel);
 }
 
 function pageImage(s: TextScreen): number | undefined {
@@ -684,6 +706,9 @@ function pageImage(s: TextScreen): number | undefined {
   return page ? imageNumbers(page.text)[0] : undefined;
 }
 
+// Picture viewer (Eugene, 2026-11-27, after looking at charts on G2): a click cycles Picture
+// (whole, auto negative), Zoom (sections; swipe moves through them), Outline (edges only) and Read
+// (the local AI's text). Swipe: the next section, text page or picture; n: negative; double-click: back.
 function openPageImage(s: Screen | null): boolean {
   if (s?.kind !== 'text' || !s.reader?.image || s.voice) return false;
   const n = pageImage(s);
@@ -692,10 +717,15 @@ function openPageImage(s: Screen | null): boolean {
   const load = s.reader.image;
   const reader = s;
   reader.reading = true;
-  const view: ImageView = { n, count: numbers.length, numbers, load, invert: false, note: '' };
+  const view: ImageView = { n, count: numbers.length, numbers, load, mode: 'fit', region: 0, regions: 1, textPage: 0, note: '' };
   const screen: TextScreen = { kind: 'text', title: ' ', text: '', fine: reader.fine ?? smallFont, imageView: view,
     onBack: () => { Object.assign(reader, { reading: false }); void show(reader).catch(e => diag((e as Error).message)); },
-    onClick: () => { if (view.image) { view.invert = !view.invert; void repaintImage(screen); } } };
+    onClick: () => {
+      const modes = IMAGE_VIEWS.filter(mode => mode !== 'read' || imageReadOffered);
+      view.mode = modes[(modes.indexOf(view.mode) + 1) % modes.length];
+      Object.assign(view, { region: 0, textPage: 0, image: undefined, text: undefined, note: '' });
+      void repaintImage(screen).then(() => loadImage(screen));
+    } };
   void show(screen).then(() => loadImage(screen)).catch(e => diag((e as Error).message));
   return true;
 }
@@ -707,29 +737,44 @@ function repaintImage(s: TextScreen) {
 
 async function loadImage(s: TextScreen) {
   const view = s.imageView!;
-  const n = view.n;
+  const { n, mode, region } = view;
+  if (mode === 'read') { view.note = tr('imageReading'); await repaintImage(s); view.note = ''; }
   try {
-    const image = await view.load(n);
-    if (current !== s || view.n !== n) return;
-    view.image = image;
-    // A mostly white picture (a light-mode screenshot) lights the whole lens: negative by default.
-    view.invert = image.mean > 0.6;
+    const answer = await view.load(n, { view: mode, region });
+    if (current !== s || view.n !== n || view.mode !== mode || view.region !== region) return;
+    if (mode === 'read') view.text = answer.text ?? '';
+    else {
+      view.image = answer;
+      view.regions = answer.regions ?? 1;
+    }
   } catch (e) {
-    if (current !== s || view.n !== n) return;
+    if (current !== s || view.n !== n || view.mode !== mode) return;
     const code = (e as Error).message;
-    view.note = code === 'images-unavailable' ? tr('imageNeedsFfmpeg') : tr('imageFailed', view.numbers.indexOf(n) + 1, view.count, code);
+    view.note = code === 'images-unavailable' ? tr('imageNeedsFfmpeg') : code === 'read-unavailable' ? tr('imageReadUnavailable')
+      : tr('imageFailed', view.numbers.indexOf(n) + 1, view.count, code);
   }
   await repaintImage(s);
 }
 
 function moveImage(s: TextScreen, step: number) {
   const view = s.imageView!;
+  // Zoom: sections first; Read: text pages first; then the next or previous picture.
+  if (view.mode === 'zoom' && view.image && view.region + step >= 0 && view.region + step < view.regions) {
+    view.region += step;
+    view.image = undefined;
+    void loadImage(s);
+    return;
+  }
+  if (view.mode === 'read' && view.text !== undefined) {
+    const { textWidth, rows } = fineLayout(smallFont);
+    const pages = readerPages(view.text, fineMeasure(smallFont), textWidth, rows, Infinity).length;
+    if (view.textPage + step >= 0 && view.textPage + step < pages) { view.textPage += step; void repaintImage(s); return; }
+  }
   if (view.count < 2) return;
   const at = view.numbers.indexOf(view.n);
-  view.n = view.numbers[(at + step + view.count) % view.count];
-  view.image = undefined;
-  view.note = tr('imageLoading', view.numbers.indexOf(view.n) + 1, view.count);
-  void repaintImage(s).then(() => { view.note = ''; return loadImage(s); });
+  Object.assign(view, { n: view.numbers[(at + step + view.count) % view.count], image: undefined, text: undefined,
+    region: 0, regions: 1, textPage: 0, invert: undefined, note: '' });
+  void repaintImage(s).then(() => loadImage(s));
 }
 
 // The Halo row of Compare backgrounds: toggles, saves and redraws the page (it stays open).
@@ -1481,7 +1526,7 @@ function thread(t: Thread, note = '') {
   // An Orca chat is read-only (Orca has no send-to-chat command): no hold-to-reply.
   const source = { title: `${t.title}${note ? `  ${note}` : ''}`, load, coding: t,
     hold: t.readOnly ? undefined : () => { void record({ thread: t }, true); },
-    image: (n: number) => api.historyImage(t.handle, n) };
+    image: (n: number, request?: ImageRequest) => api.historyImage(t.handle, n, request) };
   return guard(t.title, async () => {
     await openReader(source, home, () => {
       if (current?.kind === 'text' && current.choiceMenu) void replies(t);
@@ -1750,7 +1795,7 @@ async function closeCompose(sent = false) {
   } catch (e) { diag((e as Error).message); void showModule(); return; }
   if (!sent) return;
   if (background.kind === 'text' && current === background) {
-    void writePanel(tr('composeSent'), () => current === background);
+    void writePanel(statusNote(tr('composeSent')), () => current === background);
     void refreshReader(background);
   } else if (background.kind === 'list' && background.module === 'email') listToast(tr('composeSent'));
 }
@@ -1830,7 +1875,7 @@ let lastMailAction: { thread: MailThread; undo: MailAction; at: number } | null 
 let mailActing = false;
 
 async function mailNote(text: string, screen: Screen | null) {
-  if (screen?.kind === 'text' && screen.reader && current === screen) await writePanel(text, () => current === screen);
+  if (screen?.kind === 'text' && screen.reader && current === screen) await writePanel(statusNote(text), () => current === screen);
   else listToast(text);
 }
 
@@ -1997,7 +2042,11 @@ function commandItems(origin: Screen): FinderItem[] {
   const items: FinderItem[] = modules.map(m => ({ label: tr('commandGoTo', moduleLabel(m)), run: () => choosePhoneModule(m) }));
   items.push({ label: tr('commandQuickOpen'), run: () => openFinder(tr('commandQuickOpenTitle'), quickOpenItems(), origin) });
   items.push({ label: tr('commandRecent'), run: () => { void Promise.resolve(back()).then(() => showRecent(1)); } });
-  for (const action of origin.menuActions ?? []) items.push({ label: action.label, run: after(action.run) });
+  // Menu actions open their own page directly (no flash of the screen behind the palette).
+  for (const action of origin.menuActions ?? []) items.push({ label: action.label, run: () => {
+    const list = current;
+    return Promise.resolve(action.run()).then(() => { if (current === list) return back(); });
+  } });
   if (activeModule === 'coding') items.push(
     { label: tr('menuNewSession'), run: () => newSession() },
     { label: tr('menuUsage'), run: () => usage() },
@@ -2014,13 +2063,17 @@ function commandItems(origin: Screen): FinderItem[] {
 
 // Ctrl+Tab: recent conversations, newest first, the cursor on the one before this one.
 let switcher: Screen | null = null;
-function showRecent(start: number) {
+let tabDown = false;
+function showRecent(start: number): Promise<void> | undefined {
   if (!recentPlaces.length || composing) return;
   const places = [...recentPlaces];
   const origin = current;
   const at = Math.min(start, places.length - 1);
   const screen: Screen = {
     kind: 'list', textPicker: true, title: ' ', items: places.map(p => `[${MODULE_TAG[p.module]}] ${p.label}`), selected: at, paintedSelection: at,
+    // Past either end the cursor wraps, as VS Code's Ctrl+Tab does.
+    onNextPage: places.length > 1 ? () => showRecent(0) : undefined,
+    onPreviousPage: places.length > 1 ? () => showRecent(places.length - 1) : undefined,
     // A Ctrl+Tab choice is a new visit (history and recent list), unlike Alt+Left/Right.
     onPick: i => {
       switcher = null;
@@ -2042,7 +2095,7 @@ function startFind() {
   const s = current;
   if (s?.kind !== 'text' || !s.reader || s.voice || composing) return;
   finding = { screen: s, query: '' };
-  void writePanel(tr('findPrompt', '|'), () => current === s);
+  void writePanel(statusNote(tr('findPrompt', '|')), () => current === s);
 }
 function findType(ev: KeyboardEvent): boolean {
   const f = finding!;
@@ -2051,7 +2104,7 @@ function findType(ev: KeyboardEvent): boolean {
   if (ev.key === 'Backspace') f.query = f.query.slice(0, -1);
   else if (ev.key.length === 1) f.query += ev.key;
   else return false;
-  void writePanel(tr('findPrompt', `${f.query}|`), () => current === f.screen);
+  void writePanel(statusNote(tr('findPrompt', `${f.query}|`)), () => current === f.screen);
   return true;
 }
 function findNext(s: TextScreen, query: string, step: number) {
@@ -2064,11 +2117,11 @@ function findNext(s: TextScreen, query: string, step: number) {
     const i = ((offset + step * k) % pages.length + pages.length) % pages.length;
     if (pages[i].text.toLowerCase().includes(q)) {
       if (i !== offset) flipReader(s, i - offset);
-      void writePanel(tr('findFound', query.trim(), i + 1, pages.length), () => current === s);
+      void writePanel(statusNote(tr('findFound', query.trim(), i + 1, pages.length)), () => current === s);
       return;
     }
   }
-  void writePanel(tr('findNone', query.trim()), () => current === s);
+  void writePanel(statusNote(tr('findNone', query.trim())), () => current === s);
 }
 
 // Keys with Ctrl or Alt. Returns true when used.
@@ -2087,6 +2140,8 @@ function ideKey(ev: KeyboardEvent): boolean {
     return false;
   }
   if (!ctrl || ev.altKey) return false;
+  // Which Ctrl combinations reach the page (G2 1.0.82: Ctrl+Tab "does nothing"), in the phone log.
+  diag(`Key: Ctrl+${ev.shiftKey ? 'Shift+' : ''}${key}`);
   const reader = s.kind === 'text' && s.reader && !s.voice && !s.comparison ? s : null;
   switch (key.length === 1 ? key.toLowerCase() : key) {
     case ',': void showActionMenu(); return true;
@@ -2095,6 +2150,8 @@ function ideKey(ev: KeyboardEvent): boolean {
       if (switcher && current === switcher) glassEvent(ev.shiftKey ? OsEventTypeList.SCROLL_TOP_EVENT : OsEventTypeList.SCROLL_BOTTOM_EVENT);
       else void showRecent(ev.shiftKey ? recentPlaces.length - 1 : 1);
       return true;
+    // Ctrl+E: the same recent list without holding Ctrl (j/k or arrows move, Enter opens).
+    case 'e': void showRecent(1); return true;
     case 'f': startFind(); return true;
     case '1': case '2': case '3': {
       const module = (['coding', 'email', 'chat'] as const)[Number(key) - 1];
@@ -2135,26 +2192,19 @@ function showActionMenu() {
   let picked = false;
   return show({
     kind: 'list', textPicker: true, title: ' ', items: actions.map(action => action.label), selected: 0, paintedSelection: 0,
+    // The action opens its own page straight from this list (G2 1.0.82: going back first flashed
+    // the screen behind it). An action that opens nothing (Translate) returns to the screen.
     onPick: i => {
       if (picked || !actions[i]) return;
       picked = true;
       if (s.kind === 'text') s.reading = false;
-      void Promise.resolve(back()).then(() => actions[i].run()).catch(e => diag((e as Error).message));
+      const list = current;
+      void Promise.resolve(actions[i].run()).then(() => { if (current === list) return back(); }).catch(e => diag((e as Error).message));
     },
     onBack: () => { if (s.kind === 'text') s.reading = false; void back(); },
   });
 }
 
-// The keys page rows (Eugene, 2026-11-27): the action on the left, its keys right-aligned, padded
-// with spaces measured in the glasses' native font.
-const KEYS_WIDTH = 540;
-function keysPage() {
-  return tr('keysHelp').split('\n').map(row => {
-    const [action, keys = ''] = row.split('\t');
-    const gap = Math.max(1, Math.floor((KEYS_WIDTH - glassWidth(action) - glassWidth(keys)) / glassWidth(' ')));
-    return `${action}${' '.repeat(gap)}${keys}`;
-  }).join('\n');
-}
 
 // ?: the keys on the glasses; any key or gesture back returns.
 function showKeys() {
@@ -2166,7 +2216,7 @@ function showKeys() {
     if (back.kind === 'text') Object.assign(back, { reading: false });
     void show(back).catch(e => diag((e as Error).message));
   };
-  void show({ kind: 'text', title: tr('keysTitle'), text: keysPage(), onBack: leave, onClick: leave });
+  void show({ kind: 'text', title: ' ', text: '', fine: smallFont, keysPage: true, onBack: leave, onClick: leave });
 }
 
 // The Gmail key map outside text boxes. Returns true when the key was used.
@@ -2185,6 +2235,12 @@ const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Page
 
 function gmailKey(ev: KeyboardEvent, s: Screen, glassEvent: (type: OsEventTypeList) => void): boolean {
   const key = keyName(ev);
+  if (key === 'n' && s.kind === 'text' && s.imageView?.image && s.imageView.mode !== 'outline') {
+    const view = s.imageView;
+    view.invert = !(view.invert ?? view.image!.mean > 0.6);
+    void repaintImage(s);
+    return true;
+  }
   const list = s.kind === 'list' ? s : null;
   const moduleList = list?.module ? list : null;
   const reader = s.kind === 'text' && s.reader && !s.voice && !s.comparison ? s : null;
@@ -2692,6 +2748,13 @@ function confirm(w: Workspace, p: Provider, model: string, prompt: number, label
 // Keys reach this page only while its WebView has keyboard focus. Eugene, 2026-11-27: the keyboard
 // "does not work right away", only after switching modules on the phone. The page takes the focus
 // itself at start, when it is shown again, and on every glasses gesture, unless a text box has it.
+// The phone page says when typed keys cannot reach it yet: Android gives the keyboard to the
+// Even app's page only after a tap on it, which the page cannot do for itself.
+function showKeyFocus() {
+  const banner = document.getElementById('key-focus');
+  if (banner) banner.hidden = typeof document.hasFocus !== 'function' || document.hasFocus();
+}
+
 function ensureKeyFocus() {
   const active = document.activeElement as HTMLElement | null;
   if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return;
@@ -2704,7 +2767,7 @@ function ensureKeyFocus() {
 }
 
 function onEvent(e: EvenHubEvent) {
-  if (!e.audioEvent) ensureKeyFocus();
+  if (!e.audioEvent) { ensureKeyFocus(); showKeyFocus(); }
   if (e.menuItemClickEvent) {
     const screen = current;
     if (screen?.kind === 'list' && screen.module && !modulePending) {
@@ -3029,6 +3092,11 @@ async function main() {
   window.addEventListener('keyup', (ev: KeyboardEvent) => {
     const key = keyName(ev);
     if ((key === 'Control' || key === 'Meta') && switcher && current === switcher) { glassEvent(OsEventTypeList.CLICK_EVENT); return; }
+    if (key === 'Tab' && switcher && current === switcher) {
+      if (!tabDown) { diag('Key up only: Tab in Recent'); glassEvent(ev.shiftKey ? OsEventTypeList.SCROLL_TOP_EVENT : OsEventTypeList.SCROLL_BOTTOM_EVENT); }
+      tabDown = false;
+      return;
+    }
     if (!ARROWS.has(key)) return;
     if (arrowsDown.delete(key)) return;
     diag(`Key up only: ${key} (${ev.code || '-'}/${ev.keyCode ?? '-'})`);
@@ -3073,6 +3141,14 @@ async function main() {
       } else if (ev.key === 'Escape') { ev.preventDefault(); target!.blur?.(); }
       return;
     }
+    // In the Ctrl+Tab list every Tab moves (G2 1.0.82: the list opened, later Tabs did not move).
+    if (switcher && current === switcher && keyName(ev) === 'Tab') {
+      ev.preventDefault();
+      tabDown = true;
+      diag(`Key: Tab in Recent${ev.ctrlKey ? ' (Ctrl)' : ''}`);
+      glassEvent(ev.shiftKey ? OsEventTypeList.SCROLL_TOP_EVENT : OsEventTypeList.SCROLL_BOTTOM_EVENT);
+      return;
+    }
     if (ideKey(ev)) { ev.preventDefault(); return; }
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const s = current;
@@ -3099,8 +3175,10 @@ async function main() {
   });
   bridge.onEvenHubEvent(onEvent);
   ensureKeyFocus();
+  showKeyFocus();
   window.addEventListener('pageshow', ensureKeyFocus);
-  window.addEventListener('focus', ensureKeyFocus);
+  window.addEventListener('focus', () => { ensureKeyFocus(); showKeyFocus(); });
+  window.addEventListener('blur', showKeyFocus);
   document.addEventListener?.('visibilitychange', () => { if (document.visibilityState === 'visible') ensureKeyFocus(); });
   // Screen off delivers pagehide while this installed page stays alive, the same
   // way Workout Glass's countdown keeps ticking. Clearing the polls here made

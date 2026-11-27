@@ -490,6 +490,56 @@ export function renderFontComparison(level = INK_MAX, selected = -1, nativeRow =
   return s.tiles();
 }
 
+// A caption in the bottom-right corner of a picture (2026-11-27: the viewer's view and position,
+// "Zoom 2/4 · 1/3"), on a black box so it reads over any picture.
+export function captionTiles(tiles: number[][], caption: string, font: FineFont, level = INK_MAX): number[][] {
+  const s = new Surface(font, inkByte(level));
+  FINE_TILES.forEach((tile, i) => {
+    for (let y = 0; y < tile.height; y++) for (let x = 0; x < tile.width; x++)
+      s.pixels[(tile.yPosition + y) * SCREEN.width + tile.xPosition + x] = tiles[i][y * tile.width + x];
+  });
+  const { width: cw, height: ch } = TABLES[font];
+  const cells = Math.min(fineCells(caption), Math.floor((SCREEN.width - 8) / cw));
+  const w = cells * cw + 6, h = ch + 3, x = SCREEN.width - w, y = SCREEN.height - h;
+  s.rect(x, y, w, h, 0);
+  s.text(caption, x + 3, y + 2, cells);
+  return s.tiles();
+}
+
+// The keys page (Eugene, 2026-11-27: "can you fit everything there? If not make it rendered image
+// page"): every key in two columns in the pixel font, a heading row per group ('# Group') with a
+// thin rule under it, then 'action<TAB>keys' rows with the keys at the right of the column. A group
+// heading never ends a column.
+export function renderKeysPage(rows: string[], font: FineFont, level = INK_MAX): number[][] {
+  const s = new Surface(font, inkByte(level));
+  s.frame();
+  const { width: cw, height: ch } = TABLES[font];
+  const { columns, textX } = fineLayout(font);
+  const colCells = Math.floor((columns - 2) / 2);
+  const perColumn = Math.floor((SCREEN.height - TOP - 4) / ch);
+  const rule = Math.max(inkByte(1), Math.round(s.ink * 0.3 / 17) * 17);
+  let col = 0, row = 0;
+  for (const [i, line] of rows.entries()) {
+    const heading = line.startsWith('# ');
+    if (heading && row === perColumn - 1) { col++; row = 0; }
+    if (row >= perColumn) { col++; row = 0; }
+    if (col > 1) break;
+    if (heading && row > 0 && i > 0) row = Math.min(row, perColumn - 1);
+    const x = textX + col * (colCells + 2) * cw, y = TOP + row * ch;
+    if (heading) {
+      s.text(line.slice(2), x, y, colCells);
+      s.rect(x, y + ch - 1, colCells * cw, 1, rule);
+    } else {
+      const [action, keys = ''] = line.split('\t');
+      const keyCells = Math.min(fineCells(keys), colCells);
+      s.text(action, x, y, Math.max(0, colCells - keyCells - 1));
+      s.text(keys, x + (colCells - keyCells) * cw, y, keyCells);
+    }
+    row++;
+  }
+  return s.tiles();
+}
+
 // One row per option: its label on the left and the sample turn to the right, so every option
 // fits the screen in every font (Departure 7x14 included). The gap between rows is 2px when it
 // fits and shrinks (to 0 at worst) as the list grows; the back row below needs line + 10px.

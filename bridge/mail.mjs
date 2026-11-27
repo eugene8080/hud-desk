@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { createGmail, MailError } from './gmail.mjs';
 import { bodyText, header, parseFrom } from './mail-text.mjs';
 import { buildRaw, quotedOriginal, readDraft, replyFields } from './mail-compose.mjs';
+import { readView } from './image.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const ID = /^[a-zA-Z0-9_-]+$/;
@@ -303,7 +304,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging } 
     }
 
     // One image part, read only: inline data, or the attachment fetched by its id.
-    async function image(messageId, partId) {
+    async function image(messageId, partId, view) {
       if (!imaging) throw new MailError('images-unavailable', 503);
       return imaging.render(`mail:${account.id}:${messageId}:${partId}`, async () => {
         const message = await gmail('GET', `/messages/${messageId}`, { query: { format: 'full', fields: 'id,payload' } });
@@ -320,7 +321,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging } 
         const body = await gmail('GET', `/messages/${messageId}/attachments/${attachment}`, { query: { fields: 'data' } });
         if (typeof body?.data !== 'string') throw new MailError('not found', 404);
         return Buffer.from(body.data, 'base64url');
-      });
+      }, view);
     }
 
     // Lists drop a thread at once after an archive or trash, then reload in the background; an
@@ -549,7 +550,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging } 
     'GET /api/mail/image': query => {
       const part = query.get('part') ?? '';
       if (!PART_ID.test(part)) throw badRequest();
-      return accountOf(query.get('account')).image(threadId(query.get('message')), part);
+      return accountOf(query.get('account')).image(threadId(query.get('message')), part, readView(key => query.get(key)));
     },
   };
   return { routes, close: () => clearInterval(timer) };

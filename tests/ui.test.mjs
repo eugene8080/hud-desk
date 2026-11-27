@@ -1255,6 +1255,15 @@ test('IDE keys: Ctrl+Tab lists recent conversations and releasing Ctrl opens the
   await h.pick(3);           // Session 1
   await h.key('Tab', { ctrlKey: true });
   assert.deepEqual(menuItems(h), ['[Coding] Session 1', '[Coding] Session 0']);
+  // Every Tab moves the open list, with or without Ctrl, and on keyup if the keydown never came.
+  await h.key('Tab');
+  await h.keyup('Tab');
+  await h.keyup('Tab');
+  await h.key('Tab', { shiftKey: true, ctrlKey: true });
+  await h.keyup('Tab');
+  // Wrapped twice and back: the cursor is on Session 1; one more Tab, then release Ctrl.
+  await h.key('Tab', { ctrlKey: true });
+  await h.keyup('Tab');
   await h.keyup('Control');
   assert.match(container(h, 'body').content, /Content terminal-0/);
   // History: list, Session 0, list, Session 1, Session 0 (the Ctrl+Tab choice is a visit too).
@@ -1290,14 +1299,17 @@ test('IDE keys: Ctrl+F finds the next page with a word; Ctrl+Home/End; Ctrl+R; C
   assert.match(JSON.stringify(h.pages.at(-1)), /Email/);
 });
 
-test('? shows the keyboard page and any back returns', async () => {
+test('? shows every key on one image page in two columns, in every pixel font; any back returns', async () => {
+  const rows = i18nExports.dictionaryFor('en').keysAll.split('\n');
+  assert.ok(rows.length > 30);
+  // Every row fits two columns in every font (a heading never ends a column).
+  for (const font of fineExports.FINE_FONTS) {
+    const perColumn = Math.floor((288 - 4 - 4) / fineExports.fineLayout(font).line);
+    assert.ok(rows.length + 1 <= 2 * perColumn, `${font}: ${rows.length} rows, ${perColumn} a column`);
+  }
   const h = await harness(2);
   await h.key('?');
-  // Action on the left, keys at the right end of the same row.
-  assert.match(container(h, 'body').content, /^Reply, reply all, forward {2,}r, a, f$/m);
-  assert.match(container(h, 'body').content, /^Next, previous row {2,}j, k · Down, Up$/m);
-  assert.equal(container(h, 'body').content.split('\n').length, 9, 'all nine rows on one page');
-  assert.ok(new TextEncoder().encode(container(h, 'body').content).length <= 900);
+  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(fineExports.renderKeysPage(rows, 'terminus', 15)));
   await h.key('Escape');
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'));
 });
@@ -2966,26 +2978,43 @@ const glassImage = (level, mean = 0.2) => {
 };
 const shownTiles = h => [0, 1, 2, 3].map(i => h.images.findLast(image => image.containerName === `fine-${i}`)?.imageData);
 
-test('images: a click on a mail page with an image opens it; swipe moves, click inverts, double-click returns', async () => {
+test('images: views cycle Picture, Zoom, Outline, Read; swipe moves sections then pictures; n inverts; double-click returns', async () => {
   const { fixture, messages } = mailFixture();
   messages[1].images = [{ part: '2', name: 'plan.png' }, { part: '3', name: '' }];
   const asked = [];
-  fixture.image = async (account, message, part) => { asked.push({ account, message, part }); return glassImage(part === '2' ? 15 : 5, part === '2' ? 0.9 : 0.1); };
+  fixture.image = async (account, message, part, request = {}) => {
+    asked.push({ part, view: request.view, region: request.region });
+    if (request.view === 'read') return { text: 'Revenue 270, target 250' };
+    return { ...glassImage(part === '2' ? 15 : 5, part === '2' ? 0.9 : 0.1), regions: request.view === 'zoom' ? 3 : 1, region: request.region ?? 0 };
+  };
   const h = await emailHarness(fixture);
   await h.pickRow(2);
-  // The reader opens at the newest message; its image rows follow the text.
-  const text = h.pages.at(-1).textObject.find(c => c.containerName === 'body')?.content ?? '';
   for (let i = 0; i < 5 && !/\[Image 1: plan\.png\]/.test(container(h, 'body').content); i++) await h.scroll('down');
-  assert.match(container(h, 'body').content, /\[Image 1: plan\.png\]\n\[Image 2\]/, text);
+  assert.match(container(h, 'body').content, /\[Image 1: plan\.png\]\n\[Image 2\]/);
   await h.tap();
-  assert.deepEqual(asked, [{ account: 'work', message: 'new', part: '2' }]);
-  // A mostly white picture (mean 0.9) shows in negative: level 15 becomes 0.
-  assert.ok(shownTiles(h).every(tile => tile.every(v => v === 0)));
+  assert.deepEqual(asked, [{ part: '2', view: 'fit', region: 0 }]);
+  // A mostly white picture (mean 0.9) shows in negative; n shows it as it is. The caption sits at the bottom right.
+  const at = (x, y) => tilePixel(shownTiles(h), x, y);
+  assert.equal(at(10, 10), 0);
+  await h.key('n');
+  assert.equal(at(10, 10), 255);
+  assert.equal(at(575, 287), 0, 'caption box');
+  // Click: Zoom. Swipes move through its three sections, then to the next picture.
   await h.tap();
-  assert.ok(shownTiles(h).every(tile => tile.every(v => v === 255)), 'click shows it as it is');
+  assert.deepEqual(asked.at(-1), { part: '2', view: 'zoom', region: 0 });
   await h.scroll('down');
-  assert.deepEqual(asked.at(-1), { account: 'work', message: 'new', part: '3' });
-  assert.ok(shownTiles(h).every(tile => tile.every(v => v === 85)), 'image 2 at level 5');
+  assert.deepEqual(asked.at(-1), { part: '2', view: 'zoom', region: 1 });
+  await h.scroll('down');
+  await h.scroll('down');
+  assert.deepEqual(asked.at(-1), { part: '3', view: 'zoom', region: 0 });
+  // Click: Outline, then Read (the AI's text, drawn in the pixel font).
+  await h.tap();
+  assert.deepEqual(asked.at(-1), { part: '3', view: 'outline', region: 0 });
+  await h.tap();
+  assert.deepEqual(asked.at(-1), { part: '3', view: 'read', region: 0 });
+  const { textWidth, rows } = fineExports.fineLayout('terminus');
+  const [page] = textExports.readerPages('Revenue 270, target 250', fineExports.fineMeasure('terminus'), textWidth, rows, Infinity);
+  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(fineExports.renderFineScreen(page, 'terminus', { left: 'Read · 2/2', right: '' }, 15, 'none')));
   await h.back();
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'body'), 'back in the mail reader');
 });
@@ -2997,21 +3026,21 @@ test('images: Chat photos are numbered rows and open from the page; Coding scree
     { id: 'm2', own: true, from: '', date: 1, text: 'Nice' },
     { id: 'm1', own: false, from: 'Fixture sender', date: 2, text: 'Look', media: 'Photo', image: true },
   ] });
-  chat.image = async (chatId, messageId) => { wanted.push({ chatId, messageId }); return glassImage(10); };
+  chat.image = async (chatId, messageId, request) => { wanted.push({ chatId, messageId, view: request.view }); return glassImage(10); };
   const h = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat });
   await h.pickRow(2);
   assert.match(container(h, 'body').content, /\[Photo 1\] Look/);
   await h.tap();
-  assert.deepEqual(wanted, [{ chatId: 'fixture-0', messageId: 'm1' }]);
-  assert.ok(shownTiles(h).every(tile => tile.every(v => v === 170)));
+  assert.deepEqual(wanted, [{ chatId: 'fixture-0', messageId: 'm1', view: 'fit' }]);
+  assert.equal(tilePixel(shownTiles(h), 10, 10), 170);
   // Coding: an [Image N] row in the saved history.
   const c = await harness(2);
   const asked = [];
   c.api.history = async () => ({ text: '/ See this\n[Image 1]\n> Done.', source: 'claude-transcript' });
-  c.api.historyImage = async (handle, n) => { asked.push({ handle, n }); return glassImage(3); };
+  c.api.historyImage = async (handle, n, request) => { asked.push({ handle, n, view: request.view }); return glassImage(3); };
   await c.pick(2);
   await c.tap();
-  assert.deepEqual(asked, [{ handle: 'terminal-0', n: 1 }]);
+  assert.deepEqual(asked, [{ handle: 'terminal-0', n: 1, view: 'fit' }]);
 });
 
 test('Compare fonts has Native text as its first row, drawn by the glasses above the tiles', async () => {

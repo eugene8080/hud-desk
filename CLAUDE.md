@@ -56,6 +56,21 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.83 (Eugene on G2: arrows work; keyboard still needs a tap in the Even app;
+Ctrl+Tab list opens but Tab does not move; Ctrl+F showed 'nd'; Ctrl+, flashed; pictures hard to
+read, 'emboss/outline? AI even?'). Looked at four of his own WhatsApp pictures (with permission;
+kept in the scratchpad only): size is the main loss (1600x675 chart -> 576x288). bridge/image.mjs v2:
+ffmpeg decodes once to PGM <= 2400 px (cached, 6), views fit (stretch 1-99 %, dither), zoom (>= 2x
+fit or cover, sections in reading order), outline (Sobel on the picture alone), read (Ollama
+vision model = visionModel or beeper.translationModel; qwen3.8:27b read the KPI chart correctly in
+20 s); routes take view/region; capabilities.imageRead. App: click cycles views, swipe sections /
+text pages / pictures, n negative, caption box. Keys page: renderKeysPage, two columns, 36 rows,
+every font. Status notes prefixed (statusNote) so a Coding reader does not drop 2 chars. Ctrl+,
+and palette menu actions open their page directly. Recent list: Tab with or without Ctrl, keyup
+fallback, wraps; Ctrl+E. Keyboard focus cannot be taken by the page (Android needs a tap); phone
+banner #key-focus shows while document.hasFocus() is false. 266 tests, build pass. Bridge part
+(views, read) needs an approved restart.
+
 2026-11-27 beta 1.0.82. IDE keys (Eugene chose all eight + Ctrl+,): ideKey() in app/src/main.ts;
 Ctrl+, lists the screen's menuActions (the firmware popup cannot be opened by an app); finder list
 (Ctrl+P per-module items, Ctrl+Shift+P commands); Ctrl+Tab recent (keyup Control opens); Ctrl+F

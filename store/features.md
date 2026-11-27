@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.82**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.83**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.82,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.83,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.82)
+## Feature list (beta 1.0.83)
 
 ### All modules
 
@@ -39,9 +39,12 @@ Rule for every agent: each beta release updates this file in the release commit:
   pages directly: swipe moves the '>' mark, click uses it (on the Halo row: toggles it), double-click
   goes back unchanged. Compare fonts lists Native text first, then the pixel fonts large to small.
 - Images: [Photo N] in Chat, [Image N] under a mail's text and [Image N] where a picture was pasted
-  into a Claude or Codex session. A click on the page opens its first picture full screen (fitted
-  to 576x288, dithered to the 16 panel levels on the PC with ffmpeg); swipe for the next or previous
-  picture, click for negative (a mostly white picture opens in negative), double-click to go back.
+  into a Claude or Codex session. A click on the page opens its first picture. A click cycles the
+  views: Picture (whole, contrast stretched, a mostly white picture in negative), Zoom (at least twice
+  the size, in sections; a tall screenshot fills the width), Outline (edges only, lit lines on black)
+  and Read (the PC's local vision model reads it as text: chart values, screen text, or what a photo
+  shows). Swipe moves through sections or text pages, then pictures; n toggles negative; a caption
+  shows the view and position; double-click goes back.
   Tube draws CRT scanlines on every third pixel row across the whole screen; Tube 1/2, 1/4 and
   1/8 scan your turns over a half-, quarter- and eighth-lit band.
   The 1px frame puts consecutive messages of yours in one frame.
@@ -117,7 +120,9 @@ Rule for every agent: each beta release updates this file in the release commit:
   sessions, chats or mail), Ctrl+Shift+P command palette, Ctrl+Tab recent conversations (release
   Ctrl to open), Ctrl+F find in the conversation (Enter or F3 next), Ctrl+1/2/3 modules,
   Ctrl+Home/End first and last page, Ctrl+R refresh, Ctrl+N new session or mail, Alt+Left/Right
-  back and forward.
+  back and forward. Ctrl+E is the recent list without holding Ctrl. The ? page shows every key in
+  two columns in the pixel font. The phone page says when the keyboard is not connected yet (one tap
+  on the phone page connects it).
 
 ### Not yet built
 
@@ -154,5 +159,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.82: VS Code-style keys: Ctrl+, menu, Ctrl+P quick open, Ctrl+Shift+P commands, Ctrl+Tab recent, Ctrl+F find, Ctrl+1/2/3 modules, Ctrl+Home/End, Ctrl+R, Ctrl+N, Alt+Left/Right. Font and Background open their comparison pages directly; Native text no longer moves there and fonts run large to small. The keyboard takes focus without switching modules first.
+1.0.83: Pictures get four views (click to cycle): Picture, Zoom in sections, Outline (edges only) and Read, where the local AI on your PC reads a chart or screenshot as text. n toggles negative. The ? page shows every key in two columns. Ctrl+E recent list; Tab moves the Ctrl+Tab list. Find no longer shows 'nd'; Ctrl+, opens menus without a flash; the phone says when to tap for the keyboard.
 <!-- whatsnew:end -->

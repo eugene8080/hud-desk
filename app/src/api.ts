@@ -80,7 +80,11 @@ export type MailConversation = { subject: string; messages: { id: string; from: 
   images?: { part: string; name: string }[] }[] };
 // A picture for the glasses (2026-11-27): 576x288, two 4-bit panel levels a byte, base64; mean
 // brightness 0..1 (the app shows a mostly white picture in negative by default).
-export type GlassImage = { width: number; height: number; data: string; mean: number };
+export type GlassImage = { width: number; height: number; data: string; mean: number; view?: string; regions?: number; region?: number };
+// The viewer asks for a view (fit, zoom, outline, read) and, in zoom, a section; read answers with text.
+export type ImageRequest = { view?: 'fit' | 'zoom' | 'outline' | 'read'; region?: number };
+export type ImageAnswer = GlassImage & { text?: string };
+const viewQuery = (request: ImageRequest) => ({ ...(request.view && { view: request.view }), ...(request.region !== undefined && { region: String(request.region) }) });
 // Optional Chat features the bridge PC can serve; a bridge before 1.0.72 omits this (both offered).
 export type ChatFeatures = { transcribe: boolean; translate: boolean };
 export type ChatItem = { id: string; title: string; date: number; unread: boolean; readOnly?: boolean };
@@ -99,7 +103,7 @@ export type ChatConversation = { messages: ChatMessage[] };
 export type ChatTranslation = { id: string; text?: string | null; voice?: string | null };
 
 export const api = {
-  capabilities: () => call<{ voice: boolean; modules?: string[]; chatFeatures?: ChatFeatures }>('GET', '/api/capabilities'),
+  capabilities: () => call<{ voice: boolean; modules?: string[]; chatFeatures?: ChatFeatures; imageRead?: boolean }>('GET', '/api/capabilities'),
   chat: {
     networks: () => call<string[]>('GET', '/api/chat/networks'),
     list: (networks: string[], page: number) => call<ChatPage>('GET', `/api/chat/list?${new URLSearchParams({ networks: networks.join(','), page: String(page) })}`),
@@ -110,7 +114,8 @@ export const api = {
       call<{ items: ChatTranslation[] }>('POST', '/api/chat/translate', { chatId, messageIds }, 240000),
     send: (chatId: string, text: string) => call<{ ok: boolean }>('POST', '/api/chat/send', { chatId, text }),
     read: (chatId: string) => call<{ ok: boolean }>('POST', '/api/chat/read', { chatId }),
-    image: (chatId: string, messageId: string) => call<GlassImage>('POST', '/api/chat/image', { chatId, messageId }, 45000),
+    image: (chatId: string, messageId: string, request: ImageRequest = {}) =>
+      call<ImageAnswer>('POST', '/api/chat/image', { chatId, messageId, ...request }, 200000),
   },
   mail: {
     accounts: () => call<MailAccount[]>('GET', '/api/mail/accounts'),
@@ -122,14 +127,15 @@ export const api = {
     compose: (account: string, id: string, mode: 'reply' | 'replyAll' | 'forward') =>
       call<{ to: string; cc: string; subject: string }>('GET', `/api/mail/compose?${new URLSearchParams({ account, id, mode })}`),
     // The bridge sends a given sendId at most once, so a retry after a lost answer is safe.
-    image: (account: string, message: string, part: string) =>
-      call<GlassImage>('GET', `/api/mail/image?${new URLSearchParams({ account, message, part })}`, undefined, 45000),
+    image: (account: string, message: string, part: string, request: ImageRequest = {}) =>
+      call<ImageAnswer>('GET', `/api/mail/image?${new URLSearchParams({ account, message, part, ...viewQuery(request) })}`, undefined, 200000),
     send: (draft: MailSend) => call<{ ok: boolean; id?: string }>('POST', '/api/mail/send', draft, 30000),
   },
   health: () => call<{ ok: boolean }>('GET', '/healthz'),
   threads: () => call<Thread[]>('GET', '/api/threads'),
   activity: (handle: string) => call<{ state: Activity; elapsedSeconds?: number | null }>('GET', `/api/activity?handle=${encodeURIComponent(handle)}`),
-  historyImage: (handle: string, index: number) => call<GlassImage>('GET', `/api/history/image?${new URLSearchParams({ handle, index: String(index) })}`, undefined, 45000),
+  historyImage: (handle: string, index: number, request: ImageRequest = {}) =>
+    call<ImageAnswer>('GET', `/api/history/image?${new URLSearchParams({ handle, index: String(index), ...viewQuery(request) })}`, undefined, 200000),
   history: (handle: string) => call<{ text: string; model?: string; source?: string; limited?: boolean; messageCount?: number; reason?: string }>('GET', `/api/history?handle=${encodeURIComponent(handle)}`),
   thread: (handle: string) => call<{ text: string; menu?: ChoiceMenu | null; progress?: string; model?: string }>('GET', `/api/thread?handle=${encodeURIComponent(handle)}`),
   choice: (handle: string, menuId: string, value: string) => call<{ sent: string }>('POST', '/api/choice', { handle, menuId, value }),
