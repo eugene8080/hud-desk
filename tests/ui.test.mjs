@@ -2035,7 +2035,7 @@ test('small text draws the whole screen, status row included, as four tiles and 
   await h.menu(1101);
   assert.deepEqual(menuItems(h), ['Native text ✓', 'Departure 7x14', 'Misc Fixed 6x13', 'Terminus 6x12',
     'GohuFont 6x11', 'Scientifica 5x11', 'Compare fonts']);
-  assert.deepEqual(Object.keys(glyphExports), ['DEPARTURE_MONO', 'TERMINUS', 'GOHU', 'SCIENTIFICA', 'FIXED', 'SHINONOME_K12']);
+  assert.deepEqual(Object.keys(glyphExports), ['DEPARTURE_MONO', 'TERMINUS', 'GOHU', 'SCIENTIFICA', 'FIXED', 'CJK_12']);
   const fontCursor = () => h.pages.at(-1).textObject.find(c => c.containerName === 'body').content.split('\n').findIndex(row => row.startsWith('>'));
   await h.scroll('up');
   assert.equal(fontCursor(), 6); // wraps to the last row, Compare fonts
@@ -2448,7 +2448,7 @@ test('switching the phone language to Japanese redraws glasses labels and keeps 
   assert.equal(statusExports.readerStatus('waiting'), '/Waiting');
 });
 
-test('Japanese draws from the Shinonome wide table in every small font', () => {
+test('Japanese draws from the shared CJK table in every small font', () => {
   // あ (U+3042) and 漢 are in the 12x12 table: two cells, real pixels, no canvas fallback.
   for (const font of fineExports.FINE_FONTS) {
     const tiles = renderFineText('あ漢', font, { left: '', right: '' });
@@ -2457,6 +2457,21 @@ test('Japanese draws from the Shinonome wide table in every small font', () => {
     assert.ok(lit - blank > 40, `${font}: ${lit - blank} glyph pixels`);
   }
   assert.equal(fineExports.fineCells('日本語abc'), 9);
+});
+
+test('Cantonese uses the shared CJK table and 㩒 draws the same glyph as 撳', () => {
+  const glyphs = new Map(glyphExports.CJK_12.glyphs.split(';').map(entry => entry.split(':')));
+  const sample = '啲嘢唔係咁樣嘅';
+  const status = { left: '', right: '' };
+  const countPixels = tiles => tiles.reduce((sum, tile) => sum + tile.filter(value => value > 0).length, 0);
+  assert.equal(fineExports.fineCells(sample), 14);
+  for (const ch of sample) assert.match(glyphs.get(ch.codePointAt(0).toString(16)), /[1-9a-f]/);
+  assert.equal(glyphs.get('3a52'), glyphs.get('64b3'));
+  // The renderer VM has no document, so a canvas fallback would throw.
+  for (const font of fineExports.FINE_FONTS) {
+    assert.ok(countPixels(renderFineText(sample, font, status)) > countPixels(renderFineText('', font, status)) + 100, font);
+    assert.deepEqual(renderFineText('㩒', font, status), renderFineText('撳', font, status), font);
+  }
 });
 
 test('Japanese wraps between characters but never starts a row with closing punctuation', () => {

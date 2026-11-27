@@ -20,7 +20,9 @@ export default defineConfig({
           + 'Original project: https://github.com/2ero20ne/orca-glass\n'
           + 'Fork: https://github.com/eugene8080/orca-glass\n'
           + 'Copyright (c) 2026 2ero20ne\n'
-          + 'Used under the MIT License; see LICENSE.txt.\n',
+          + 'Used under the MIT License; see LICENSE.txt.\n'
+          + 'Shared CJK glyphs: Fusion Pixel Font by TakWolf, with Shinonome fallbacks.\n'
+          + 'See FONT-LICENSES.txt for the font notices.\n',
       });
       // Small-text reader fonts ship with their licences (OFL-1.1 requires the
       // notice to travel with the font; the others are kept for attribution).
@@ -36,8 +38,10 @@ export default defineConfig({
           + readFileSync(new URL('./src/fonts/SCIENTIFICA-OFL.txt', import.meta.url), 'utf8')
           + '\n\nX11 misc-fixed 6x13 (glyph table):\n\n'
           + readFileSync(new URL('./src/fonts/MISC-FIXED-COPYING.txt', import.meta.url), 'utf8')
-          + '\n\nShinonome 0.9.11, 6x12 and 12x12 Japanese (glyph tables, public domain):\n\n'
-          + readFileSync(new URL('./src/fonts/SHINONOME-LICENSE.txt', import.meta.url), 'utf8'),
+          + '\n\nShinonome 0.9.11 (wide glyph fallbacks, public domain):\n\n'
+          + readFileSync(new URL('./src/fonts/SHINONOME-LICENSE.txt', import.meta.url), 'utf8')
+          + '\n\nFusion Pixel Font 12px Mono zh_HK v2026.11.10 (shared CJK glyphs and upstream notices):\n\n'
+          + readFileSync(new URL('./src/fonts/FUSION-PIXEL-LICENSE.txt', import.meta.url), 'utf8'),
       });
     },
   }],
