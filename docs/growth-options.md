@@ -24,6 +24,20 @@ small user count comes from Orca being niche. Listing stats that day: 51 install
 - **Chesly.** Says it hosts everything ("no computer needed"). Its architecture was not checked.
 - **Claude Remote** (Even Hub #18). Its own tagline says "Reverse-Engineered Claude /rc Controller".
 
+## Whitelist enforcement in practice (2026-11-27, test pending)
+
+Evidence that the Even app may not enforce the network whitelist, despite its docs:
+- Upstream Orca Glass (2ero20ne, published 1.0.0/1.0.1) whitelists only `https://ntfy.sh`, yet its
+  app fetches each user's random `https://<name>.trycloudflare.com` tunnel (app/src/pairing.ts at
+  upstream 6315d7f).
+- Claude Code G2 (Even Hub) asks each user for "your own backend URL and bearer token" (Mac over
+  Tailscale), which no build whitelist can list.
+Test: beta 1.0.93 adds an optional Bridge address on the phone's Settings; PSCAP11 serves the bridge
+on a second tailnet-only address, `https://pscap11.tailf91bf7.ts.net:8444` (`tailscale serve`,
+remove with `tailscale serve --https=8444 off`), which is NOT in app/app.json. If Eugene's phone
+connects through it, user-typed addresses work and the relay becomes optional (users without
+Tailscale, the hosted tier, or a fallback if Even starts enforcing). If blocked, the relay is required.
+
 ## Options (agent's recommendation; nothing decided)
 
 1. Let any self-hoster connect. This fixes the whitelist blocker and makes "free self-host" exist.

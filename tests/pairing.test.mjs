@@ -46,3 +46,18 @@ test('eho2 resolves only to the configured relay and requires canonical key byte
   assert.equal(app.parseCode(code + '='), null);
   assert.equal(app.parseCode(code.slice(0, -1) + 'B'), null);
 });
+
+// 2026-11-27: a bridge address typed on the phone, used instead of the build's origin for eho1 codes.
+test('a typed bridge address must be a bare HTTPS origin and wins over the build origin', async () => {
+  const api = pairing('https://pc.example:8443', noNetwork);
+  assert.equal(api.parseOrigin('https://Their-PC.tail1234.ts.net:8443/'), 'https://their-pc.tail1234.ts.net:8443');
+  assert.equal(api.parseOrigin('https://relay.example.com:443'), 'https://relay.example.com');
+  for (const bad of ['http://pc.example:8443', 'https://pc.example/path', 'https://user@pc.example', 'https://pc.example:99999',
+    'https://localhost:8443', 'https://pc.example?x=1', 'pc.example:8443', 'javascript:alert(1)', '']) {
+    assert.equal(api.parseOrigin(bad), null, bad);
+  }
+  const direct = { topic: 'private', token: 'secret' };
+  assert.equal(await api.resolveBase(direct, 'https://their-pc.tail1234.ts.net:8443'), 'https://their-pc.tail1234.ts.net:8443');
+  assert.equal(await api.resolveBase(direct, 'not an address'), 'https://pc.example:8443');
+  assert.equal(await api.resolveBase(direct, ''), 'https://pc.example:8443');
+});

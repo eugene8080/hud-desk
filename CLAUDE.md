@@ -58,6 +58,15 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 whitelist test (Eugene asked whether Claude Code G2 / upstream need a relay): upstream
+whitelists only ntfy.sh yet fetched trycloudflare tunnels; Claude Code G2 takes a user-typed URL.
+Beta 1.0.93 (295 tests, CLI verified 251,093 bytes, prototype build restored) adds Settings >
+Bridge address (parseOrigin: https host[:port] only; stored as 'bridge-origin'; eho1 only).
+tailscale serve added https :8444 (tailnet only) -> 127.0.0.1:8787, not in the whitelist. Waiting on
+Eugene: type https://pscap11.tailf91bf7.ts.net:8444 in Settings and report connect/blocked. The
+droplet hud-relay (146.190.110.60, SGP1, US$6/month, created with his approval) is up but the relay
+install is PAUSED until this result. docs/growth-options.md has the evidence.
+
 2026-11-27 relay hosting chosen by Eugene: DigitalOcean droplet + Tailscale Funnel address (free
 .ts.net name, no domain). SSH key created with his OK: ~/.ssh/hud-desk-relay (no passphrase; public
 key comment hud-desk-relay@PSCAP11). PAUSED before any purchase: Eugene asked whether he needs the

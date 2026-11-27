@@ -17,7 +17,7 @@ import {
   type EvenHubEvent,
 } from '@evenrealities/even_hub_sdk';
 import { api, currentBase, setApiLang, setConnection, setDemo, type ChatFeatures, type ChatItem, type GlassImage, type ImageAnswer, type ImageRequest, type ChoiceMenu, type MailAction, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
-import { parseCode, resolveBase } from './pairing';
+import { parseCode, parseOrigin, resolveBase } from './pairing';
 import { applyPage, detectLang, getLang, setLang, t as tr } from './i18n';
 import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth, type ReaderPage } from './text';
 import { readerStatus, statusPixels, SPINNER, workingLabels } from './reader-status';
@@ -2980,8 +2980,11 @@ async function connect() {
   cancelModuleSwitch();
   moduleCache.clear();
   const code = await bridge.getLocalStorage('code');
+  const typedOrigin = await bridge.getLocalStorage('bridge-origin');
   const pairing = parseCode(code);
   $('code').value = code;
+  const originInput = document.getElementById('bridge-origin') as HTMLInputElement | null;
+  if (originInput) originInput.value = typedOrigin;
   const t0 = Date.now();
   setDemo(code === 'demo');
   demoConnection = code === 'demo';
@@ -2996,11 +2999,11 @@ async function connect() {
   }
   phone?.connection({ state: 'connecting' });
   try {
-    const base = await resolveBase(pairing);
+    const base = await resolveBase(pairing, typedOrigin);
     if (!base) throw new Error(tr('noRelay'));
     setConnection('routeId' in pairing
       ? { base, relay: pairing }
-      : { base, token: pairing.token, resolve: () => resolveBase(pairing) });
+      : { base, token: pairing.token, resolve: () => resolveBase(pairing, typedOrigin) });
     await api.health();
     const threads = await api.threads();
     const ms = Date.now() - t0;
@@ -3272,7 +3275,11 @@ async function main() {
     holding = false;
     const code = $('code').value.trim();
     if (code && code !== 'demo' && !parseCode(code)) return diag(tr('badCode'));
+    const typed = ((document.getElementById('bridge-origin') as HTMLInputElement | null)?.value ?? '').trim();
+    const origin = typed ? parseOrigin(typed) : '';
+    if (origin === null) return diag(tr('badAddress'));
     await bridge.setLocalStorage('code', code);
+    await bridge.setLocalStorage('bridge-origin', origin);
     await connect();
   });
   $('demo').addEventListener('click', async () => {
