@@ -56,6 +56,17 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.65 (user on G2 after 1.0.64: Email / and -- work; asked for '-' instead of '--',
+a fix for the first Email open showing one thread, Ink 1 for now, dimmer and patterned backgrounds).
+Read mark '-' in Email and Chat. First-open cause: bridge listThreads returns what arrived within
+its 3 s cold wait and the app never asked again. Bridge now returns loading:true for an incomplete
+page (not live until a bridge restart); the app re-reads every 1.5 s, at most 10 times, redrawing
+rows in place, and treats a short page with hasMore as incomplete on older bridges. Backgrounds:
+None, Ink 1 (default), Lines 1/2, Lines 1/3, Dots 1/2, Dots 1/4, 1px frame; Ink 2/3 removed (saved
+value falls back to Ink 1). Patterns at Ink 1 in absolute coordinates. Compare backgrounds puts
+labels left of the sample so all seven fit in every font. 217 tests, build pass. G2 pick pending.
+Eugene asked whether GazeChat's Beeper token can be reused; answered (works, separate token advised).
+
 2026-11-26 beta 1.0.64: Chat module (Codex worker d481b54 + base merge 7528dc8, merged 4e7f417).
 Bridge bridge/beeper.mjs: Beeper Desktop API on 127.0.0.1:23373, token file .local/beeper-token.txt,
 allowlist GET /v1/accounts, GET /v1/chats, GET/POST /v1/chats/{id}/messages (POST text only);

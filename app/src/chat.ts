@@ -8,7 +8,7 @@ const line = (value: string) => value.replace(/\s+/g, ' ').trim();
 const chatTitle = (chat: ChatItem) => line(chat.title) || t('chatUntitled');
 
 export function chatColumns(chat: ChatItem): SessionColumns {
-  return { marker: chat.unread ? '/' : '--', title: chatTitle(chat),
+  return { marker: chat.unread ? '/' : '-', title: chatTitle(chat),
     right: chat.date ? mailDate(chat.date) : '', preserveSuffix: false };
 }
 

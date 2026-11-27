@@ -161,7 +161,7 @@ test('Mail unions and pages labels in newest-first order, fetches visible header
       date: example.now - 10, unread: true, count: 2 },
     { account: 'work', id: 'middle', from: 'middle@example.test', subject: 'Middle',
       date: example.now - 20, unread: false, count: 1 },
-  ], hasMore: true, unread: 2 });
+  ], hasMore: true, unread: 2, loading: false });
   const threadCalls = () => example.calls.filter(c => c.route.startsWith('/threads/'));
   assert.deepEqual(threadCalls().map(c => c.route), ['/threads/newest', '/threads/middle']);
   assert(threadCalls().every(c => c.searchParams.get('format') === 'metadata'));
@@ -214,8 +214,31 @@ test('Cold mail lists return cached data within the wait budget and finish loadi
   const first = await get(route);
   assert.equal(first.status, 200);
   assert.deepEqual(first.data.items, []);
+  // The app reads an incomplete page again (G2 2026-11-27: the first Email open showed one thread).
+  assert.equal(first.data.loading, true);
   release();
-  let list;
-  for (let i = 0; i < 10 && !list?.length; i++) list = (await get(route)).data.items;
-  assert.deepEqual(list.map(item => item.id), ['newest', 'middle']);
+  let page;
+  for (let i = 0; i < 10 && !page?.items.length; i++) page = (await get(route)).data;
+  assert.deepEqual(page.items.map(item => item.id), ['newest', 'middle']);
+  assert.equal(page.loading, false);
+});
+
+test('A page whose thread summaries are still arriving is marked loading and completes later', async t => {
+  const example = fixture();
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const get = await serve(t, config, { ...example, transport: async (url, options) => {
+    if (new URL(url).pathname.endsWith('/threads/middle')) await held;
+    return example.transport(url, options);
+  } }, 25);
+  const route = '/api/mail/threads?filter=work:INBOX';
+  let first;
+  for (let i = 0; i < 10 && !first?.items.length; i++) first = (await get(route)).data;
+  assert.deepEqual(first.items.map(item => item.id), ['newest']);
+  assert.equal(first.loading, true);
+  release();
+  let page;
+  for (let i = 0; i < 10 && page?.items.length !== 2; i++) page = (await get(route)).data;
+  assert.deepEqual(page.items.map(item => item.id), ['newest', 'middle']);
+  assert.equal(page.loading, false);
 });

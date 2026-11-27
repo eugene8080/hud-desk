@@ -70,7 +70,8 @@ export type Usage = Record<string, { provider?: string; status: string; error?: 
 export type MailAccount = { id: string; short: string; address?: string; ok: boolean; error?: string };
 export type MailLabel = { id: string; name: string; unread: number };
 export type MailThread = { account: string; id: string; from: string; subject: string; date: number; unread: boolean; count: number };
-export type MailPage = { items: MailThread[]; hasMore: boolean; unread: number };
+// loading: the bridge's cold-start wait ran out and the page is incomplete (bridges before 1.0.65 omit it).
+export type MailPage = { items: MailThread[]; hasMore: boolean; unread: number; loading?: boolean };
 export type MailConversation = { subject: string; messages: { id: string; from: string; to: string; cc: string; date: number; text: string }[] };
 export type ChatItem = { id: string; title: string; date: number; unread: boolean; readOnly?: boolean };
 export type ChatPage = { items: ChatItem[]; hasMore: boolean; unread: number };

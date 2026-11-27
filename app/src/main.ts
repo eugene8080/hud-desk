@@ -901,7 +901,12 @@ function home(page = positions.coding.page, selected = positions.coding.cursor, 
   }, home);
 }
 
-async function mailHome(page = positions.email.page, selected = positions.email.cursor, mounted?: SessionMenuScreen) {
+// A cold bridge answers with the threads it fetched within its wait budget. While the page is
+// incomplete, read it again and redraw the rows in place (bounded: about 15 s).
+const MAIL_RETRY_MS = 1500, MAIL_RETRIES = 10;
+let mailRetryTimer: ReturnType<typeof setTimeout> | undefined;
+async function mailHome(page = positions.email.page, selected = positions.email.cursor, mounted?: SessionMenuScreen, retry = 0) {
+  clearTimeout(mailRetryTimer);
   selectThread(null);
   const owner = current;
   const revision = moduleRevision;
@@ -910,16 +915,25 @@ async function mailHome(page = positions.email.page, selected = positions.email.
   try {
     let result = await mail.list(page);
     // A changed filter or external mailbox activity can remove the last page.
-    while (page > 0 && !result.items.length && !result.hasMore && active()) result = await mail.list(--page);
+    // Bridges before 1.0.65 send no loading flag: a short page that has a next page is incomplete.
+    const loading = () => result.loading ?? (result.items.length < 8 && result.hasMore);
+    while (page > 0 && !result.items.length && !result.hasMore && !loading() && active()) result = await mail.list(--page);
     if (!active()) return;
     const columns = [{ marker: '*', title: tr('mailFilter'), right: result.filterColumn }, ...result.items.map(item => mailColumns(item, result.letter(item)))];
-    await showModuleList('email', page, selected, { columns, count: tr('mailUnread', result.unread),
+    const shown = await showModuleList('email', page, selected, { columns, count: tr('mailUnread', result.unread),
       items: columns.map(row => `${row.marker || ' '} ${row.title} ${row.right}`),
       onPreviousPage: page > 0 ? () => mailHome(page - 1, -1) : undefined,
       onNextPage: result.hasMore ? () => mailHome(page + 1, 1) : undefined,
       menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
       onPick: i => { if (i === 0) void mailLabels(0, 0, true); else if (result.items[i - 1]) void openMail(result.items[i - 1]); },
     }, mounted);
+    if (loading() && retry < MAIL_RETRIES) {
+      mailRetryTimer = setTimeout(() => {
+        // Only while this list is still on screen with the same module and filter.
+        if (current === shown && revision === moduleRevision && filterRevision === mailFilterRevision && !shown.paging)
+          void mailHome(page, undefined, shown, retry + 1);
+      }, MAIL_RETRY_MS);
+    }
   } catch {
     if (mounted) return;
     if (active()) await showModuleList('email', page, 0, {

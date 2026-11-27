@@ -327,7 +327,11 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
       filter.get(account).add(label);
     }
     const selected = [...filter].map(([account, labels]) => ({ account, indexes: [...labels].map(account.labelIndex) }));
-    await warm(selected.flatMap(({ account, indexes }) => [account.order, account.unread, ...indexes]), deadline);
+    const entries = selected.flatMap(({ account, indexes }) => [account.order, account.unread, ...indexes]);
+    await warm(entries, deadline);
+    // loading: the cold-start wait ran out before every list or summary arrived, so this page is
+    // incomplete. The app asks again shortly (G2 2026-11-27: the first Email open showed one thread).
+    let loading = entries.some(entry => !entry.ready);
 
     let unread = 0;
     const feeds = selected.map(({ account, indexes }) => {
@@ -344,7 +348,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
     });
     const offset = page * size;
     const total = feeds.reduce((count, feed) => count + feed.ids.length, 0);
-    if (offset >= total) return { items: [], hasMore: false, unread };
+    if (offset >= total) return { items: [], hasMore: false, unread, loading };
     let visible;
     if (feeds.length <= 1) {
       const [feed] = feeds;
@@ -355,6 +359,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
         account, key, date: await account.sortDate(key),
       })));
       const ranked = await before(Promise.all(candidates), deadline);
+      if (!ranked) loading = true;
       visible = ranked?.sort((a, b) => b.date - a.date).slice(offset, offset + size) ?? [];
     }
     const results = visible.map(({ account, key }) => account.summary(key));
@@ -363,7 +368,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
     const items = [];
     for (const [i, result] of results.entries()) {
       if (result.removed) continue;
-      if (!result.value) break;
+      if (!result.value) { loading = true; break; }
       const { account, key } = visible[i];
       if (result.value.date >= cutoff) {
         const unreadIds = account.unread.read();
@@ -372,7 +377,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
       }
     }
     items.sort((a, b) => b.date - a.date);
-    return { items, hasMore: total > offset + size, unread };
+    return { items, hasMore: total > offset + size, unread, loading };
   }
 
   const routes = {

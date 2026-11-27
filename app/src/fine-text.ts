@@ -30,17 +30,35 @@ const NAMES: Record<FineFont, string> = {
 // 'Cozette 6x13': short name and native cell. The glasses menu truncates labels
 // beyond about 210px, so names are short (Pixeloid Mono -> Pixeloid).
 export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].width}x${TABLES[font].height}`;
-export const TURN_BACKGROUNDS = ['none', '1', '2', '3', 'frame'] as const;
+// User-turn backgrounds (Eugene, 2026-11-27: "use Ink 1 for now. can it be even less bright? also
+// can it be a pattern instead of solid?"). Ink 1 is the panel's lowest step, so the dimmer options
+// light only part of the band at Ink 1: every 2nd or 3rd pixel row, a 1px checker, or one pixel in
+// each 2x2 block. Ink 2 and Ink 3 were dropped; a saved '2' or '3' falls back to Ink 1.
+// G2 note (2026-11-09): 1px line gratings looked even, a 1px checker looked blotchy.
+export const TURN_BACKGROUNDS = ['none', '1', 'lines2', 'lines3', 'dots2', 'dots4', 'frame'] as const;
 export type TurnBackground = typeof TURN_BACKGROUNDS[number];
-export const DEFAULT_TURN_BACKGROUND: TurnBackground = '2';
+export const DEFAULT_TURN_BACKGROUND: TurnBackground = '1';
 export function parseTurnBackground(value: string | null | undefined): TurnBackground {
   return TURN_BACKGROUNDS.find(option => option === value) ?? DEFAULT_TURN_BACKGROUND;
 }
 export function turnBackgroundLabel(option: TurnBackground): string {
   if (option === 'none') return t('backgroundNone');
   if (option === 'frame') return t('backgroundFrame');
+  if (option === 'lines2') return t('backgroundLines', '1/2');
+  if (option === 'lines3') return t('backgroundLines', '1/3');
+  if (option === 'dots2') return t('backgroundDots', '1/2');
+  if (option === 'dots4') return t('backgroundDots', '1/4');
   return t('backgroundInk', option);
 }
+// Which pixels of a band a background lights, in absolute screen coordinates so the pattern
+// stays continuous across rows and fonts with odd line heights.
+const TURN_PATTERNS: Record<Exclude<TurnBackground, 'none' | 'frame'>, (x: number, y: number) => boolean> = {
+  '1': () => true,
+  lines2: (_x, y) => y % 2 === 0,
+  lines3: (_x, y) => y % 3 === 0,
+  dots2: (x, y) => (x + y) % 2 === 0,
+  dots4: (x, y) => x % 2 === 0 && y % 2 === 0,
+};
 // The panel is 4-bit: 16 steps, numbered 0 through 15. Full white is 15, which is
 // what the app drew before this control. An 8-bit image byte of n*17 lands on step n
 // whether the glasses keep the high nibble or scale 0..255 onto 0..15.
@@ -153,6 +171,12 @@ class Surface {
       this.pixels.fill(level, start + left, start + right);
     }
   }
+  // A rectangle that lights only the pixels the pattern selects (absolute coordinates).
+  pattern(x: number, y: number, w: number, h: number, level: number, lit: (x: number, y: number) => boolean) {
+    const right = Math.min(SCREEN.width, x + w), bottom = Math.min(SCREEN.height, y + h);
+    for (let row = Math.max(0, y); row < bottom; row++)
+      for (let col = Math.max(0, x); col < right; col++) if (lit(col, row)) this.pixels[row * SCREEN.width + col] = level;
+  }
   frame() {
     this.rect(0, 0, SCREEN.width, FRAME); this.rect(0, SCREEN.height - FRAME, SCREEN.width, FRAME);
     this.rect(0, 0, FRAME, SCREEN.height); this.rect(SCREEN.width - FRAME, 0, FRAME, SCREEN.height);
@@ -252,18 +276,21 @@ export function scannerLevels(frame: number): number[] {
 }
 
 export type FineStatus = { left: string; right: string; model?: string; scanner?: number };
-function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: TurnBackground) {
-  const { line, rows, columns, textX, textWidth } = fineLayout(s.font);
+// region: the text block the rows sit in (the comparison screen indents it past the labels).
+function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: TurnBackground,
+  region: { textX: number; textWidth: number; columns: number } = fineLayout(s.font)) {
+  const { line, rows } = fineLayout(s.font);
+  const { textX, textWidth, columns } = region;
   const lines = page.text.split('\n').slice(0, rows);
   // Keep at least one ink step between the letters and the background at low brightness.
-  const ink = Math.max(0, Math.min(inkByte(background === 'frame' ? 2 : Number(background)), s.ink - inkByte(1)));
+  const ink = Math.max(0, Math.min(inkByte(background === 'frame' ? 2 : 1), s.ink - inkByte(1)));
   if (background !== 'none' && ink > 0) {
     lines.forEach((_, r) => {
       const turn = page.userTurns[r];
       if (!turn) return;
       const y = top + r * line;
       if (background !== 'frame') {
-        s.rect(textX, y, textWidth, line, ink);
+        s.pattern(textX, y, textWidth, line, ink, TURN_PATTERNS[background]);
       } else {
         s.rect(textX, y, 1, line, ink);
         s.rect(textX + textWidth - 1, y, 1, line, ink);
@@ -323,16 +350,26 @@ export function renderFontComparison(level = INK_MAX): number[][] {
   return s.tiles();
 }
 
+// One block per option: its label on the left, the sample turn and reply to the right, so all
+// seven options fit the screen in every font (Departure 7x14 included).
+export const BACKGROUND_GAP = 4;
+export function backgroundComparisonLayout(font: FineFont) {
+  const { width: cell } = TABLES[font];
+  const { columns, textX, textWidth } = fineLayout(font);
+  const labelCells = Math.max(...TURN_BACKGROUNDS.map(option => fineCells(turnBackgroundLabel(option)))) + 1;
+  return { labelCells, sample: { textX: textX + labelCells * cell, textWidth: textWidth - labelCells * cell, columns: columns - labelCells } };
+}
 export function renderBackgroundComparison(font: FineFont, level = INK_MAX): number[][] {
   const s = new Surface(font, inkByte(level));
   const { line, columns, textX, textWidth, rows } = fineLayout(font);
-  const [sample] = readerPages(t('backgroundSample'), fineMeasure(font), textWidth, rows, Infinity);
+  const { labelCells, sample: region } = backgroundComparisonLayout(font);
+  const [sample] = readerPages(t('backgroundSample'), fineMeasure(font), region.textWidth, rows, Infinity);
   s.frame();
   let y = TOP;
   for (const option of TURN_BACKGROUNDS) {
-    s.text(turnBackgroundLabel(option), textX, y, columns);
-    drawTurnRows(s, sample, y + line, option);
-    y += (sample.userTurns.length + 1) * line + 5;
+    s.text(turnBackgroundLabel(option), textX, y, labelCells);
+    drawTurnRows(s, sample, y, option, region);
+    y += sample.userTurns.length * line + BACKGROUND_GAP;
   }
   s.rect(textX, y + 2, textWidth, 1);
   s.text(t('compareBack'), textX, y + 8, columns);

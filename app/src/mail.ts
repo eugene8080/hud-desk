@@ -158,8 +158,8 @@ export function labelPickerPages(accounts: AccountLabels[], selected: Set<string
 export function mailColumns(thread: MailThread, accountLetter = ''): SessionColumns {
   const date = mailDate(thread.date);
   // Gutter marks (Eugene, 2026-11-26): '/' unread, as Coding's '/' marks a session waiting for
-  // you; '--' read. '*' stays for action rows such as Filter.
-  return { marker: thread.unread ? '/' : '--', title: `${singleLine(thread.from)} - ${singleLine(thread.subject)}`,
+  // you; '-' read (2026-11-27, was '--'). '*' stays for action rows such as Filter.
+  return { marker: thread.unread ? '/' : '-', title: `${singleLine(thread.from)} - ${singleLine(thread.subject)}`,
     right: accountLetter ? `[${accountLetter}] ${date}` : date, preserveSuffix: false };
 }
 
@@ -221,7 +221,7 @@ export class Mail {
   async list(page: number) {
     const catalog = await this.labelGroups();
     const picks = effectiveLabels(this.selected!, this.prefs.off);
-    const result = picks.length ? await api.mail.threads(picks, page) : { items: [], hasMore: false, unread: 0 };
+    const result = picks.length ? await api.mail.threads(picks, page) : { items: [], hasMore: false, unread: 0, loading: false };
     const shown = catalog.filter(({ account }) => !this.prefs.off.has(account.id)).length;
     return { ...result, items: [...result.items].sort((a, b) => b.date - a.date),
       // The letter tells two mailboxes apart; one mailbox needs no letter.

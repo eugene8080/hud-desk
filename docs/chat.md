@@ -20,7 +20,7 @@ An empty `beeper` object uses both defaults. Keep the token file under the gitig
 
 ## Use
 
-Click row 0 to cycle through the offered modules or select **Chat** on the phone. The first row below it opens **Filter by Network**. Network checkboxes on the phone and the glasses share the same saved selection. The glasses show up to eight chats per page in activity order, with `/` for unread and `--` for read. The count covers the selected networks.
+Click row 0 to cycle through the offered modules or select **Chat** on the phone. The first row below it opens **Filter by Network**. Network checkboxes on the phone and the glasses share the same saved selection. The glasses show up to eight chats per page in activity order, with `/` for unread and `-` for read. The count covers the selected networks.
 
 The reader starts at the beginning of the newest message. Swipe up for earlier pages and swipe down on the last page to refresh. Your messages begin with `/ ` and incoming messages begin with `> ` and the sender name. Opening a chat does not mark it read in Beeper.
 
