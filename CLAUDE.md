@@ -56,6 +56,17 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 bridge restarted with Eugene's approval for 1.0.69 (old supervisor 20716/server 21108/
+whisper 21832/tunnel 21128+cloudflared 21500; new supervisor 6768, server 62660, tunnel watcher
+56512, whisper 62444 --vad); local and tailnet healthz ok. Counts-only check (GET only, nothing
+opened for display, nothing marked read): modules coding+email+chat; chat page 0 8 rows/8 unread;
+first page's chats carry media tags File 4, Photo 20, Sticker 1, Video 3, Voice 6 (no Beeper
+transcripts); no '<br>' left in text; Email both Inboxes 7 rows loading:false on the second read.
+GazeChat retired (Eugene chose): README notes pushed (gazechat 8e68029, messenger-glass 25c40d6),
+both GitHub repos archived; upstream PR builtproper/gazechat#1 left open (not chosen). Left for
+Eugene: revoke Beeper token g2new, revoke the mail facade's Gmail grant, decide on the Even Hub app
+com.eugene8080.gazechat. First real transcription/translation/mark-read: Eugene on G2.
+
 2026-11-27 beta 1.0.69. Merged Codex worker chat-voice (3ee0d14, merge 716ec39): Chat shows voice
 notes/media tags, a click transcribes the page's voice notes (bridge POST /api/chat/transcribe ->
 Beeper GET /v1/assets/serve -> ffmpeg -> FunASR SenseVoice yue + OpenCC s2hk in a warm Python
