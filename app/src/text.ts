@@ -200,6 +200,12 @@ export function readerPages(text: string, measure: (text: string) => number, wid
     }
     rows.push({ text: row, turn: userTurn });
   }
+  // Blank rows that end a user turn (the gap before the agent's reply) are not part of the
+  // block, so the highlight stops at the last row with text. Walk backwards so a run of
+  // blank rows clears together.
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].turn && !rows[i].text.trim() && rows[i + 1]?.turn !== rows[i].turn) rows[i].turn = 0;
+  }
   const pages: ReaderPage[] = [];
   let page: typeof rows = [];
   const save = () => pages.push({ text: page.map(row => row.text).join('\n'), userTurns: page.map(row => row.turn) });

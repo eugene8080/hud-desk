@@ -10,6 +10,11 @@ vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/i18n.ts',
 const textExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/text.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: textExports, TextEncoder });
 const readerPageText = (...args) => textExports.readerPages(...args).map(page => page.text);
+
+test('the user-turn highlight covers wrapped and inner blank rows but not the gap before the reply', () => {
+  const [page] = textExports.readerPages('/ first line\n\n  more from the user\n\n\n> the reply', text => text.length, 200, 10, Infinity);
+  assert.deepEqual([...page.userTurns], [1, 1, 1, 0, 0, 0]);
+});
 const statusExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/reader-status.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: statusExports, require: () => i18nExports });
 const hintExports = {};

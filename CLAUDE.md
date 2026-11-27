@@ -56,6 +56,13 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-26 beta 1.0.63: reader worker efc03a6 (merged 33c9166) highlights user turns in pixel-font
+modes (Background: None/Ink 1/2/3/1px frame, default Ink 2, pref reader-turn-bg; Compare
+backgrounds screen); native text unchanged (SDK 0.0.16 has no text background). Removed Misc Fixed
+9x15, GohuFont 8x14, Shinonome 6x12 (SHINONOME_K12 Japanese table kept; saved removed font falls
+back to Terminus). Coordinator fix: blank rows ending a user turn are not highlighted. Email marks
+/ unread, -- read. 205 tests, build pass. App-only; no restart. G2 choice of background pending.
+
 2026-11-26 E2 live: Eugene completed the personal consent (.local/mail/personal.json, scope
 gmail.modify only) and approved a restart. Old tree supervisor 70236/server 80148/whisper 78156/
 tunnel 23316; new supervisor 43672, server 52048, whisper 36876 --vad, tunnel watcher 60488;
