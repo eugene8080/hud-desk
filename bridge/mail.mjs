@@ -329,9 +329,12 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
     const selected = [...filter].map(([account, labels]) => ({ account, indexes: [...labels].map(account.labelIndex) }));
     const entries = selected.flatMap(({ account, indexes }) => [account.order, account.unread, ...indexes]);
     await warm(entries, deadline);
-    // loading: the cold-start wait ran out before every list or summary arrived, so this page is
-    // incomplete. The app asks again shortly (G2 2026-11-27: the first Email open showed one thread).
-    let loading = entries.some(entry => !entry.ready);
+    // loading: the cold-start wait ran out before the rows were known (thread order, label index,
+    // ranking or a visible summary), so this page is incomplete and the app asks again shortly
+    // (G2 2026-11-27: the first Email open showed one thread). The mailbox-wide UNREAD scan is left
+    // out: it has no date window, took 20-30 s on a large mailbox after the 2026-11-27 reboot, and
+    // only feeds the row-0 count; each row's own mark falls back to its summary's UNREAD label.
+    let loading = selected.some(({ account, indexes }) => !account.order.ready || indexes.some(index => !index.ready));
 
     let unread = 0;
     const feeds = selected.map(({ account, indexes }) => {

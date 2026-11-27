@@ -223,6 +223,24 @@ test('Cold mail lists return cached data within the wait budget and finish loadi
   assert.equal(page.loading, false);
 });
 
+test('A slow mailbox-wide unread scan does not mark complete rows as loading', async t => {
+  const example = fixture();
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const get = await serve(t, config, { ...example, transport: async (url, options) => {
+    const parsed = new URL(url);
+    // After the 2026-11-27 reboot the UNREAD scan of a large mailbox took 20-30 s.
+    if (parsed.pathname.endsWith('/threads') && parsed.searchParams.get('labelIds') === 'UNREAD') await held;
+    return example.transport(url, options);
+  } }, 25);
+  const route = '/api/mail/threads?filter=work:INBOX';
+  let page;
+  for (let i = 0; i < 10 && page?.items.length !== 2; i++) page = (await get(route)).data;
+  assert.deepEqual(page.items.map(item => item.id), ['newest', 'middle']);
+  assert.equal(page.loading, false);
+  release();
+});
+
 test('A page whose thread summaries are still arriving is marked loading and completes later', async t => {
   const example = fixture();
   let release;

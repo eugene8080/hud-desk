@@ -8,7 +8,10 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
-- [ ] **Super app: Coding, Email, Chat, Reader in one app -- Chat in beta 1.0.64; live set-up pending:**
+- [ ] **Super app: Coding, Email, Chat, Reader in one app -- Chat live since the 2026-11-27 reboot:**
+  2026-11-27 reboot restarted the bridge: Chat offered and read live (counts only). Bridge fix for the
+  over-eager mail loading flag (unread scan excluded) needs an approved restart. G2 checks pending:
+  Chat list/reader and the first real voice reply (Eugene's own), Email loading dot.
   2026-11-27 beta 1.0.66: Eugene picked Dots 1/2 (now the only style) and confirmed the first Email
   open fills (1.0.65). G2 check of the Email loading dot pending. Beeper token in
   .local/beeper-token.txt + beeper block in config.local.json: needs an approved bridge restart, which

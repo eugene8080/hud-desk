@@ -56,6 +56,19 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 PSCAP11 rebooted (boot 01:41:57 local); the sign-in task restarted the bridge with the
+1.0.65/1.0.66 bridge code and the beeper block: supervisor 20716, server 21108, whisper 21832
+--vad, tunnel watcher 21128 / cloudflared 21500; local and tailnet healthz ok. Read-only check
+(counts only, no POST, no chat opened): modules coding+email+chat, chat networks 4, chat page 0
+8 rows / 6 unread / hasMore, chat cf-ray 403. Mail: both Inboxes had 8 rows from the first read
+but loading:true for 20-30 s, because the flag counted the mailbox-wide UNREAD scan (no date
+window, 500 a page), which only feeds the row-0 count. Fixed in the bridge: loading now means
+order, label index, ranking or a visible summary is missing (test added, 219 pass); live after
+the next approved restart. Until then the app may re-read a complete page quietly and show
+'Loading more...' under a short page for up to ~45 s after a bridge start. Cursor: Orca rewrote
+~/.cursor/hooks.json at 01:54 after the reboot and kept the pc-settings title hook (survival
+confirmed).
+
 2026-11-27 beta 1.0.66 (user on G2 after 1.0.65: picked Dots 1/2; first Email open now fills; asked
 for an animated Email loading screen and for frozen text while the glasses show 'connection lost').
 Email: with nothing cached, a list with Filter + 'Loading email…' and the moving gutter dot shows at
