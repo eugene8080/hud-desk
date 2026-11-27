@@ -58,6 +58,15 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.94: self-host setup merged. setup-mac eebc64d (merge f559ee9: scripts/setup-macos.sh,
+docs/self-host-macos.md, LaunchAgent gets Node's absolute path) and setup-win 0d71631 (merge: eho3
+pairing code = base64url(publicOrigin) + token, address precedence typed > code > build;
+scripts/setup-windows.ps1 with -DryRun/-Voice, docs/self-host.md, README; store description drops
+"not offered yet", says one command on Windows or macOS). 304 tests, build pass; beta 1.0.94 CLI
+verified 251,354 bytes; prototype build restored. Eugene switched the Even Hub review build himself:
+CLI shows 1.0.93 "In Review". Not done: a real setup on a second machine (PSCAP10 suggested: also the
+different-host whitelist proof) and on a real Mac; the store description change waits for that.
+
 2026-11-27 Even Hub status (read-only portal check): public v1.0.36 live; v1.0.91 submitted
 Nov 27 1:29 PM, "In review / Awaiting review". Advice given: leave 1.0.91 in review (listing matches
 it); submit the next public build after the self-host setup ships in a beta, one outside user has

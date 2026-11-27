@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.93**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.94**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -162,7 +162,7 @@ Keyboard: Gmail-style keys everywhere, VS Code-style Ctrl+P, Ctrl+Shift+P, Ctrl+
 
 Reader: book-style pages in Native text or pixel fonts, down to Scientifica 5x11 (114 columns), with Chinese and Japanese; backgrounds (lines, dots, Tube scanlines, left bar, underline); App Brightness. English and Japanese.
 
-Requires G2, the Even Realities app (iPhone untested) and the bridge on your PC over Tailscale. Windows setup takes one command. Agents, mail, chats, voice and AI run on your PC. Try the demo without a PC.
+Requires G2, the Even Realities app (iPhone untested) and the bridge on your PC over Tailscale. Setup is one command on Windows or macOS. Agents, mail, chats, voice and AI run on your PC. Try the demo without a PC.
 
 Source/setup: https://github.com/eugene8080/hud-desk/tree/windows-android-codex
 Independent fork of 2ero20ne's Orca Glass under MIT.
@@ -172,5 +172,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.93: Settings on the phone has an optional Bridge address: type your own computer's HTTPS address (for example its Tailscale name) and HUD Desk connects there with your pairing code. Blank keeps the built-in address.
+1.0.94: Self-hosting on your own computer. One setup command for Windows or macOS installs the bridge, starts it at sign-in, serves it on your Tailscale address and prints a pairing code that carries that address: paste it on the phone (with Tailscale on the phone) and you're connected. Guide: docs/self-host.md.
 <!-- whatsnew:end -->
