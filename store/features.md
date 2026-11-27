@@ -143,14 +143,14 @@ Read your agent sessions, email and chats on G2. Talk, type on a Bluetooth keybo
 HUD Desk (renamed from Orca Glass) connects G2 to the coding agents, email and Beeper chats on your own Windows PC or Mac. The top row switches Coding, Email and Chat.
 
 Coding:
-- Claude Code and Codex sessions, with or without Orca; through Orca also Cursor, OpenCode, Pi, OpenClaude and Hermes Agent. Model and status shown.
-- Filter by Agent and Workspace. Usage bars for Codex, Claude and Cursor.
+- Claude Code and Codex sessions, with or without Orca; through Orca also Cursor, OpenCode, Pi, OpenClaude and Hermes Agent, with model and status.
+- Filter by Agent and Workspace. Usage bars: Codex, Claude, Cursor.
 - Hold to talk: local Whisper on your PC, review, then send. Answer numbered choices.
 
 Email (Gmail, or any IMAP/SMTP account):
 - One mailbox at a time, Filter by Label with voice or typed search. Opening a thread marks it read.
 - With a keyboard: compose, reply, reply all, forward, archive, delete, star and undo with Gmail's keys. Drafts show on the glasses; review, then send.
-- Pictures in mail, newsletter images included.
+- Pictures in mail, newsletters included.
 
 Chat (Beeper: WhatsApp, Signal, Telegram and more):
 - Rows show the day and the app; Filter by Network; formatting kept.
@@ -162,7 +162,7 @@ Keyboard: Gmail-style keys everywhere, VS Code-style Ctrl+P, Ctrl+Shift+P, Ctrl+
 
 Reader: book-style pages in Native text or pixel fonts, down to Scientifica 5x11 (114 columns), with Chinese and Japanese; backgrounds (lines, dots, Tube scanlines, left bar, underline); App Brightness. English and Japanese.
 
-Requires G2, the Even Realities app (iPhone untested), Tailscale on your phone and the bridge on your PC. Setup is one command on Windows or macOS. Agents, mail, chats, voice and AI run on your PC. Try the demo without a PC.
+Requires G2, the Even Realities app (iPhone untested), Tailscale on your phone and the bridge on your PC. Setup is one command on Windows or macOS. Everything runs on your PC. Try the demo without a PC.
 
 Source/setup: https://github.com/eugene8080/hud-desk/tree/windows-android-codex
 Independent fork of 2ero20ne's Orca Glass under MIT.
