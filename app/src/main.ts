@@ -108,6 +108,10 @@ let readerText: ReaderText = 'native';
 // The small font the menu offers when native text is on (last one used).
 let smallFont: FineFont = DEFAULT_SMALL_FONT;
 let turnBackground: TurnBackground = DEFAULT_TURN_BACKGROUND;
+// Halo (2026-11-27): background pixels touching a letter stay dark; a toggle in the Background menu.
+let turnHalo = false;
+// Email has no turns of yours: Dim replies would dim the whole mail, so its reader shows None.
+const backgroundFor = (s: TextScreen): TurnBackground => turnBackground === 'dimreplies' && s.reader?.mail ? 'none' : turnBackground;
 // Reader ink, panel steps 1..15. 15 is full white. 0 is not offered: it would blank the font and frame. This is not the system brightness.
 let inkLevel = 15;
 const textBrightness = () => nativeTextColor(inkLevel);
@@ -494,8 +498,8 @@ async function show(s: Screen, reloadText = false) {
 async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boolean> {
   const t0 = Date.now();
   const tiles = s.comparison === 'fonts' ? renderFontComparison(inkLevel)
-    : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel)
-    : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel, turnBackground);
+    : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel, turnHalo)
+    : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel, backgroundFor(snapshot), turnHalo);
   let sent = 0;
   for (let i = 0; i < tiles.length; i++) {
     if (current !== s) return false;
@@ -606,11 +610,24 @@ function showFonts() {
 // backgrounds first, then every option.
 function showBackgrounds(reader: TextScreen) {
   const selected = TURN_BACKGROUNDS.indexOf(turnBackground);
-  const labels = [tr('compareBackgrounds'), ...TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : ''))];
+  const labels = [tr('compareBackgrounds'), tr('backgroundHalo', tr(turnHalo ? 'backgroundHaloOn' : 'backgroundHaloOff')),
+    ...TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : ''))];
   let saving = false;
-  return showTextPicker(reader, labels, selected + 1, async i => {
+  return showTextPicker(reader, labels, selected + 2, async i => {
     if (i === 0) { await openComparison(reader, 'backgrounds').catch(e => diag((e as Error).message)); return; }
-    const option = TURN_BACKGROUNDS[i - 1];
+    if (i === 1) {
+      if (saving) return;
+      const picker = current;
+      saving = true;
+      try {
+        if (!await bridge.setLocalStorage('reader-turn-halo', turnHalo ? 'off' : 'on')) throw new Error(tr('backgroundSaveFailed'));
+        turnHalo = !turnHalo;
+        if (current === picker) await show(reader);
+      } catch (e) { diag((e as Error).message); }
+      finally { saving = false; }
+      return;
+    }
+    const option = TURN_BACKGROUNDS[i - 2];
     if (saving || !option) return;
     const picker = current;
     saving = true;
@@ -2503,6 +2520,7 @@ async function main() {
   const savedFont = await bridge.getLocalStorage('reader-font');
   smallFont = FINE_FONTS.includes(savedFont as FineFont) ? savedFont as FineFont : readerText === 'native' ? DEFAULT_SMALL_FONT : readerText;
   turnBackground = parseTurnBackground(await bridge.getLocalStorage('reader-turn-bg'));
+  turnHalo = await bridge.getLocalStorage('reader-turn-halo') === 'on';
   inkLevel = parseInk(await bridge.getLocalStorage('reader-ink'));
   const resetMode = await bridge.getLocalStorage('usage-reset-mode');
   if (RESET_MODES.includes(resetMode as ResetMode)) usageResetMode = resetMode as ResetMode;

@@ -56,6 +56,17 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.79 (Eugene picked all four terminal-style options after asking what early
+terminals used): Left bar (2px at Ink 5 in the first text column, replacing '/'; Departure fills
+the width, so no margin bar), Underline (1px at Ink 4 under the letters), Dim replies (non-user
+rows at 55 %; mapped to None in Email readers), Halo toggle (pref reader-turn-halo; background
+pixels touching a letter cleared). Background menu: Compare, Halo, 17 options (two pages);
+comparison row gap shrinks per font (backgroundGap). 254 tests, build pass, previews checked.
+Bridge restarted for 1.0.78 with Eugene's approval (old supervisor 64448/server 64364/whisper
+67084; new supervisor 65368, server 64840, whisper 64288 --vad); local and tailnet healthz ok;
+new mail routes answer (refused-input checks only: modify bogus 400, send no recipient 400,
+compose bad mode 400; nothing reached Gmail, no mail sent).
+
 2026-11-27 beta 1.0.78 (Eugene: 'standard Gmail keyboard shortcuts as much as possible. Pc
 shortcuts', delete, compose, archive (e), reply, reply all; Ctrl+Enter like Gmail, then review
 and Enter sends; Gmail keys everywhere). App: gmailKey() in app/src/main.ts (j/k, o, u, Space,

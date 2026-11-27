@@ -52,9 +52,24 @@ export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].widt
 // (was Tube dim), 1/4, 1/8: 'Background: Tube xx dim' is 218 px, past the menu's ~210 px.
 // 1px frame: a thin outline at Ink 2 around your turns; consecutive messages of yours share one
 // frame, including blank rows between them (Eugene, 2026-11-27).
+// Terminal-style highlights (Eugene, 2026-11-27: "what did early terminals use? ... see the
+// background highlight but aren't too bright and you can still see the text"). Nothing lights
+// the band behind the letters:
+// - Left bar: a 2px bar in the first text column of your turns, in place of the '/' marker, down
+//   every row of the turn (the quote bar of mail clients). In the text column because Departure 7x14
+//   fills the full width and the other fonts leave only 2px beside the frame.
+// - Underline: a 1px line under the letters of each row of yours (the VT100 underline attribute).
+// - Dim replies: no background; the other rows' letters at 55 % (the IBM 3270's normal versus
+//   intensified fields). Email has no turns of yours, so its reader shows it as None.
+// - Halo (a toggle, not an option): with Ink, Lines, Dots or Tube, the background pixels that touch a
+//   letter (8 neighbours) stay dark, so each letter stands on black.
 // Default Lines 1/3 (Eugene, 2026-11-27). Ink 2/3 were dropped; a saved one falls back to the default.
 export const TURN_BACKGROUNDS = ['none', 'ink58', 'ink12', 'ink14', 'lines3', 'lines4', 'dots3', 'dots14',
-  'dots18', 'tubedim', 'tubexdim', 'tubexxdim', 'tube', 'frame'] as const;
+  'dots18', 'tubedim', 'tubexdim', 'tubexxdim', 'tube', 'frame', 'bar', 'underline', 'dimreplies'] as const;
+// Options drawn as marks or text levels rather than a lit band (no TURN_PATTERNS entry).
+type MarkBackground = 'none' | 'frame' | 'bar' | 'underline' | 'dimreplies';
+const MARKS: readonly string[] = ['none', 'frame', 'bar', 'underline', 'dimreplies'];
+const BAR_INK = 5, UNDERLINE_INK = 4, DIM_REPLIES = 0.55;
 // Saved values from earlier betas that map onto an option that still exists.
 const RENAMED: Record<string, TurnBackground> = { dots2: 'ink12', dots4: 'ink14' };
 export type TurnBackground = typeof TURN_BACKGROUNDS[number];
@@ -88,13 +103,16 @@ export function turnBackgroundLabel(option: TurnBackground): string {
   if (option === 'tubexxdim') return t('backgroundTubeBand', '1/8');
   if (option === 'tube') return t('backgroundTube');
   if (option === 'frame') return t('backgroundFrame');
+  if (option === 'bar') return t('backgroundBar');
+  if (option === 'underline') return t('backgroundUnderline');
+  if (option === 'dimreplies') return t('backgroundDimReplies');
   return t('backgroundInk', option);
 }
 // A tube band: dark on its scanline rows, `fill` of 16 lit elsewhere.
 const tubeLit = ({ pitch, fill }: { pitch: number; fill: number }) => (x: number, y: number) => !scanRow(y, pitch) && dither(fill)(x, y);
 // Which pixels of a band a background lights, in absolute screen coordinates so the pattern
 // stays continuous across rows and fonts with odd line heights.
-const TURN_PATTERNS: Record<Exclude<TurnBackground, 'none' | 'frame'>, (x: number, y: number) => boolean> = {
+const TURN_PATTERNS: Record<Exclude<TurnBackground, MarkBackground>, (x: number, y: number) => boolean> = {
   ink58: dither(10),
   ink12: dither(8),
   ink14: dither(4),
@@ -241,8 +259,9 @@ class Surface {
     this.rect(0, 0, SCREEN.width, FRAME); this.rect(0, SCREEN.height - FRAME, SCREEN.width, FRAME);
     this.rect(0, 0, FRAME, SCREEN.height); this.rect(SCREEN.width - FRAME, 0, FRAME, SCREEN.height);
   }
-  // Draw text from (x, y) in whole cells; stops at maxCells. Returns cells used.
-  text(text: string, x: number, y: number, maxCells: number): number {
+  // Draw text from (x, y) in whole cells; stops at maxCells. Returns cells used. `level` lets one
+  // row be dimmer than the rest (Dim replies); it defaults to the screen's ink.
+  text(text: string, x: number, y: number, maxCells: number, level = this.ink): number {
     const { width: cw, height: ch } = TABLES[this.font];
     let col = 0;
     for (const c of text) {
@@ -254,7 +273,7 @@ class Surface {
       const wide = !bitmap && cells === 2 ? wideGlyph(code) : undefined;
       if (bitmap) {
         const high = cw > 8 ? 0x8000 : 0x80;
-        for (let gy = 0; gy < bitmap.length; gy++) for (let gx = 0; gx < cw; gx++) if (bitmap[gy] & (high >> gx)) this.set(px + gx, y + gy);
+        for (let gy = 0; gy < bitmap.length; gy++) for (let gx = 0; gx < cw; gx++) if (bitmap[gy] & (high >> gx)) this.set(px + gx, y + gy, level);
       } else if (wide) {
         // Baseline-aligned to this font; centred in the two-cell box (11 used columns).
         const dy = TABLES[this.font].ascent - WIDE.ascent, dx = Math.max(0, (2 * cw - 11) >> 1);
@@ -338,12 +357,17 @@ export function scannerLevels(frame: number): number[] {
 export type FineStatus = { left: string; right: string; model?: string; scanner?: number };
 // region: the text block the rows sit in (the comparison screen indents it past the labels).
 function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: TurnBackground,
-  region: { textX: number; textWidth: number; columns: number } = fineLayout(s.font)) {
+  region: { textX: number; textWidth: number; columns: number } = fineLayout(s.font), halo = false) {
   const { line, rows } = fineLayout(s.font);
   const { textX, textWidth, columns } = region;
+  const cell = TABLES[s.font].width;
   const lines = page.text.split('\n').slice(0, rows);
   // Keep at least one ink step between the letters and the background at low brightness.
-  const ink = Math.max(0, Math.min(inkByte(background === 'frame' ? 2 : 1), s.ink - inkByte(1)));
+  const want = background === 'frame' ? 2 : background === 'bar' ? BAR_INK : background === 'underline' ? UNDERLINE_INK : 1;
+  const ink = Math.max(0, Math.min(inkByte(want), s.ink - inkByte(1)));
+  // Left bar: the '/' that opens a turn of yours gives way to the bar.
+  const shown = background === 'bar' && ink > 0
+    ? lines.map((row, r) => page.userTurns[r] && row.startsWith('/') ? ' ' + row.slice(1) : row) : lines;
   if (background === 'frame' && ink > 0) {
     // One outline per run of your messages: a row is inside when it is yours, or blank between two
     // rows of yours. Sides on every inside row, top where the run starts, bottom where it ends.
@@ -365,12 +389,42 @@ function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: Tur
       if (!framed[r - 1]) s.rect(textX, y, textWidth, 1, ink);
       if (r === lines.length - 1 || !framed[r + 1]) s.rect(textX, y + line - 1, textWidth, 1, ink);
     });
-  } else if (background !== 'none' && ink > 0) {
+  } else if (background === 'bar' && ink > 0) {
+    const x = textX + Math.max(0, (cell >> 1) - 1);
+    lines.forEach((_, r) => { if (page.userTurns[r]) s.rect(x, top + r * line, 2, line, ink); });
+  } else if (!MARKS.includes(background) && ink > 0) {
     lines.forEach((_, r) => {
-      if (page.userTurns[r]) s.pattern(textX, top + r * line, textWidth, line, ink, TURN_PATTERNS[background as Exclude<TurnBackground, 'none' | 'frame'>]);
+      if (page.userTurns[r]) s.pattern(textX, top + r * line, textWidth, line, ink, TURN_PATTERNS[background as Exclude<TurnBackground, MarkBackground>]);
     });
   }
-  lines.forEach((row, r) => s.text(row, textX, top + r * line, columns));
+  // Dim replies: every row that is not yours at 55 %, rounded to a panel step, never below Ink 1.
+  const dim = Math.max(inkByte(1), Math.round(s.ink * DIM_REPLIES / 17) * 17);
+  shown.forEach((row, r) => {
+    const cells = s.text(row, textX, top + r * line, columns, background === 'dimreplies' && !page.userTurns[r] ? dim : s.ink);
+    if (background === 'underline' && ink > 0 && page.userTurns[r] && row.trim()) {
+      // Under the letters only: from the first to the last non-space cell of the row.
+      const start = row.length - row.trimStart().length;
+      s.rect(textX + start * cell, top + r * line + line - 1, Math.max(0, cells - start - (row.length - row.trimEnd().length)) * cell, 1, ink);
+    }
+  });
+  // Halo: background pixels next to a letter go dark. A letter pixel is brighter than the
+  // background level, which is always at least one step below the text.
+  if (halo && !MARKS.includes(background) && ink > 0) {
+    const { pixels } = s, W = SCREEN.width;
+    lines.forEach((_, r) => {
+      if (!page.userTurns[r]) return;
+      const y0 = top + r * line, y1 = Math.min(SCREEN.height, y0 + line);
+      for (let y = y0; y < y1; y++) for (let x = textX; x < textX + textWidth; x++) {
+        if (pixels[y * W + x] !== ink) continue;
+        let touches = false;
+        for (let dy = -1; dy <= 1 && !touches; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if ((dx || dy) && nx >= 0 && ny >= 0 && nx < W && ny < SCREEN.height && pixels[ny * W + nx] > ink) { touches = true; break; }
+        }
+        if (touches) pixels[y * W + x] = 0;
+      }
+    });
+  }
   // Tube dim, x dim, xx dim: the scanlines cross the letters of your turns too. (Tube scans the whole screen
   // afterwards, in renderFineScreen and the comparison.)
   const tube = TUBES[background];
@@ -379,11 +433,11 @@ function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: Tur
   }
 }
 
-export function renderFineScreen(page: ReaderPage, font: FineFont, status: FineStatus, level = INK_MAX, background = DEFAULT_TURN_BACKGROUND): number[][] {
+export function renderFineScreen(page: ReaderPage, font: FineFont, status: FineStatus, level = INK_MAX, background = DEFAULT_TURN_BACKGROUND, halo = false): number[][] {
   const s = new Surface(font, inkByte(level));
   const { line, columns, textX, textWidth, statusY, dividerY } = fineLayout(font);
   s.frame();
-  drawTurnRows(s, page, TOP, background);
+  drawTurnRows(s, page, TOP, background, undefined, halo);
   s.rect(textX, dividerY, textWidth, 1);
   const rightCells = Math.min(fineCells(status.right), columns);
   s.text(status.right, textX + (columns - rightCells) * TABLES[font].width, statusY, rightCells);
@@ -429,28 +483,37 @@ export function renderFontComparison(level = INK_MAX): number[][] {
 }
 
 // One row per option: its label on the left and the sample turn to the right, so every option
-// fits the screen in every font (Departure 7x14 included).
+// fits the screen in every font (Departure 7x14 included). The gap between rows is 2px when it
+// fits and shrinks (to 0 at worst) as the list grows; the back row below needs line + 10px.
 export const BACKGROUND_GAP = 2;
+export function backgroundGap(font: FineFont): number {
+  const { height: line } = TABLES[font];
+  const room = SCREEN.height - 1 - TOP - TURN_BACKGROUNDS.length * line - 8 - line;
+  return Math.max(0, Math.min(BACKGROUND_GAP, Math.floor(room / TURN_BACKGROUNDS.length)));
+}
 export function backgroundComparisonLayout(font: FineFont) {
   const { width: cell } = TABLES[font];
   const { columns, textX, textWidth } = fineLayout(font);
   const labelCells = Math.max(...TURN_BACKGROUNDS.map(option => fineCells(turnBackgroundLabel(option)))) + 1;
   return { labelCells, sample: { textX: textX + labelCells * cell, textWidth: textWidth - labelCells * cell, columns: columns - labelCells } };
 }
-export function renderBackgroundComparison(font: FineFont, level = INK_MAX): number[][] {
+export function renderBackgroundComparison(font: FineFont, level = INK_MAX, halo = false): number[][] {
   const s = new Surface(font, inkByte(level));
   const { line, columns, textX, textWidth, rows } = fineLayout(font);
   const { labelCells, sample: region } = backgroundComparisonLayout(font);
   const [page] = readerPages(t('backgroundSample'), fineMeasure(font), region.textWidth, rows, Infinity);
-  // The user's turn only: its first row.
-  const sample = { ...page, text: page.text.split('\n')[0], userTurns: page.userTurns.slice(0, 1) };
+  // The user's turn only: its first row. Dim replies shows the reply row, which it dims.
+  const rowsOf = page.text.split('\n');
+  const sample = { ...page, text: rowsOf[0], userTurns: page.userTurns.slice(0, 1) };
+  const reply = { ...page, text: rowsOf.find((row, i) => i > 0 && row.trim()) ?? rowsOf[0], userTurns: [0] };
+  const gap = backgroundGap(font);
   s.frame();
   let y = TOP;
   for (const option of TURN_BACKGROUNDS) {
     s.text(turnBackgroundLabel(option), textX, y, labelCells);
-    drawTurnRows(s, sample, y, option, region);
+    drawTurnRows(s, option === 'dimreplies' ? reply : sample, y, option, region, halo);
     if (option === 'tube') s.scanlines(region.textX, y, region.textWidth, line);
-    y += line + BACKGROUND_GAP;
+    y += line + gap;
   }
   s.rect(textX, y + 2, textWidth, 1);
   s.text(t('compareBack'), textX, y + 8, columns);

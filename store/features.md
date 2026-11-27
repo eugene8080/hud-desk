@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.78**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.79**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.78,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.79,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.78)
+## Feature list (beta 1.0.79)
 
 ### All modules
 
@@ -31,8 +31,11 @@ Rule for every agent: each beta release updates this file in the release commit:
   Misc Fixed 6x13, Terminus 6x12, GohuFont 6x11, Scientifica 5x11; Compare fonts screen), App
   Brightness 15 down to 1. Both lists wrap at the ends.
 - With a pixel font, the user's turns sit on a dim background so they stand out. The reader's
-  long-press menu has a Background menu: Compare backgrounds, None, Ink 5/8, 1/2 and 1/4, Lines
-  1/3 (default) and 1/4, Dots 1/3, 1/4 and 1/8, Tube 1/2, 1/4 and 1/8, Tube and 1px frame.
+  long-press menu has a Background menu: Compare backgrounds, Halo On/Off, None, Ink 5/8, 1/2 and
+  1/4, Lines 1/3 (default) and 1/4, Dots 1/3, 1/4 and 1/8, Tube 1/2, 1/4 and 1/8, Tube, 1px frame,
+  and three terminal-style marks that light nothing behind the letters: Left bar (a quote bar in
+  place of the '/'), Underline, and Dim replies (the other side's text dimmer; Email shows None).
+  Halo keeps the background dark next to every letter.
   Tube draws CRT scanlines on every third pixel row across the whole screen; Tube 1/2, 1/4 and
   1/8 scan your turns over a half-, quarter- and eighth-lit band.
   The 1px frame puts consecutive messages of yours in one frame.
@@ -139,5 +142,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.78: Gmail keyboard shortcuts with a Bluetooth keyboard: j/k, o, u, Space, ? for the keys. Email: c compose, r reply, a reply all, f forward, e archive, # delete, Shift+U unread, s star, z undo. Drafts show on the glasses; Ctrl+Enter reviews, Enter sends once. In Coding and Chat, r types a reply. Needs the updated bridge on your PC.
+1.0.79: Terminal-style highlights for your turns: Left bar (a quote bar instead of the /), Underline, and Dim replies (the agent's text dimmer, as on IBM 3270 terminals). New Halo switch in the Background menu keeps Ink, Lines, Dots and Tube backgrounds dark next to every letter, so text stays clear.
 <!-- whatsnew:end -->

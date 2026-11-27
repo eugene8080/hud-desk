@@ -2482,11 +2482,11 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
   await h.pick(2);
   for (const y of [3, 4, 5, 6]) assert.equal(tilePixel(sentFineTiles(h), right, y), y >= 4 && y % 3 === 0 ? 17 : 0);
   await h.menu(1109);
-  assert.deepEqual(menuItems(h), ['Compare backgrounds', 'None', 'Ink 5/8', 'Ink 1/2', 'Ink 1/4', 'Lines 1/3 ✓',
-    'Lines 1/4', 'Dots 1/3', 'Dots 1/4', 'Dots 1/8']);
+  assert.deepEqual(menuItems(h), ['Compare backgrounds', 'Halo: Off', 'None', 'Ink 5/8', 'Ink 1/2', 'Ink 1/4', 'Lines 1/3 ✓',
+    'Lines 1/4', 'Dots 1/3', 'Dots 1/4']);
   await h.pick(0);
   const comparison = sentFineTiles(h);
-  const row = i => 4 + i * (line + fineExports.BACKGROUND_GAP);
+  const row = i => 4 + i * (line + fineExports.backgroundGap('terminus'));
   const lit = (i, test) => Array.from({ length: line }, (_, r) => row(i) + r)
     .every(y => [right - 3, right - 2, right - 1, right].every(x => tilePixel(comparison, x, y) === (test(x, y) ? 17 : 0)));
   const scan = (pitch, fill) => (x, y) => y % pitch !== pitch - 1 && ditherLit(fill)(x, y);
@@ -2506,14 +2506,14 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
   const count = fineExports.TURN_BACKGROUNDS.length;
   for (const font of fineExports.FINE_FONTS) {
     const { line: fontLine } = fineExports.fineLayout(font);
-    assert.ok(4 + count * (fontLine + fineExports.BACKGROUND_GAP) + 8 + fontLine <= 287, font);
+    assert.ok(4 + count * (fontLine + fineExports.backgroundGap(font)) + 8 + fontLine <= 287, font);
   }
   await h.scroll('down');
-  // Page two: the Tube options and 1px frame; pick Tube.
+  // Page two: Dots 1/8, the Tube options, 1px frame and the terminal-style options; pick Tube.
   await h.menu(1109);
   for (let i = 0; i < 5; i++) await h.scroll('down');
-  assert.deepEqual(menuItems(h), ['Tube 1/2', 'Tube 1/4', 'Tube 1/8', 'Tube', '1px frame']);
-  await h.pick(3);
+  assert.deepEqual(menuItems(h), ['Dots 1/8', 'Tube 1/2', 'Tube 1/4', 'Tube 1/8', 'Tube', '1px frame', 'Left bar', 'Underline', 'Dim replies']);
+  await h.pick(4);
   assert.equal(h.storage.get('reader-turn-bg'), 'tube');
   const tube = sentFineTiles(h);
   assert.equal(tilePixel(tube, right, 4), 17);
@@ -2525,6 +2525,59 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
   dim.api.thread = async () => ({ text });
   await dim.pick(2);
   for (const y of [4, 5]) assert.equal(tilePixel(sentFineTiles(dim), right, y), 0);
+});
+
+test('terminal-style backgrounds: left bar, underline and dim replies light nothing behind the letters', () => {
+  const status = { left: '', right: '' };
+  const { textX, line, cell } = fineExports.fineLayout('terminus');
+  const at = (tiles, x, y) => tilePixel(tiles, x, y);
+  // Left bar: 2px at Ink 5 in the first column of your rows, where the '/' was.
+  const bar = fineExports.renderFineScreen({ text: '/ MMMM\n  more', userTurns: [1, 1] }, 'terminus', status, 15, 'bar');
+  const barX = textX + (cell >> 1) - 1;
+  for (let y = 4; y < 4 + 2 * line; y++) {
+    assert.equal(at(bar, barX, y), 85, `bar ${y}`);
+    assert.equal(at(bar, barX + 1, y), 85, `bar ${y}`);
+    for (const x of [textX, textX + cell - 1]) if (x !== barX && x !== barX + 1) assert.equal(at(bar, x, y), 0, `no slash at ${x},${y}`);
+  }
+  // Underline: 1px at Ink 4 under the letters of your row, nothing past them.
+  const under = fineExports.renderFineScreen({ text: '/ MMMM', userTurns: [1] }, 'terminus', status, 15, 'underline');
+  const y = 4 + line - 1;
+  for (let x = textX; x < textX + 6 * cell; x++) assert.ok([68, 255].includes(at(under, x, y)), `underline ${x}`);
+  assert.equal(at(under, textX + 6 * cell, y), 0);
+  // Dim replies: your row at full ink, the reply's letters at step 8 (55 % of 15, rounded).
+  const page = { text: '/ MMMM\n> MMMM', userTurns: [1, 0] };
+  const plain = fineExports.renderFineScreen(page, 'terminus', status, 15, 'none');
+  const dim = fineExports.renderFineScreen(page, 'terminus', status, 15, 'dimreplies');
+  for (let y = 4; y < 4 + 2 * line; y++) for (let x = textX; x < textX + 6 * cell; x++) {
+    if (at(plain, x, y) !== 255) { assert.equal(at(dim, x, y), 0); continue; }
+    assert.equal(at(dim, x, y), y < 4 + line ? 255 : 136, `${x},${y}`);
+  }
+});
+
+test('Halo keeps the background dark next to every letter, and is a saved toggle in the Background menu', async () => {
+  const status = { left: '', right: '' };
+  const { textX, line, textWidth } = fineExports.fineLayout('terminus');
+  const page = { text: '/ MMMM HHHH', userTurns: [1] };
+  const touching = tiles => {
+    let count = 0;
+    for (let y = 4; y < 4 + line; y++) for (let x = textX; x < textX + textWidth; x++) {
+      if (tilePixel(tiles, x, y) !== 17) continue;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && tilePixel(tiles, x + dx, y + dy) === 255) count++;
+    }
+    return count;
+  };
+  assert.ok(touching(fineExports.renderFineScreen(page, 'terminus', status, 15, 'ink12')) > 0);
+  const halo = fineExports.renderFineScreen(page, 'terminus', status, 15, 'ink12', true);
+  assert.equal(touching(halo), 0);
+  assert.ok([0, 1, 2, 3].some(dx => tilePixel(halo, textX + textWidth - 2 - dx, 4) === 17), 'the band away from the letters stays');
+  const h = await moduleHarness({ storage: { 'reader-text': 'terminus' } });
+  h.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
+  await h.pick(2);
+  await h.menu(1109);
+  await h.pick(1);
+  assert.equal(h.storage.get('reader-turn-halo'), 'on');
+  await h.menu(1109);
+  assert.equal(menuItems(h)[1], 'Halo: On');
 });
 
 test('every Background label fits the glasses menu, and Tube dim scans only your turns', () => {
