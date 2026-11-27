@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.86**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.87**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.86,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.87,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.86)
+## Feature list (beta 1.0.87)
 
 ### All modules
 
@@ -38,7 +38,9 @@ Rule for every agent: each beta release updates this file in the release commit:
   Halo (on by default, 2 px) keeps the background dark next to every letter. Font and Background open their comparison
   pages directly: swipe moves the '>' mark, click uses it (on the Halo row: toggles it), double-click
   goes back unchanged. Compare fonts lists Native text first, then the pixel fonts large to small.
-- Images: [Photo N] in Chat, [Image N] under a mail's text and [Image N] where a picture was pasted
+- Images: [Photo N] in Chat; [Image N: name] in a mail where the picture appears, including pictures a
+  newsletter links to (fetched from the sender's server only when opened, https and public addresses
+  only; tracking pixels, icons and ad servers skipped); [Image N] where a picture was pasted
   into a Claude or Codex session. A click on the page opens its first picture. A click cycles the
   views: Original Picture (whole; a chart or screenshot in four flat tones, a photo as thin bright outlines over a
   dot pattern, as G2oom draws its scenes; a mostly white picture in negative), Zoom (at least twice
@@ -161,5 +163,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.86: Menus keep their right-aligned columns and full titles again: fast keyboard use could make the glasses reject one menu page, which switched every list to the compact layout for the rest of the session. Chat rows now show the day and the app on the right, e.g. [27Nov/Signal].
+1.0.87: Email shows the pictures a newsletter links to, such as Bloomberg's Morning Briefing, as [Image N] rows where they appear in the mail. A picture is fetched from the sender's server only when you open it; tracking pixels, small icons and ad slots are skipped.
 <!-- whatsnew:end -->

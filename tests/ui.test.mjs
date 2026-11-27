@@ -3131,7 +3131,8 @@ test('images: views cycle Original Picture, Zoom, Outline, AI Readout; swipe mov
   const { fixture, messages } = mailFixture();
   messages[1].images = [{ part: '2', name: 'plan.png' }, { part: '3', name: '' }];
   const asked = [];
-  fixture.image = async (account, message, part, request = {}) => {
+  fixture.image = async (account, message, ref, request = {}) => {
+    const part = ref.part;
     asked.push({ part, view: request.view, region: request.region });
     if (request.view === 'read') return { text: 'Revenue 270, target 250' };
     return { ...glassImage(part === '2' ? 15 : 5, part === '2' ? 0.9 : 0.1), regions: request.view === 'zoom' ? 3 : 1, region: request.region ?? 0 };
@@ -3211,4 +3212,17 @@ test('Compare fonts has Native text as its first row, drawn by the glasses above
   await h.scroll('up');
   await h.tap();
   assert.equal(h.storage.get('reader-text'), 'native');
+});
+
+test('mail pictures sit where the HTML shows them; unplaced ones follow the text; remote ones open by index', async () => {
+  const { fixture, messages } = mailFixture();
+  messages[1].text = 'Top story\n[[img:1]]\nMarkets\n[[img:0]]\nEnd';
+  messages[1].images = [{ part: '2', name: 'chart.png' }, { remote: 4, name: 'Bloomberg' }, { remote: 7, name: '' }];
+  const asked = [];
+  fixture.image = async (account, message, ref) => { asked.push(ref); return glassImage(8); };
+  const h = await emailHarness(fixture);
+  await h.pickRow(2);
+  let body = '';
+  for (let i = 0; i < 6; i++) { body += container(h, 'body').content + '\n'; await h.scroll('down'); }
+  assert.match(body, /Top story\n\[Image 1: Bloomberg\]\nMarkets\n\[Image 2: chart\.png\]\nEnd\n\[Image 3\]/);
 });

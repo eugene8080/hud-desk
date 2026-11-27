@@ -37,21 +37,30 @@ export function mailFilterSummary(selected: Set<string>, names: Map<string, stri
   return `${names.get(first) ?? (first.endsWith(':INBOX') ? 'Inbox' : t('unavailableSection'))}${extra ? ` +${extra}` : ''}`;
 }
 
-export function mailReaderText(conversation: MailConversation): ReaderContent & { images: { message: string; part: string }[] } {
+type ImageRef = { message: string; part?: string; remote?: number };
+export function mailReaderText(conversation: MailConversation): ReaderContent & { images: ImageRef[] } {
   const subject = singleLine(conversation.subject);
-  const images: { message: string; part: string }[] = [];
-  const messages = [...conversation.messages].sort((a, b) => a.date - b.date).map(message => [
-    t('mailFrom', singleLine(message.from)),
-    t('mailDate', new Date(message.date).toLocaleString(getLang())),
-    t('mailSubject', subject),
-    '',
-    message.text,
-    // Image parts below the message text: [Image N: name], opened with a click on its page.
-    ...(message.images ?? []).map(image => {
-      images.push({ message: message.id, part: image.part });
+  const images: ImageRef[] = [];
+  const messages = [...conversation.messages].sort((a, b) => a.date - b.date).map(message => {
+    const list = message.images ?? [];
+    const placed = new Set<number>();
+    const tag = (i: number) => {
+      const image = list[i];
+      images.push({ message: message.id, ...(image.remote !== undefined ? { remote: image.remote } : { part: image.part }) });
+      placed.add(i);
       return `[Image ${images.length}${image.name ? `: ${singleLine(image.name)}` : ''}]`;
-    }),
-  ].join('\n'));
+    };
+    // Pictures where the mail shows them ([[img:N]] from the bridge, 2026-11-27); the rest below.
+    const text = message.text.replace(/\[\[img:(\d+)\]\]/g, (_, n) => list[Number(n)] && !placed.has(Number(n)) ? tag(Number(n)) : '');
+    return [
+      t('mailFrom', singleLine(message.from)),
+      t('mailDate', new Date(message.date).toLocaleString(getLang())),
+      t('mailSubject', subject),
+      '',
+      text,
+      ...list.map((_, i) => i).filter(i => !placed.has(i)).map(tag),
+    ].join('\n');
+  });
   const before = messages.slice(0, -1).join('\n\n');
   return { text: messages.join('\n\n'), openingOffset: before ? before.length + 2 : 0, images };
 }
@@ -286,7 +295,7 @@ export class Mail {
   reader(thread: MailThread): ReaderSource {
     let failed = false;
     let displayed = false;
-    let images: { message: string; part: string }[] = [];
+    let images: ImageRef[] = [];
     return {
       title: singleLine(thread.subject),
       mail: thread,
@@ -298,7 +307,7 @@ export class Mail {
       image: async (n, request) => {
         const ref = images[n - 1];
         if (!ref) throw new Error('not found');
-        return api.mail.image(thread.account, ref.message, ref.part, request);
+        return api.mail.image(thread.account, ref.message, ref, request);
       },
       statusText: () => failed ? t('mailNotMarkedRead') : ' ',
       afterDisplay: async () => {

@@ -395,3 +395,22 @@ test('Mail lists image parts of 2 KB or more and serves one through imaging, rea
   assert.equal((await get('/api/mail/image?account=work&message=msg1&part=0')).status, 404, 'a text part is not an image');
   assert.equal((await get('/api/mail/image?account=work&message=msg1&part=../x')).status, 400);
 });
+
+test('Mail serves a picture the HTML links to through the injected fetcher, only by its <img> index', async t => {
+  const base = fixture();
+  const html = '<p>Hi</p><img src="https://cdn.example.test/top.jpg" alt="Top"><img src="https://cdn.example.test/two.jpg">';
+  const transport = (url, options) => {
+    const { pathname } = new URL(url);
+    const route = pathname.replace('/gmail/v1/users/me', '');
+    if (route === '/messages/msg1') return Response.json({ id: 'msg1', payload: { mimeType: 'text/html', partId: '', body: { data: Buffer.from(html).toString('base64url') } } });
+    return base.transport(url, options);
+  };
+  const fetched = [];
+  const imaging = { render: async (key, load) => { const bytes = await load(); return { key, bytes: bytes.toString() }; } };
+  const fetchRemote = async url => { fetched.push(url); return Buffer.from('JPEG'); };
+  const get = await serve(t, config, { ...base, transport }, undefined, { imaging, fetchRemote });
+  assert.deepEqual((await get('/api/mail/image?account=work&message=msg1&remote=1')).data, { key: 'mail:work:msg1:remote-1', bytes: 'JPEG' });
+  assert.deepEqual(fetched, ['https://cdn.example.test/two.jpg']);
+  assert.equal((await get('/api/mail/image?account=work&message=msg1&remote=5')).status, 404);
+  assert.equal((await get('/api/mail/image?account=work&message=msg1&remote=x')).status, 400);
+});

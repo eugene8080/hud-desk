@@ -1,7 +1,8 @@
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGmail, MailError } from './gmail.mjs';
-import { bodyText, header, parseFrom } from './mail-text.mjs';
+import { bodyHtml, bodyText, header, htmlImages, parseFrom } from './mail-text.mjs';
+import { fetchPublicImage } from './remote-image.mjs';
 import { buildRaw, quotedOriginal, readDraft, replyFields } from './mail-compose.mjs';
 import { readView } from './image.mjs';
 
@@ -23,17 +24,53 @@ const SEND_MEMORY_MS = 10 * 60_000;
 // Image parts of a message the glasses can open (2026-11-27). Parts under 2 KB are left out:
 // those are tracking pixels and small logos, not pictures anyone wants to look at.
 const PART_ID = /^\d+(?:\.\d+)*$/;
+const cleanName = value => String(value ?? '').replace(/[\r\n]+/g, ' ').trim().slice(0, 80);
 function imageParts(payload) {
   const found = [];
   (function walk(part) {
     if (!part || found.length >= 20) return;
     if (/^image\//i.test(part.mimeType ?? '') && typeof part.partId === 'string' && PART_ID.test(part.partId) &&
         (part.body?.attachmentId || part.body?.data) && (part.body?.size ?? 0) >= 2048) {
-      found.push({ part: part.partId, name: String(part.filename ?? '').replace(/[\r\n]+/g, ' ').slice(0, 80) });
+      const contentId = (part.headers ?? []).find(h => h.name?.toLowerCase() === 'content-id')?.value?.replace(/^<|>$/g, '') ?? '';
+      found.push({ part: part.partId, name: cleanName(part.filename), contentId });
     }
     for (const child of part.parts ?? []) walk(child);
   })(payload);
   return found;
+}
+
+// A message's pictures and its text with [[img:N]] where they appear (Eugene, 2026-11-27:
+// newsletter images did not show). N indexes the returned list: attached and inline (cid:) parts,
+// then pictures the HTML links to (remote: K, the K-th <img> tag). Pictures the HTML marks as 48 px
+// or smaller in width or height are left out (tracking pixels, icons). Text read from the plain part
+// has no markers; the app lists that message's pictures below its text.
+// Ad and tracking image servers in newsletters (Bloomberg's sli.bloomberg.com slots came back blank):
+// LiveIntent-style "sli." hosts, ad, tracking, pixel and open-beacon hosts or paths.
+const AD_IMAGE = /^https:\/\/(?:[^/]*\.)?(?:sli|ads?|adserver|track(?:ing)?|pixel|beacon|open|click)\.|liveintent|doubleclick|adsrvr|googlesyndication|\/(?:track|pixel|beacon|open)(?:[/?.]|$)/i;
+
+// Read a message's text from its HTML when the HTML has pictures to place.
+export function messageWithPictures(payload, subject) {
+  const placeable = messagePictures(payload, '').images.length > 0 && !!bodyHtml(payload);
+  return messagePictures(payload, bodyText(payload, { subject, preferHtml: placeable }));
+}
+
+export function messagePictures(payload, text) {
+  const parts = imageParts(payload);
+  const images = parts.map(({ part, name }) => ({ part, name }));
+  const tags = htmlImages(bodyHtml(payload));
+  const marker = tags.map((tag, k) => {
+    if (tag.src.toLowerCase().startsWith('cid:')) {
+      const at = parts.findIndex(p => p.contentId && p.contentId === tag.src.slice(4));
+      return at >= 0 ? at : null;
+    }
+    if (!/^https:\/\//i.test(tag.src) || (tag.width && tag.width <= 48) || (tag.height && tag.height <= 48) || images.length >= 30 ||
+        AD_IMAGE.test(tag.src)) return null;
+    images.push({ remote: k, name: cleanName(tag.alt) });
+    return images.length - 1;
+  });
+  const placed = text.replace(/\[\[img:(\d+)\]\]/g, (_, k) => marker[Number(k)] === null || marker[Number(k)] === undefined ? '' : `[[img:${marker[Number(k)]}]]`)
+    .replace(/\n{3,}/g, '\n\n').trim();
+  return { text: placed, images };
 }
 
 export function readMailConfig(config) {
@@ -148,7 +185,7 @@ function publicError(error) {
   return error instanceof MailError ? error.code : 'internal';
 }
 
-export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging } = {}) {
+export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging, fetchRemote = fetchPublicImage } = {}) {
   const refreshMs = config.refreshSeconds * 1000;
   const search = `newer_than:${config.windowDays}d`;
   const accounts = new Map(config.accounts.map(account => {
@@ -271,10 +308,10 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging } 
       return {
         subject: header(messages[0] ?? {}, 'subject'),
         messages: messages.map(m => {
-          const images = imageParts(m.payload);
+          const { text, images } = messageWithPictures(m.payload, header(m, 'subject'));
           return {
             id: m.id, from: parseFrom(header(m, 'from')), to: header(m, 'to'), cc: header(m, 'cc'),
-            date: dateOf(m), text: bodyText(m.payload, { subject: header(m, 'subject') }), ...(images.length && { images }),
+            date: dateOf(m), text, ...(images.length && { images }),
           };
         }),
       };
@@ -304,10 +341,17 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging } 
     }
 
     // One image part, read only: inline data, or the attachment fetched by its id.
-    async function image(messageId, partId, view) {
+    async function image(messageId, partId, view, remote) {
       if (!imaging) throw new MailError('images-unavailable', 503);
-      return imaging.render(`mail:${account.id}:${messageId}:${partId}`, async () => {
+      return imaging.render(`mail:${account.id}:${messageId}:${remote === undefined ? partId : `remote-${remote}`}`, async () => {
         const message = await gmail('GET', `/messages/${messageId}`, { query: { format: 'full', fields: 'id,payload' } });
+        if (remote !== undefined) {
+          // A picture the HTML links to, fetched from the sender's server only now that it is opened.
+          const src = htmlImages(bodyHtml(message.payload))[remote]?.src ?? '';
+          if (!/^https:\/\//i.test(src)) throw new MailError('not found', 404);
+          try { return await fetchRemote(src); }
+          catch (error) { throw new MailError(error?.message === 'remote-refused' ? 'remote-refused' : 'remote-failed', 502); }
+        }
         let part;
         (function find(node) {
           if (!node || part) return;
@@ -549,8 +593,10 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging } 
     'POST /api/mail/send': (_query, body) => accountOf(body?.account).send(body),
     'GET /api/mail/image': query => {
       const part = query.get('part') ?? '';
-      if (!PART_ID.test(part)) throw badRequest();
-      return accountOf(query.get('account')).image(threadId(query.get('message')), part, readView(key => query.get(key)));
+      const remote = query.get('remote');
+      if (remote !== null ? !/^\d{1,3}$/.test(remote) : !PART_ID.test(part)) throw badRequest();
+      return accountOf(query.get('account')).image(threadId(query.get('message')), part, readView(key => query.get(key)),
+        remote !== null ? Number(remote) : undefined);
     },
   };
   return { routes, close: () => clearInterval(timer) };

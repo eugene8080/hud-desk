@@ -15,10 +15,28 @@ export function decodeEntities(text) {
   });
 }
 
+// The <img> tags of an HTML body in document order: src, alt, and the width and height the HTML
+// gives (attribute or inline style), so 1x1 tracking pixels and small icons can be skipped unseen.
+export function htmlImages(html) {
+  const images = [];
+  const body = String(html ?? '').replace(/<!--[^]*?-->/g, '').replace(/<(script|style|head|title)\b[^>]*>[^]*?<\/\1\s*>/gi, '');
+  for (const [tag] of body.matchAll(/<img\b[^>]*>/gi)) {
+    const attr = name => decodeEntities(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag)?.slice(1).find(v => v !== undefined) ?? '');
+    const style = attr('style');
+    const size = name => Number(attr(name)) || Number(new RegExp(`(?:^|;)\\s*${name}\\s*:\\s*(\\d+)px`, 'i').exec(style)?.[1]) || 0;
+    images.push({ src: attr('src').trim(), alt: attr('alt').replace(/\s+/g, ' ').trim(), width: size('width'), height: size('height') });
+  }
+  return images;
+}
+
+// Each <img> becomes a [[img:K]] marker (K counts the <img> tags in order); the bridge maps K to
+// the message's picture list or drops the marker (mail.mjs).
 export function htmlToText(html) {
+  let k = 0;
   return decodeEntities(html
     .replace(/<!--[^]*?-->/g, '')
     .replace(/<(script|style|head|title)\b[^>]*>[^]*?<\/\1\s*>/gi, '')
+    .replace(/<img\b[^>]*>/gi, () => `\n[[img:${k++}]]\n`)
     .replace(/<blockquote\b[^>]*>[^]*?<\/blockquote\s*>/gi, '\n>\n')
     .replace(/<br\b[^>]*>/gi, '\n')
     .replace(/<\/(?:p|div|tr|h[1-6]|li|table|section|article)\s*>/gi, '\n')
@@ -136,11 +154,19 @@ export function withoutHistory(text, { subject = '' } = {}) {
   return text;
 }
 
-export function bodyText(payload, { subject = '' } = {}) {
+// preferHtml: read the HTML part even when a plain part exists, so pictures can sit where the mail
+// shows them (a newsletter with pictures, 2026-11-27).
+export function bodyText(payload, { subject = '', preferHtml = false } = {}) {
   const plain = findPart(payload, 'text/plain');
   const html = findPart(payload, 'text/html');
   const text = plain ? unwrapPlain(decodeEntities(decodePart(plain))) : '';
-  return withoutHistory(tidy(html && text.trim().length < 200 ? htmlToText(decodePart(html)) : text), { subject });
+  return withoutHistory(tidy(html && (preferHtml || text.trim().length < 200) ? htmlToText(decodePart(html)) : text), { subject });
+}
+
+// The decoded HTML body, if the message has one.
+export function bodyHtml(payload) {
+  const html = findPart(payload, 'text/html');
+  return html ? decodePart(html) : '';
 }
 
 export function header(message, name) {

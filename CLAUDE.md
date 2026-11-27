@@ -56,6 +56,17 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.87 (Eugene: inline images not showing, e.g. the Bloomberg 'Holiday washout'
+newsletter). Newsletter pictures are <img src=https://...> links, not MIME parts. bridge/mail-text.mjs
+htmlImages + [[img:K]] markers in htmlToText; bridge/mail.mjs messagePictures (cid: -> its part; remote
+https kept unless HTML size <= 48 px or an ad/tracking server, AD_IMAGE) and messageWithPictures (reads
+the HTML part when it has placeable pictures); route GET /api/mail/image?remote=K; bridge/remote-image.mjs
+fetchPublicImage: https on 443 only, no IP literals or credentials, DNS checked inside the socket
+lookup (private, loopback, link-local, CGNAT incl. tailnet refused), re-checked per redirect (3),
+10 MB, 15 s. Fetched only when opened (the sender may see that it was opened). On his Bloomberg mail:
+26 img tags, 10 story pictures kept and placed, 6 sli.bloomberg.com ad slots skipped; banner converts
+crisp. 276 tests, build pass. Bridge part needs an approved restart.
+
 2026-11-27 beta 1.0.86 (Eugene: Coding [session/agent] not right-aligned and titles cut off, Email
 titles cut off, Chat dates not right-aligned; wants [27Nov/Signal]). Symptoms = the compact fallback,
 which one rejected aligned rebuild latched for the whole run (compactMenuOnly). Likely trigger: fast
