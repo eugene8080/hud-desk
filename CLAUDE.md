@@ -63,7 +63,9 @@ keyboard navigation overlapping page rebuilds (unverified: the phone log line 'a
 rejected' was not read). Fix: rebuildPage() serializes rebuildPageContainer; a rejected aligned menu is
 retried once; compact for that screen only, latched after 3 rejected screens in a row; an accepted
 aligned page resets the count. Chat: bridge list items carry network; chatColumns right =
-[27Nov/Signal]. 271 tests, build pass. Bridge part (network) needs an approved restart.
+[27Nov/Signal]. 271 tests, build pass. Bridge restarted with Eugene's approval (old supervisor
+71220/server 71024/whisper 72348; new supervisor 71716, server 70740, whisper 44092 --vad); healthz ok;
+live chat list page 0: 8 rows, network on each (WhatsApp 7, Signal 1).
 
 2026-11-27 beta 1.0.85 (Eugene: views 'Picture, Zoom, AI Readout', then 'or maybe try to improve the
 outline first... lines too thick'; caption blocked the border). Views Original Picture, Zoom, Outline,
