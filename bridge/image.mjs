@@ -119,28 +119,54 @@ export function stretch(pixels) {
   return out;
 }
 
-// Sobel edge strength per pixel, and the 99th percentile (the scale for "full strength").
-function sobel({ width, height, pixels }) {
-  const magnitude = new Float32Array(width * height);
+// Thin edges (Eugene on G2, 2026-11-27: "the outline lines are too thick"). Sobel marks every pixel
+// on an edge's slope, 2-3 px wide; as in the Canny detector, only the pixel that is strongest across
+// the edge (along the gradient) is kept, so lines are 1 px. Hysteresis: a pixel above `high` of the
+// strongest edges starts a line, and pixels above `low` join it only when connected to one, so
+// lines stay continuous without speckle. Returns strength 0..1 per pixel (0 = no edge).
+export function thinEdges({ width, height, pixels }, high = 0.3, low = 0.12) {
+  const n = width * height;
+  const magnitude = new Float32Array(n), angle = new Uint8Array(n);
   for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
     const p = (dx, dy) => pixels[(y + dy) * width + x + dx];
     const gx = p(1, -1) + 2 * p(1, 0) + p(1, 1) - p(-1, -1) - 2 * p(-1, 0) - p(-1, 1);
     const gy = p(-1, 1) + 2 * p(0, 1) + p(1, 1) - p(-1, -1) - 2 * p(0, -1) - p(1, -1);
-    magnitude[y * width + x] = Math.hypot(gx, gy);
+    const i = y * width + x;
+    magnitude[i] = Math.hypot(gx, gy);
+    // Gradient direction in four sectors: 0 = horizontal, 1 = 45 deg, 2 = vertical, 3 = 135 deg.
+    const a = (Math.atan2(gy, gx) * 180 / Math.PI + 180) % 180;
+    angle[i] = a < 22.5 || a >= 157.5 ? 0 : a < 67.5 ? 1 : a < 112.5 ? 2 : 3;
   }
-  const sorted = Float32Array.from(magnitude).sort();
-  return { magnitude, top: sorted[Math.floor(sorted.length * 0.99)] || 1 };
+  const step = [[1, 0], [1, 1], [0, 1], [-1, 1]];
+  const kept = new Float32Array(n);
+  for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
+    const i = y * width + x, m = magnitude[i];
+    if (!m) continue;
+    const [dx, dy] = step[angle[i]];
+    if (m >= magnitude[i + dy * width + dx] && m > magnitude[i - dy * width - dx]) kept[i] = m;
+  }
+  const nonzero = kept.filter(v => v > 0).sort();
+  const top = nonzero[Math.floor(nonzero.length * 0.98)] || 1;
+  const out = new Float32Array(n);
+  const stack = [];
+  for (let i = 0; i < n; i++) if (kept[i] / top >= high) { out[i] = Math.min(1, kept[i] / top); stack.push(i); }
+  while (stack.length) {
+    const i = stack.pop(), x = i % width, y = (i - x) / width;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const j = ny * width + nx;
+      if (!out[j] && kept[j] / top >= low) { out[j] = Math.min(1, kept[j] / top); stack.push(j); }
+    }
+  }
+  return out;
 }
 
-// Edges only, scaled so the strongest 1% reach full level; weak edges are dropped.
+// Edges only, 1 px wide; strong lines full, faint ones dimmer (never below level 7, so they show).
 export function outline(picture) {
-  const { width, height } = picture;
-  const { magnitude, top } = sobel(picture);
-  const levels = new Uint8Array(width * height);
-  for (let i = 0; i < levels.length; i++) {
-    const v = Math.min(1, magnitude[i] / top);
-    levels[i] = v < 0.18 ? 0 : Math.round(Math.sqrt(v) * 15);
-  }
+  const strength = thinEdges(picture);
+  const levels = new Uint8Array(strength.length);
+  for (let i = 0; i < levels.length; i++) if (strength[i] > 0) levels[i] = Math.max(7, Math.round(Math.sqrt(strength[i]) * 15));
   return levels;
 }
 
@@ -151,11 +177,11 @@ export function g2Picture(picture) {
   const lifted = new Uint8Array(picture.pixels.length);
   const tone = stretch(picture.pixels);
   for (let i = 0; i < tone.length; i++) lifted[i] = Math.round(255 * Math.pow(tone[i] / 255, 0.45));
-  const { magnitude, top } = sobel({ width, height, pixels: lifted });
+  const edges = thinEdges({ width, height, pixels: lifted });
   const levels = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const i = y * width + x;
-    if (magnitude[i] / top > 0.3) { levels[i] = 15; continue; }
+    if (edges[i] > 0) { levels[i] = 15; continue; }
     // Absolute screen position for the matrix keeps the pattern still between sections.
     // Dark areas stay black (no dots below 30 %), so a dark background is not a field of dots.
     const fill = Math.max(0, (lifted[i] / 255 - 0.3) / 0.7) * 0.6;

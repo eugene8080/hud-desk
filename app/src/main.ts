@@ -25,7 +25,7 @@ import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, renderKeysPage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
+import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, renderKeysPage, renderTextPage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, imageNumbers, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, ChatReader, chatColumns, CHAT_NETWORKS_KEY, CHAT_TRANSLATE_KEY } from './chat';
@@ -104,6 +104,8 @@ let viewProvider = 'all';
 type ReaderText = 'native' | FineFont;
 // The full-screen picture viewer (2026-11-27): image n of count from the reader's source.
 type ImageMode = 'fit' | 'zoom' | 'outline' | 'read';
+// Original Picture, Zoom, Outline, AI Readout (Eugene, 2026-11-27: Outline kept for now with thin,
+// 1px lines; he may drop it after trying them).
 const IMAGE_VIEWS: ImageMode[] = ['fit', 'zoom', 'outline', 'read'];
 const IMAGE_VIEW_LABEL = { fit: 'imageViewFit', zoom: 'imageViewZoom', outline: 'imageViewOutline', read: 'imageViewRead' } as const;
 type ImageView = { n: number; count: number; numbers: number[]; load: (n: number, request?: ImageRequest) => Promise<ImageAnswer>;
@@ -696,14 +698,15 @@ function imageViewTiles(view: ImageView): number[][] {
   const position = view.count > 1 ? ` · ${view.numbers.indexOf(view.n) + 1}/${view.count}` : '';
   const label = tr(IMAGE_VIEW_LABEL[view.mode]);
   if (view.mode === 'read' && view.text !== undefined && !view.note) {
-    // The local AI's reading, in the pixel font, a page at a time.
+    // The local AI's reading, in the pixel font, a page at a time: no divider, and "AI Readout 1/2"
+    // in the same bottom-right caption box as a picture's.
     const { textWidth, rows } = fineLayout(smallFont);
     const pages = readerPages(view.text, fineMeasure(smallFont), textWidth, rows, Infinity);
     const page = pages[Math.min(view.textPage, pages.length - 1)];
-    return renderFineScreen(page, smallFont, { left: `${label}${position}`, right: pages.length > 1 ? `Pg${view.textPage + 1}/${pages.length}` : '' }, inkLevel, 'none');
+    return captionTiles(renderTextPage(page, smallFont, inkLevel), `${label} ${Math.min(view.textPage, pages.length - 1) + 1}/${pages.length}`, smallFont, inkLevel);
   }
-  if (!view.image || view.note) return renderFineScreen({ text: view.note || tr('imageLoading', view.numbers.indexOf(view.n) + 1, view.count), userTurns: [], firstLine: 0, lastLine: 0 },
-    smallFont, { left: `${label}${position}`, right: '' }, inkLevel, 'none');
+  if (!view.image || view.note) return captionTiles(renderTextPage({ text: view.note || tr('imageLoading', view.numbers.indexOf(view.n) + 1, view.count),
+    userTurns: [], firstLine: 0, lastLine: 0 }, smallFont, inkLevel), `${label}${position}`, smallFont, inkLevel);
   const bytes = Uint8Array.from(atob(view.image.data), ch => ch.charCodeAt(0));
   const top = inkByte(inkLevel);
   // The bridge draws the negative itself (before finding the edges); bridges before 1.0.84 send

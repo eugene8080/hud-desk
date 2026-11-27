@@ -56,6 +56,14 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.85 (Eugene: views 'Picture, Zoom, AI Readout', then 'or maybe try to improve the
+outline first... lines too thick'; caption blocked the border). Views Original Picture, Zoom, Outline,
+AI Readout (Outline kept pending his G2 look). bridge/image.mjs thinEdges: Sobel + non-maximum
+suppression (4 sectors) + hysteresis (high 0.3, low 0.12 of the 98th percentile) -> 1 px lines, used by
+Outline and the photo style. AI Readout page: renderTextPage (frame only, no divider/status) +
+captionTiles 'AI Readout p/n'; captionTiles now inside the 1 px frame. 270 tests, build pass.
+Bridge part (thin edges) needs an approved restart.
+
 2026-11-27 beta 1.0.84. (1) This session: Eugene on G2 1.0.83, 'AI read is good. The actual pictures
 are all bad', with the r/EvenRealities G2oom post (gamma 0.45, Sobel edges, non-edge 60 %, Bayer 4x4).
 Even FAQ/display docs: image containers 4-bit (16 levels), 288x144 max, ~800 ms full-screen refresh.

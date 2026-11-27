@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.84**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.85**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.84,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.85,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.84)
+## Feature list (beta 1.0.85)
 
 ### All modules
 
@@ -40,11 +40,11 @@ Rule for every agent: each beta release updates this file in the release commit:
   goes back unchanged. Compare fonts lists Native text first, then the pixel fonts large to small.
 - Images: [Photo N] in Chat, [Image N] under a mail's text and [Image N] where a picture was pasted
   into a Claude or Codex session. A click on the page opens its first picture. A click cycles the
-  views: Picture (whole; a chart or screenshot in four flat tones, a photo as bright outlines over a
+  views: Original Picture (whole; a chart or screenshot in four flat tones, a photo as thin bright outlines over a
   dot pattern, as G2oom draws its scenes; a mostly white picture in negative), Zoom (at least twice
-  the size, in sections; a tall screenshot fills the width), Outline (edges only, lit lines on black)
-  and Read (the PC's local vision model reads it as text: chart values, screen text, or what a photo
-  shows). Swipe moves through sections or text pages, then pictures; n toggles negative; a caption
+  the size, in sections; a tall screenshot fills the width), Outline (1 px edges only, lit lines on
+  black) and AI Readout (the PC's local vision model reads it as text: chart values, screen text, or
+  what a photo shows; its pages have no divider and "AI Readout 1/2" in the caption box). Swipe moves through sections or text pages, then pictures; n toggles negative; a caption
   shows the view and position; double-click goes back.
   Tube draws CRT scanlines on every third pixel row across the whole screen; Tube 1/2, 1/4 and
   1/8 scan your turns over a half-, quarter- and eighth-lit band.
@@ -161,5 +161,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.84: Pictures redrawn for the G2: charts and screenshots in flat tones with solid text, photos as bright outlines over a dot pattern; negative is drawn on the PC, so edges stay lit. An Enable BT keyboard button on the phone page connects the keyboard in one press. Ctrl+, and Ctrl+Shift+P pages go back one layer. Halo is on by default and 2 px wide.
+1.0.85: Picture views are Original Picture, Zoom, Outline and AI Readout. Outlines are now one pixel thin (photos too). The AI Readout page has no divider and shows AI Readout page/total in the same bottom-right box as pictures, now inside the frame.
 <!-- whatsnew:end -->

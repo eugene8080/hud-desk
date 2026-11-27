@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ditherLevels, glassImage, packLevels, IMAGE_WIDTH, IMAGE_HEIGHT } from '../bridge/image.mjs';
+import { ditherLevels, glassImage, packLevels, thinEdges, IMAGE_WIDTH, IMAGE_HEIGHT } from '../bridge/image.mjs';
 import { visibleClaudeMessage, visibleMessage } from '../bridge/conversation.mjs';
 
 test('images dither grey to 16 panel levels, keep the mean tone and pack two pixels a byte', () => {
@@ -27,4 +27,17 @@ test('transcripts count pasted images, keep image-only messages and ignore image
   assert.deepEqual(visibleMessage({ type: 'response_item', payload: { type: 'message', role: 'user', id: 'c1', content: [
     { type: 'input_text', text: 'See' }, { type: 'input_image', image_url: `data:image/png;base64,${png}` },
   ] } }), { role: 'user', text: 'See', id: 'c1', images: 1 });
+});
+
+test('thin edges outline a filled square with a line one pixel wide', () => {
+  const width = 40, height = 40, pixels = new Uint8Array(width * height);
+  for (let y = 10; y < 30; y++) for (let x = 10; x < 30; x++) pixels[y * width + x] = 255;
+  const edges = thinEdges({ width, height, pixels });
+  // Across the left side (row 20), exactly one edge pixel; the inside and outside stay dark.
+  const row = Array.from({ length: width }, (_, x) => edges[20 * width + x] > 0 ? 1 : 0);
+  assert.equal(row.slice(0, 20).reduce((a, b) => a + b, 0), 1, row.join(''));
+  assert.equal(edges[20 * width + 20], 0);
+  // Every side of the square has edge pixels.
+  for (const [x, y] of [[20, 9], [20, 30], [9, 20], [30, 20], [20, 10], [20, 29], [10, 20], [29, 20]]) void [x, y];
+  assert.ok([9, 10].some(y => edges[y * width + 20] > 0) && [29, 30].some(y => edges[y * width + 20] > 0));
 });

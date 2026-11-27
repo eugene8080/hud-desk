@@ -493,6 +493,15 @@ export function renderFontComparison(level = INK_MAX, selected = -1, nativeRow =
   return s.tiles();
 }
 
+// A page of text with only the frame: no divider and no status row (the AI Readout page; its
+// caption goes in the bottom-right corner like a picture's, Eugene 2026-11-27).
+export function renderTextPage(page: ReaderPage, font: FineFont, level = INK_MAX): number[][] {
+  const s = new Surface(font, inkByte(level));
+  s.frame();
+  drawTurnRows(s, page, TOP, 'none');
+  return s.tiles();
+}
+
 // A caption in the bottom-right corner of a picture (2026-11-27: the viewer's view and position,
 // "Zoom 2/4 · 1/3"), on a black box so it reads over any picture.
 export function captionTiles(tiles: number[][], caption: string, font: FineFont, level = INK_MAX): number[][] {
@@ -503,7 +512,8 @@ export function captionTiles(tiles: number[][], caption: string, font: FineFont,
   });
   const { width: cw, height: ch } = TABLES[font];
   const cells = Math.min(fineCells(caption), Math.floor((SCREEN.width - 8) / cw));
-  const w = cells * cw + 6, h = ch + 3, x = SCREEN.width - w, y = SCREEN.height - h;
+  // Inside the 1px frame, so a text page's border stays whole (Eugene, 2026-11-27).
+  const w = cells * cw + 6, h = ch + 3, x = SCREEN.width - FRAME - w, y = SCREEN.height - FRAME - h;
   s.rect(x, y, w, h, 0);
   s.text(caption, x + 3, y + 2, cells);
   return s.tiles();

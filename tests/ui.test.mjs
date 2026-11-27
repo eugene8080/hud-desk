@@ -3109,7 +3109,7 @@ const glassImage = (level, mean = 0.2) => {
 };
 const shownTiles = h => [0, 1, 2, 3].map(i => h.images.findLast(image => image.containerName === `fine-${i}`)?.imageData);
 
-test('images: views cycle Picture, Zoom, Outline, Read; swipe moves sections then pictures; n inverts; double-click returns', async () => {
+test('images: views cycle Original Picture, Zoom, Outline, AI Readout; swipe moves sections then pictures; n inverts; double-click returns', async () => {
   const { fixture, messages } = mailFixture();
   messages[1].images = [{ part: '2', name: 'plan.png' }, { part: '3', name: '' }];
   const asked = [];
@@ -3129,7 +3129,7 @@ test('images: views cycle Picture, Zoom, Outline, Read; swipe moves sections the
   assert.equal(at(10, 10), 0);
   await h.key('n');
   assert.equal(at(10, 10), 255);
-  assert.equal(at(575, 287), 0, 'caption box');
+  assert.equal(at(574, 286), 0, 'caption box, inside the frame line');
   // Click: Zoom. Swipes move through its three sections, then to the next picture.
   await h.tap();
   assert.deepEqual(asked.at(-1), { part: '2', view: 'zoom', region: 0 });
@@ -3138,14 +3138,18 @@ test('images: views cycle Picture, Zoom, Outline, Read; swipe moves sections the
   await h.scroll('down');
   await h.scroll('down');
   assert.deepEqual(asked.at(-1), { part: '3', view: 'zoom', region: 0 });
-  // Click: Outline, then Read (the AI's text, drawn in the pixel font).
+  // Click: Outline, then AI Readout: the AI's text in the pixel font, no divider, and
+  // "AI Readout 1/1" in the picture's bottom-right caption box.
   await h.tap();
   assert.deepEqual(asked.at(-1), { part: '3', view: 'outline', region: 0 });
   await h.tap();
   assert.deepEqual(asked.at(-1), { part: '3', view: 'read', region: 0 });
   const { textWidth, rows } = fineExports.fineLayout('terminus');
   const [page] = textExports.readerPages('Revenue 270, target 250', fineExports.fineMeasure('terminus'), textWidth, rows, Infinity);
-  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(fineExports.renderFineScreen(page, 'terminus', { left: 'Read · 2/2', right: '' }, 15, 'none')));
+  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(fineExports.captionTiles(fineExports.renderTextPage(page, 'terminus', 15), 'AI Readout 1/1', 'terminus', 15)));
+  // Click again: back to Original Picture.
+  await h.tap();
+  assert.deepEqual(asked.at(-1), { part: '3', view: 'fit', region: 0 });
   await h.back();
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'body'), 'back in the mail reader');
 });
