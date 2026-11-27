@@ -16,9 +16,10 @@ import { makeRelayIdentity, relayRouteId } from '../bridge/relay-config.mjs';
 import { createBridge } from '../bridge/server.mjs';
 import { createRelay } from '../relay/server.mjs';
 import * as wire from '../app/src/relay-wire.mjs';
+import * as bridgeOrigin from '../app/src/bridge-origin.mjs';
 
 function loadApp({ fetch, origin }) {
-  const modules = new Map([['./demo', {}], ['./relay-wire.mjs', wire]]);
+  const modules = new Map([['./demo', {}], ['./relay-wire.mjs', wire], ['./bridge-origin.mjs', bridgeOrigin]]);
   for (const name of ['relay-transport', 'api', 'pairing']) {
     const source = readFileSync(new URL(`../app/src/${name}.ts`, import.meta.url), 'utf8');
     const exports = {};

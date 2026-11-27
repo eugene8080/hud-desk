@@ -17,7 +17,7 @@ import {
   type EvenHubEvent,
 } from '@evenrealities/even_hub_sdk';
 import { api, currentBase, setApiLang, setConnection, setDemo, type ChatFeatures, type ChatItem, type GlassImage, type ImageAnswer, type ImageRequest, type ChoiceMenu, type MailAction, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
-import { parseCode, parseOrigin, resolveBase } from './pairing';
+import { parseCode, parseOrigin, resolveBase, type Pairing } from './pairing';
 import { applyPage, detectLang, getLang, setLang, t as tr } from './i18n';
 import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth, type ReaderPage } from './text';
 import { readerStatus, statusPixels, SPINNER, workingLabels } from './reader-status';
@@ -2976,6 +2976,14 @@ function diag(line: string) {
   $('diag').textContent = line;
 }
 
+function showCodeOrigin(pairing: Pairing | null) {
+  const hint = document.getElementById('pair-code-origin');
+  if (!hint) return;
+  const origin = pairing && 'origin' in pairing ? pairing.origin : undefined;
+  hint.textContent = origin ? tr('codeAddress', origin) : '';
+  hint.hidden = !origin;
+}
+
 async function connect() {
   cancelModuleSwitch();
   moduleCache.clear();
@@ -2983,6 +2991,7 @@ async function connect() {
   const typedOrigin = await bridge.getLocalStorage('bridge-origin');
   const pairing = parseCode(code);
   $('code').value = code;
+  showCodeOrigin(pairing);
   const originInput = document.getElementById('bridge-origin') as HTMLInputElement | null;
   if (originInput) originInput.value = typedOrigin;
   const t0 = Date.now();
@@ -3052,6 +3061,7 @@ function useLang(pref: string) {
   setLang(l);
   setApiLang(l);
   applyPage();
+  showCodeOrigin(parseCode($('code').value));
   showKeyFocus(); // its label is not a data-i18n text
 }
 
@@ -3269,6 +3279,7 @@ async function main() {
     if (s.kind === 'list' && s.mailPicker && typeLabelSearch(ev.key, s.mailPicker.search)) { ev.preventDefault(); return; }
     if (gmailKey(ev, s, glassEvent)) ev.preventDefault();
   });
+  $('code').addEventListener('input', () => showCodeOrigin(parseCode($('code').value)));
   $('conn').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     cancelCapture?.();

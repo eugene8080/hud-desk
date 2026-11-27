@@ -8,6 +8,10 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
+- [ ] **Windows self-host setup (2026-11-27):** one-command setup and eho3 pairing
+  implemented. See [docs/self-host.md](docs/self-host.md). Real installation on a
+  separate PC and phone pairing with a build that supports eho3 remain to be checked.
+
 - [ ] **Public relay for self-hosters (2026-11-27):** implementation and local checks in
   `docs/relay.md`. A relay host and origin remain to be chosen. A release needs the exact
   origin in the network manifest and a packaged WebView check on a phone.

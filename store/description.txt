@@ -22,7 +22,7 @@ Keyboard: Gmail-style keys everywhere, VS Code-style Ctrl+P, Ctrl+Shift+P, Ctrl+
 
 Reader: book-style pages in Native text or pixel fonts, down to Scientifica 5x11 (114 columns), with Chinese and Japanese; backgrounds (lines, dots, Tube scanlines, left bar, underline); App Brightness. English and Japanese.
 
-Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge on your PC over Tailscale; self-service setup for any PC is not offered yet. Agents, mail, chats, voice and AI run on your PC. Try the demo without a PC.
+Requires G2, the Even Realities app (iPhone untested) and the bridge on your PC over Tailscale. Windows setup takes one command. Agents, mail, chats, voice and AI run on your PC. Try the demo without a PC.
 
 Source/setup: https://github.com/eugene8080/hud-desk/tree/windows-android-codex
 Independent fork of 2ero20ne's Orca Glass under MIT.
