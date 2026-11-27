@@ -9,6 +9,12 @@ const i18nExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/i18n.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: i18nExports });
 const textExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/text.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: textExports, TextEncoder });
+const readerPageText = (...args) => textExports.readerPages(...args).map(page => page.text);
+
+test('the user-turn highlight covers wrapped and inner blank rows but not the gap before the reply', () => {
+  const [page] = textExports.readerPages('/ first line\n\n  more from the user\n\n\n> the reply', text => text.length, 200, 10, Infinity);
+  assert.deepEqual([...page.userTurns], [1, 1, 1, 0, 0, 0]);
+});
 const statusExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/reader-status.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: statusExports, require: () => i18nExports });
 const hintExports = {};
@@ -19,7 +25,8 @@ vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/usage-res
 const glyphExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/fonts/glyphs.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: glyphExports });
 const fineExports = {};
-vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/fine-text.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: fineExports, require: name => name === './i18n' ? i18nExports : glyphExports, Uint8ClampedArray });
+vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/fine-text.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: fineExports, require: name => ({ './i18n': i18nExports, './text': textExports, './fonts/glyphs': glyphExports })[name], Uint8ClampedArray });
+const renderFineText = (text, ...args) => fineExports.renderFineScreen({ text, userTurns: [] }, ...args);
 const filterExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/filters.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: filterExports, require: () => i18nExports });
 
@@ -72,7 +79,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
   const bridge = {
     updateImageRawData: async value => { images.push(value); return 'success'; },
     getLocalStorage: async key => storage.get(key) ?? (key === 'code' ? 'demo' : key === 'recording-mode' ? mode : key === 'lang' ? 'en' : key === 'view-provider' ? savedView : key === 'view-workspaces' ? savedWorkspaces : key === 'usage-reset-mode' ? savedUsage : key === 'open-thread' ? savedOpen : ''),
-    setLocalStorage: async (key, value) => { storage.set(key, value); },
+    setLocalStorage: async (key, value) => { storage.set(key, value); return true; },
     shutDownPageContainer: async () => { exited++; },
     createStartUpPageContainer: async p => { pages.push(p); return startupResult; },
     rebuildPageContainer: async p => { pages.push(p); return !(rejectAlignedMenu && p.textObject.some(c => c.containerName === 'menu-right') && (rejectAlignedMenu !== 'images' || !!p.imageObject)); },
@@ -232,6 +239,16 @@ test('Chat reader opens at the newest message start and refreshes past the last 
   assert.equal(sends.length, 0);
   await h.back();
   assert.match(container(h, 'menu-count').content, /5 unread chats/);
+});
+
+test('Shared reader page metadata carries Chat user turns across message continuations', () => {
+  const { chatReaderText } = chatModule({});
+  const { text } = chatReaderText({ messages: [
+    { own: true, from: '', date: 1, text: 'Synthetic first line.\nSecond line.' },
+    { own: false, from: 'Fixture sender', date: 2, text: 'Synthetic reply.\n/ Message text.' },
+  ] });
+  const [page] = textExports.readerPages(text, str => str.length, 60);
+  assert.deepEqual([...page.userTurns], [1, 1, 0, 0, 0]);
 });
 
 test('Chat shares Coding voice review, sends once per click, and cancels with no POST', async () => {
@@ -865,7 +882,7 @@ test('saved history is reachable in both directions without dropped or renumbere
   const text = '> Open items:\n' + Array.from({ length: 19 }, (_, i) => `  ${i + 1}. Item ${i + 1}`).join('\n') + '\n  - Group\n    1. Nested one\n    2. Nested two';
   h.api.history = async () => ({ text, source: 'claude-transcript' });
   await h.pick(2);
-  const expected = [...textExports.readerPages(text, t => textExports.glassTextWidth(t), 552, 9)];
+  const expected = [...readerPageText(text, t => textExports.glassTextWidth(t), 552, 9)];
   // A single response opens at its top (page 1); page down through the rest.
   const seen = [h.pages.at(-1).textObject[1].content];
   const pageCount = h.pages.length;
@@ -909,7 +926,7 @@ test('rapid reader swipes serialize writes and never rebuild the page or send in
 test('reader page wrapping retains every character with proportional widths and Unicode budgets', () => {
   const measure = t => [...t].reduce((n, c) => n + (c === 'W' ? 24 : 9), 0);
   const text = Array.from({ length: 19 }, (_, i) => `  ${i + 1}. WWW item ${i + 1} with wide words and punctuation; ` + '🙂'.repeat(100)).join('\n');
-  const pages = [...textExports.readerPages(text, measure)];
+  const pages = [...readerPageText(text, measure)];
   // Wrapping adds hanging-indent spaces and drops wrap-point spaces only.
   assert.equal(pages.join('').replace(/\s/g, ''), text.replace(/\s/g, ''));
   assert.ok(pages.every(page => page.split('\n').length <= 6 && new TextEncoder().encode(page).length <= 900));
@@ -1604,7 +1621,7 @@ test('native text widths use measured firmware advances so rows reach the right 
   assert.equal(textExports.glassTextWidth('[Tap & hold to input]'), 177);
   assert.equal(textExports.glassTextWidth('…', () => 9), 9);
   const prose = 'The reader now wraps every row with the measured firmware glyph widths instead of the wider browser Arial estimate, so each row runs close to the frame.';
-  const rows = textExports.readerPages(prose, t => textExports.glassTextWidth(t), 552)[0].split('\n');
+  const rows = readerPageText(prose, t => textExports.glassTextWidth(t), 552)[0].split('\n');
   assert.ok(rows.every(row => textExports.glassTextWidth(row) <= 552));
   assert.ok(textExports.glassTextWidth(rows[0]) > 500, 'first row should fill most of the 560px body');
   // Right-aligned labels keep 3px slack: a 278px line wrapped in a 280px container.
@@ -1830,16 +1847,17 @@ test('small text draws the whole screen, status row included, as four tiles and 
   const saved = [];
   h.bridge.setLocalStorage = async (key, value) => { saved.push([key, value]); };
   await h.pick(2);
-  // Fonts, including the comparison page, are one ten-row list. Terminus 6x12 is the sixth small face.
+  // Fonts and both comparisons fit in one list. Terminus 6x12 is the third small face.
   await h.menu(1101);
-  assert.deepEqual(menuItems(h), ['Native text ✓', 'Misc Fixed 9x15', 'GohuFont 8x14', 'Departure 7x14', 'Misc Fixed 6x13',
-    'Shinonome 6x12', 'Terminus 6x12', 'GohuFont 6x11', 'Scientifica 5x11', 'Compare fonts']);
+  assert.deepEqual(menuItems(h), ['Native text ✓', 'Departure 7x14', 'Misc Fixed 6x13', 'Terminus 6x12',
+    'GohuFont 6x11', 'Scientifica 5x11', 'Background: Ink 2', 'Compare fonts', 'Compare backgrounds']);
+  assert.deepEqual(Object.keys(glyphExports), ['DEPARTURE_MONO', 'TERMINUS', 'GOHU', 'SCIENTIFICA', 'FIXED', 'SHINONOME_K12']);
   const fontCursor = () => h.pages.at(-1).textObject.find(c => c.containerName === 'body').content.split('\n').findIndex(row => row.startsWith('>'));
   await h.scroll('up');
-  assert.equal(fontCursor(), 9);
+  assert.equal(fontCursor(), 8);
   await h.scroll('down');
   assert.equal(fontCursor(), 0);
-  await h.pick(6);
+  await h.pick(3);
   const page = h.pages.at(-1);
   assert.deepEqual(saved.slice(-2), [['reader-text', 'terminus'], ['reader-font', 'terminus']]);
   assert.equal(page.containerTotalNum, 5);
@@ -1854,8 +1872,8 @@ test('small text draws the whole screen, status row included, as four tiles and 
   assert.deepEqual([layout.columns, layout.rows], [95, 22]);
   // Every font on its own whole-pixel grid, filling the 574px inside the frame.
   assert.equal(JSON.stringify(Object.fromEntries(fineExports.FINE_FONTS.map(f => { const l = fineExports.fineLayout(f); return [f, [l.cell, l.line, l.columns, l.rows]]; }))),
-    JSON.stringify({ scientifica: [5, 11, 114, 24], gohu: [6, 11, 95, 24], terminus: [6, 12, 95, 22], shinonome: [6, 12, 95, 22], fixed: [6, 13, 95, 20],
-      departure: [7, 14, 82, 18], gohu14: [8, 14, 71, 18], fixed9: [9, 15, 63, 17] }));
+    JSON.stringify({ scientifica: [5, 11, 114, 24], gohu: [6, 11, 95, 24], terminus: [6, 12, 95, 22],
+      fixed: [6, 13, 95, 20], departure: [7, 14, 82, 18] }));
   // A full row is exactly `columns` cells, and one more cell wraps. The gap
   // inside the frame is shorter than one cell, so Departure 7px (82) and the
   // narrower fonts both run to the right edge.
@@ -1866,25 +1884,23 @@ test('small text draws the whole screen, status row included, as four tiles and 
     assert.ok(574 - l.textWidth < l.cell, f);
     const measure = fineExports.fineMeasure(f);
     const full = 'M'.repeat(l.columns);
-    assert.equal(textExports.readerPages(full, measure, l.textWidth, l.rows, Infinity)[0], full);
-    assert.deepEqual(textExports.readerPages(full + 'N', measure, l.textWidth, l.rows, Infinity)[0].split('\n'), [full, 'N']);
-    const row = textExports.readerPages(sentence, measure, l.textWidth, l.rows, Infinity)[0].split('\n')[0];
+    assert.equal(readerPageText(full, measure, l.textWidth, l.rows, Infinity)[0], full);
+    assert.deepEqual(readerPageText(full + 'N', measure, l.textWidth, l.rows, Infinity)[0].split('\n'), [full, 'N']);
+    const row = readerPageText(sentence, measure, l.textWidth, l.rows, Infinity)[0].split('\n')[0];
     assert.ok(l.columns - fineExports.fineCells(row) < 6, `${f} left ${l.columns - fineExports.fineCells(row)} cells`);
   }
-  // GohuFont 8x14 is an 8px cell: M's ink stays inside the cell and the next pixel is empty.
-  for (const font of ['gohu14']) {
-    const cell = fineExports.fineLayout(font);
-    const tile = fineExports.renderFineScreen('M', font, { left: '', right: '' })[0];
-    let ink = 0;
-    for (let y = 4; y < 4 + cell.line; y++) {
-      for (let x = 0; x < cell.cell; x++) if (tile[y * 288 + cell.textX + x] > 0) ink++;
-      assert.equal(tile[y * 288 + cell.textX + cell.cell], 0, font);
-    }
-    assert.ok(ink > 8, `${font} drew ${ink} pixels`);
+  // GohuFont 6x11 still draws the original cell and leaves the next cell empty.
+  const gohu = fineExports.fineLayout('gohu');
+  const tile = renderFineText('M', 'gohu', { left: '', right: '' })[0];
+  let ink = 0;
+  for (let y = 4; y < 4 + gohu.line; y++) {
+    for (let x = 0; x < gohu.cell; x++) if (tile[y * 288 + gohu.textX + x] > 0) ink++;
+    assert.equal(tile[y * 288 + gohu.textX + gohu.cell], 0);
   }
+  assert.ok(ink > 8);
   // Picking a font from the list switches to it. Leaving the list keeps the current face.
   await h.menu(1101);
-  await h.pick(3);
+  await h.pick(1);
   assert.deepEqual(saved.slice(-2), [['reader-text', 'departure'], ['reader-font', 'departure']]);
   assert.equal(h.pages.at(-1).menuObject.menuItems[0].itemName, 'Font: Departure 7x14');
   const pagesBefore = h.pages.length;
@@ -1893,14 +1909,14 @@ test('small text draws the whole screen, status row included, as four tiles and 
   assert.equal(h.pages.length, pagesBefore + 2);
   assert.equal(h.pages.at(-1).menuObject.menuItems[0].itemName, 'Font: Departure 7x14');
   await h.menu(1101);
-  await h.pick(6);
+  await h.pick(3);
   assert.deepEqual(saved.at(-1), ['reader-font', 'terminus']);
   // 50 lines at 22 rows: three pages, opening on the newest. The tiles sent are
   // exactly the rendered screen with the status row drawn in.
   const sent = () => h.images.filter(i => /^fine-/.test(i.containerName));
-  const expected = (from, pageNo) => fineExports.renderFineScreen(Array.from({ length: Math.min(22, 50 - from) }, (_, i) => `Line ${from + i}`).join(nl),
+  const expected = (from, pageNo) => renderFineText(Array.from({ length: Math.min(22, 50 - from) }, (_, i) => `Line ${from + i}`).join(nl),
     'terminus', { left: '/Status unknown', right: `[Tap&Hold for Input] Pg${pageNo}/3` });
-  // A rebuild re-sends all four tiles; the latest four are the Spleen page.
+  // A rebuild re-sends all four tiles for the Terminus page.
   assert.equal(JSON.stringify(sent().slice(-4).map(i => i.containerName)), JSON.stringify(['fine-0', 'fine-1', 'fine-2', 'fine-3']));
   assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(expected(44, 3)));
   // A page turn re-sends only tiles that changed and keeps native text untouched.
@@ -1912,7 +1928,7 @@ test('small text draws the whole screen, status row included, as four tiles and 
   for (const tile of turned) assert.equal(JSON.stringify(tile.imageData), JSON.stringify(want[Number(tile.containerName.slice(5))]));
   assert.ok(!h.upgrades.some(u => ['body', 'voice', 'hint'].includes(u.containerName)));
   // The display test replaces the tiles; the next swipe restores the page.
-  await h.menu(1101); await h.pick(9); await h.flush();
+  await h.menu(1101); await h.pick(7); await h.flush();
   assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison()));
   await h.scroll('down'); await h.flush();
   const restored = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
@@ -1937,7 +1953,7 @@ test('small text draws the whole screen, status row included, as four tiles and 
   const dimFrom = sent().length;
   await h.pick(7);
   assert.deepEqual(saved.at(-1), ['reader-ink', '8']);
-  const dim = fineExports.renderFineScreen(Array.from({ length: 22 }, (_, i) => `Line ${22 + i}`).join(nl), 'terminus', { left: '/Status unknown', right: '[Tap&Hold for Input] Pg2/3' }, 8);
+  const dim = renderFineText(Array.from({ length: 22 }, (_, i) => `Line ${22 + i}`).join(nl), 'terminus', { left: '/Status unknown', right: '[Tap&Hold for Input] Pg2/3' }, 8);
   const dimmed = sent().slice(dimFrom);
   assert.equal(dimmed.length, 4);
   for (const tile of dimmed) assert.equal(JSON.stringify(tile.imageData), JSON.stringify(dim[Number(tile.containerName.slice(5))]));
@@ -1950,6 +1966,103 @@ test('small text draws the whole screen, status row included, as four tiles and 
   assert.equal(native.textObject.find(c => c.containerName === 'body').textColor, 3);
   assert.equal(native.textObject.find(c => c.containerName === 'frame').borderColor, 8);
   assert.equal(native.textObject.find(c => c.containerName === 'hint').textColor, 3);
+});
+
+const sentFineTiles = h => h.images.filter(image => image.containerName.startsWith('fine-')).slice(-4).map(image => image.imageData);
+function tilePixel(tiles, x, y) {
+  return tiles[Math.floor(y / 144) * 2 + Math.floor(x / 288)][(y % 144) * 288 + (x % 288)];
+}
+
+test('saved removed reader modes and the saved comparison font fall back to Terminus', async () => {
+  for (const id of ['fixed9', 'gohu14', 'shinonome']) {
+    const h = await moduleHarness({ storage: { 'reader-text': id, 'reader-font': id } });
+    await h.pick(2);
+    assert.equal(h.pages.at(-1).menuObject.menuItems[0].itemName, 'Font: Terminus 6x12');
+  }
+  const h = await moduleHarness({ storage: { 'reader-text': 'native', 'reader-font': 'gohu14' } });
+  await h.pick(2);
+  const native = container(h, 'body').content;
+  await h.menu(1101);
+  await h.pick(8);
+  assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus')));
+  await h.scroll('up');
+  assert.equal(h.pages.at(-1).containerTotalNum, 7);
+  assert.equal(container(h, 'body').content, native);
+});
+
+test('user turn background follows wrapped and indented rows across pages without affecting other pixels', async () => {
+  const h = await moduleHarness({ storage: { 'reader-text': 'terminus' } });
+  const { rows, columns, line, textX, textWidth, statusY, dividerY } = fineExports.fineLayout('terminus');
+  const text = [
+    ...Array(rows - 1).fill('Earlier output'),
+    '/ ' + 'M'.repeat(columns - 2) + ' continued',
+    '  Another line from the user',
+    '> ' + 'A'.repeat(columns - 2) + ' reply continues',
+  ].join('\n');
+  h.api.thread = async () => ({ text });
+  await h.pick(2);
+  const tiles = sentFineTiles(h);
+  const right = textX + textWidth - 1;
+  for (let y = 4; y < 4 + line * 2; y++) assert.equal(tilePixel(tiles, right, y), 34);
+  const secondPage = textExports.readerPages(text, fineExports.fineMeasure('terminus'), textWidth, rows, Infinity)[1];
+  const plain = fineExports.renderFineScreen(secondPage, 'terminus',
+    { left: '/Status unknown', right: '[Tap&Hold for Input] Pg2/2' }, 15, 'none');
+  for (let y = 0; y < 288; y++) {
+    for (let x = 0; x < 576; x++) {
+      const old = tilePixel(plain, x, y);
+      const inUserBand = y >= 4 && y < 4 + line * 2 && x >= textX && x <= right;
+      assert.equal(tilePixel(tiles, x, y), inUserBand && old === 0 ? 34 : old, `pixel ${x},${y}`);
+    }
+  }
+  assert.equal(tilePixel(tiles, right, dividerY), 255);
+  assert.equal(tilePixel(tiles, 0, statusY), 255);
+  // The first user line is the final row of the preceding page.
+  const before = h.images.length;
+  await h.scroll('up');
+  const changed = new Map(h.images.slice(before).map(image => [image.containerName, image.imageData]));
+  const earlier = tiles.map((tile, i) => changed.get(`fine-${i}`) ?? tile);
+  assert.equal(tilePixel(earlier, right, 4 + (rows - 1) * line), 34);
+  assert.equal(tilePixel(earlier, right, 4 + (rows - 2) * line), 0);
+});
+
+test('background picker saves, redraws and restores, and comparison shows every ink and outline', async () => {
+  const { line, textX, textWidth } = fineExports.fineLayout('terminus');
+  const right = textX + textWidth - 1;
+  const text = '/ Check this.\n> Checked.';
+  const storage = { 'reader-text': 'terminus' };
+  const h = await moduleHarness({ storage });
+  h.api.thread = async () => ({ text });
+  await h.pick(2);
+  await h.menu(1101);
+  await h.pick(8);
+  const comparison = sentFineTiles(h);
+  for (const [i, ink] of [0, 17, 34, 51].entries()) {
+    const y = 4 + i * (3 * line + 5) + line;
+    assert.equal(tilePixel(comparison, right, y + 1), ink);
+    assert.equal(tilePixel(comparison, right, y + line + 1), 0);
+  }
+  const y = 4 + 4 * (3 * line + 5) + line;
+  assert.equal(tilePixel(comparison, right, y + 1), 34);
+  assert.equal(tilePixel(comparison, right - 1, y), 34);
+  assert.equal(tilePixel(comparison, right - 1, y + 1), 0);
+  assert.equal(tilePixel(comparison, right, y + line + 1), 0);
+  await h.scroll('down');
+  assert.equal(tilePixel(sentFineTiles(h), right, 5), 34);
+  await h.menu(1101);
+  await h.pick(6);
+  assert.deepEqual(menuItems(h), ['None', 'Ink 1', 'Ink 2 ✓', 'Ink 3', '1px frame']);
+  await h.pick(3);
+  const saved = h.storage.get('reader-turn-bg');
+  assert.equal(saved, '3');
+  assert.equal(tilePixel(sentFineTiles(h), right, 5), 51);
+  const reopened = await moduleHarness({ storage: { ...storage, 'reader-turn-bg': saved, 'reader-ink': '3' } });
+  reopened.api.thread = async () => ({ text });
+  await reopened.pick(2);
+  assert.equal(tilePixel(sentFineTiles(reopened), right, 5), 34); // capped below text ink
+  await reopened.menu(1101);
+  assert.equal(menuItems(reopened)[6], 'Background: Ink 3');
+  await reopened.pick(6);
+  assert.equal(menuItems(reopened)[3], 'Ink 3 ✓');
 });
 
 test('reader ink follows the panel steps 1 through 15', () => {
@@ -1965,8 +2078,8 @@ test('reader ink follows the panel steps 1 through 15', () => {
   assert.equal(fineExports.nativeTextColor(8), 3);
   assert.equal(fineExports.nativeTextColor(1), 1);
   assert.equal(fineExports.nativeTextColor(0), 0);
-  const full = fineExports.renderFineScreen('M', 'gohu14', { left: '', right: '' }, 15)[0];
-  const dim = fineExports.renderFineScreen('M', 'gohu14', { left: '', right: '' }, 8)[0];
+  const full = renderFineText('M', 'gohu', { left: '', right: '' }, 15)[0];
+  const dim = renderFineText('M', 'gohu', { left: '', right: '' }, 8)[0];
   let ink = 0;
   for (let i = 0; i < full.length; i++) {
     if (full[i] === 0) assert.equal(dim[i], 0);
@@ -1983,7 +2096,7 @@ test('tile modes sweep a scanner light where native text shows the Braille spinn
   assert.equal(JSON.stringify(fineExports.scannerLevels(3)), JSON.stringify([64, 112, 176, 255, 0, 0, 0, 0]));
   assert.equal(JSON.stringify(fineExports.scannerLevels(10)), JSON.stringify([0, 0, 0, 0, 255, 176, 112, 64]));
   // Two frames differ only in the bottom-left tile, where the status row starts.
-  const frame = n => fineExports.renderFineScreen('Line', 'terminus', { model: 'Opus5.5', scanner: n, left: 'Thinking...', right: 'Pg1/1' });
+  const frame = n => renderFineText('Line', 'terminus', { model: 'Opus5.5', scanner: n, left: 'Thinking...', right: 'Pg1/1' });
   const a = frame(0), b = frame(1);
   assert.equal(JSON.stringify([0, 1, 2, 3].map(i => JSON.stringify(a[i]) === JSON.stringify(b[i]))), JSON.stringify([true, true, false, true]));
 });
@@ -2024,7 +2137,7 @@ test('wrapped rows hang under the text after the / and > markers', () => {
   const nl = String.fromCharCode(10);
   const mono = t => [...t].length * 6;
   const text = ['/ blah blah blah blah blah blah', '> blah blah blah blah blah blah', '  blah blah blah blah blah blah', 'plain blah blah blah blah blah'].join(nl);
-  const rows = textExports.readerPages(text, mono, 6 * 18, 20)[0].split(nl);
+  const rows = readerPageText(text, mono, 6 * 18, 20)[0].split(nl);
   assert.deepEqual([...rows], [
     '/ blah blah blah', '  blah blah blah',
     '> blah blah blah', '  blah blah blah',
@@ -2032,14 +2145,14 @@ test('wrapped rows hang under the text after the / and > markers', () => {
     'plain blah blah', 'blah blah blah']);
   // Proportional native text: the indent is the run of spaces closest in width to '> '.
   const native = t => [...t].reduce((n, c) => n + (c === ' ' ? 5 : c === '>' ? 12 : 10), 0);
-  const second = textExports.readerPages('> ' + 'word '.repeat(20), native, 120, 20)[0].split(nl)[1];
+  const second = readerPageText('> ' + 'word '.repeat(20), native, 120, 20)[0].split(nl)[1];
   assert.match(second, /^ {3}\S/);
 });
 
 test('wrapped list items hang under the item text', () => {
   const nl = String.fromCharCode(10);
   const mono = t => [...t].length * 6;
-  const rows = textExports.readerPages(['  - blah blah blah blah blah', '> 12. blah blah blah blah blah'].join(nl), mono, 6 * 18, 20)[0].split(nl);
+  const rows = readerPageText(['  - blah blah blah blah blah', '> 12. blah blah blah blah blah'].join(nl), mono, 6 * 18, 20)[0].split(nl);
   assert.deepEqual([...rows], ['  - blah blah blah', '    blah blah', '> 12. blah blah', '      blah blah', '      blah']);
 });
 
@@ -2076,9 +2189,9 @@ test('switching the phone language to Japanese redraws glasses labels and keeps 
 test('Japanese draws from the Shinonome wide table in every small font', () => {
   // あ (U+3042) and 漢 are in the 12x12 table: two cells, real pixels, no canvas fallback.
   for (const font of fineExports.FINE_FONTS) {
-    const tiles = fineExports.renderFineScreen('あ漢', font, { left: '', right: '' });
+    const tiles = renderFineText('あ漢', font, { left: '', right: '' });
     const lit = tiles.reduce((n, tile) => n + tile.filter(v => v > 0).length, 0);
-    const blank = fineExports.renderFineScreen('', font, { left: '', right: '' }).reduce((n, tile) => n + tile.filter(v => v > 0).length, 0);
+    const blank = renderFineText('', font, { left: '', right: '' }).reduce((n, tile) => n + tile.filter(v => v > 0).length, 0);
     assert.ok(lit - blank > 40, `${font}: ${lit - blank} glyph pixels`);
   }
   assert.equal(fineExports.fineCells('日本語abc'), 9);
@@ -2088,7 +2201,7 @@ test('Japanese wraps between characters but never starts a row with closing punc
   const nl = String.fromCharCode(10);
   const cells = t => [...t].reduce((n, c) => n + (c.charCodeAt(0) > 0x2e80 ? 2 : 1), 0) * 6;
   // 'UTC の実行日…': before, the whole Japanese run moved to the next row.
-  const rows = textExports.readerPages('> 明細の日付を UTC の実行日と比べているため、翌日扱いになりました。', cells, 6 * 24, 20)[0].split(nl);
+  const rows = readerPageText('> 明細の日付を UTC の実行日と比べているため、翌日扱いになりました。', cells, 6 * 24, 20)[0].split(nl);
   assert.ok(rows.length >= 2);
   assert.ok(rows.every(row => cells(row) <= 6 * 24), rows.join('|'));
   assert.ok(cells(rows[0]) >= 6 * 22, `first row filled: ${rows[0]}`);
@@ -2096,5 +2209,5 @@ test('Japanese wraps between characters but never starts a row with closing punc
   // Every character kept: only the hanging indent and wrap-point spaces differ.
   assert.equal(rows.join('').replace(/\s/g, ''), '>明細の日付をUTCの実行日と比べているため、翌日扱いになりました。');
   // Latin words are still never split.
-  assert.deepEqual([...textExports.readerPages('alpha beta gamma', t => t.length * 6, 6 * 11, 20)[0].split(nl)], ['alpha beta', 'gamma']);
+  assert.deepEqual([...readerPageText('alpha beta gamma', t => t.length * 6, 6 * 11, 20)[0].split(nl)], ['alpha beta', 'gamma']);
 });

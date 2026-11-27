@@ -15,7 +15,7 @@ export function chatColumns(chat: ChatItem): SessionColumns {
 export function chatReaderText(conversation: ChatConversation): ReaderContent {
   const messages = [...conversation.messages].sort((a, b) => a.date - b.date).map(message => {
     const who = message.own ? '/' : `> ${line(message.from) || t('chatSender')}:`;
-    return `${who} ${message.text}`;
+    return `${who} ${message.text.replace(/\r\n?|\n/g, '\n  ')}`;
   });
   const earlier = messages.slice(0, -1).join('\n\n');
   return { text: messages.join('\n\n') || t('chatEmpty'), openingOffset: earlier ? earlier.length + 2 : 0 };

@@ -19,13 +19,13 @@ import {
 import { api, currentBase, setApiLang, setConnection, setDemo, type ChatItem, type ChoiceMenu, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
 import { parseCode, resolveBase } from './pairing';
 import { applyPage, detectLang, getLang, setLang, t as tr } from './i18n';
-import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth } from './text';
+import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth, type ReaderPage } from './text';
 import { readerStatus, statusPixels, SPINNER, workingLabels } from './reader-status';
 import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, inkByte, nativeTextColor, parseInk, type FineFont, type FineStatus } from './fine-text';
+import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, chatColumns, CHAT_NETWORKS_KEY } from './chat';
@@ -64,7 +64,7 @@ const POLL_MS = 1000;
 
 type Screen =
   | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
-  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: string[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; pattern?: boolean; pendingPattern?: boolean; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
+  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
 let current: Screen | null = null;
@@ -100,9 +100,13 @@ let releaseCapture: (() => void) | null = null;
 let viewProvider = 'all';
 // Reader text: the firmware's native font, or small text drawn as image tiles.
 type ReaderText = 'native' | FineFont;
+type Comparison = 'fonts' | 'backgrounds';
+const DEFAULT_SMALL_FONT: FineFont = 'terminus';
+const REMOVED_FONTS = ['fixed9', 'gohu14', 'shinonome'];
 let readerText: ReaderText = 'native';
 // The small font the menu offers when native text is on (last one used).
-let smallFont: FineFont = 'terminus';
+let smallFont: FineFont = DEFAULT_SMALL_FONT;
+let turnBackground: TurnBackground = DEFAULT_TURN_BACKGROUND;
 // Reader ink, panel steps 1..15. 15 is full white. 0 is not offered: it would blank the font and frame. This is not the system brightness.
 let inkLevel = 15;
 const textBrightness = () => nativeTextColor(inkLevel);
@@ -152,74 +156,64 @@ function selectThread(t: Thread | null) {
 // 8px (under one glyph) in case hardware rendering differs slightly.
 const READER_WRAP_WIDTH = 552;
 type TextScreen = Extract<Screen, { kind: 'text' }>;
-function messagePages(s: TextScreen, paginate: (text: string) => string[], transform = (text: string) => text) {
-  const start = s.openingOffset!;
-  const before = start ? paginate(transform(s.text.slice(0, start - 2))) : [];
-  s.pages = [...before, ...paginate(transform(s.text.slice(start)))];
-  s.responsePage = before.length;
-  s.pageText = s.text;
-  return s.pages;
-}
+const readerChars = (text: string) => text.replace(/\s/g, '').length; // wrapping only adds/drops spaces
+
 function readerLayout(s: TextScreen) {
-  if (s.pageText !== s.text || !s.pages || s.pagesFine !== s.fine) {
-    s.pagesFine = s.fine;
-    if (s.fine) {
-      // Monospace small text: wrap by cells; images have no native byte limit.
-      const layout = fineLayout(s.fine);
-      const measure = fineMeasure(s.fine);
-      const width = layout.textWidth, rows = layout.rows;
-      if (s.openingOffset !== undefined) return messagePages(s, text => readerPages(text, measure, width, rows, Infinity), alignMarkdownTables);
-      // Monospace: Markdown tables are padded so their columns line up.
-      const text = alignMarkdownTables(s.text);
-      const start = latestResponseStart(text);
-      const whole = readerPages(text, measure, width, rows, Infinity);
-      const chars = (text: string) => text.replace(/\s/g, '').length; // wrapping only adds/drops spaces
-      if (start < 0) { s.pages = whole; s.responsePage = undefined; }
-      else if (chars(text.slice(0, start)) >= chars(whole.slice(0, -1).join(''))) { s.pages = whole; s.responsePage = whole.length - 1; }
-      else {
-        const before = start > 0 ? readerPages(text.slice(0, start - 1), measure, width, rows, Infinity) : [];
-        s.pages = [...before, ...readerPages(text.slice(start), measure, width, rows, Infinity)];
-        s.responsePage = before.length;
-      }
-      s.pageText = s.text;
-      return s.pages;
-    }
+  if (s.pageText === s.text && s.pages && s.pagesFine === s.fine) return s.pages;
+  s.pagesFine = s.fine;
+  const transform = s.fine ? alignMarkdownTables : (text: string) => text;
+  let paginate: (text: string) => ReaderPage[];
+  if (s.fine) {
+    // Monospace small text wraps by cells, with no native byte limit.
+    const { textWidth, rows } = fineLayout(s.fine);
+    const measure = fineMeasure(s.fine);
+    paginate = text => readerPages(text, measure, textWidth, rows, Infinity);
+  } else {
     const ctx = document.createElement?.('canvas').getContext('2d');
     if (ctx) ctx.font = '21px Arial';
     // Wrap with the measured firmware font; Arial only sizes non-ASCII glyphs.
     const measure = (text: string) => glassTextWidth(text, ch => ctx ? ctx.measureText(ch).width : 21);
-    if (s.openingOffset !== undefined) return messagePages(s, text => readerPages(text, measure, READER_WRAP_WIDTH, READER_ROWS));
-    // Open on the latest response. When it already lies wholly on the last
-    // page, keep normal pages; otherwise start a fresh page at its first line
-    // so it opens at the page top. Pages keep every character except the
-    // newlines at row breaks, so non-newline counts locate the start.
-    const start = latestResponseStart(s.text);
-    const whole = readerPages(s.text, measure, READER_WRAP_WIDTH, READER_ROWS);
-    const chars = (text: string) => text.replace(/\s/g, '').length; // wrapping only adds/drops spaces
+    paginate = text => readerPages(text, measure, READER_WRAP_WIDTH, READER_ROWS);
+  }
+  if (s.openingOffset !== undefined) {
+    const start = s.openingOffset;
+    const before = start ? paginate(transform(s.text.slice(0, start - 2))) : [];
+    s.pages = [...before, ...paginate(transform(s.text.slice(start)))];
+    s.responsePage = before.length;
+  } else {
+    // Start the latest response on a fresh page if it spans more than the last page.
+    const text = transform(s.text);
+    const start = latestResponseStart(text);
+    const whole = paginate(text);
     if (start < 0) {
       s.pages = whole;
       s.responsePage = undefined;
-    } else if (chars(s.text.slice(0, start)) >= chars(whole.slice(0, -1).join(''))) {
+    } else if (readerChars(text.slice(0, start)) >= whole.slice(0, -1).reduce((count, page) => count + readerChars(page.text), 0)) {
       s.pages = whole;
       s.responsePage = whole.length - 1;
     } else {
-      const before = start > 0 ? readerPages(s.text.slice(0, start - 1), measure, READER_WRAP_WIDTH, READER_ROWS) : [];
-      s.pages = [...before, ...readerPages(s.text.slice(start), measure, READER_WRAP_WIDTH, READER_ROWS)];
+      const before = start > 0 ? paginate(text.slice(0, start - 1)) : [];
+      s.pages = [...before, ...paginate(text.slice(start))];
       s.responsePage = before.length;
     }
-    s.pageText = s.text;
   }
+  s.pageText = s.text;
   return s.pages;
 }
 
 function bodyText(s: TextScreen) {
-  const sections = s.reader ? readerLayout(s) : textSections(s.text);
+  if (!s.reader) {
+    const sections = textSections(s.text);
+    s.offset = Math.max(0, Math.min(s.offset ?? (s.tail ? sections.length - 1 : 0), sections.length - 1));
+    return sections[s.offset];
+  }
+  const sections = readerLayout(s);
   // Opening a session shows the top of the latest response once; later live
   // updates and refreshes follow the newest page.
   const tail = s.openAtResponse && s.responsePage !== undefined ? s.responsePage : sections.length - 1;
   s.openAtResponse = false;
   s.offset = Math.max(0, Math.min(s.offset ?? (s.tail ? tail : 0), sections.length - 1));
-  return sections[s.offset];
+  return sections[s.offset].text;
 }
 
 // Full-screen voice page: nine scrollable transcript rows, a divider and one
@@ -267,13 +261,6 @@ function readerHint(s: TextScreen, seconds: number | null | undefined) {
 }
 
 function flipReader(s: TextScreen, delta: number) {
-  if (s.pattern) {
-    s.pattern = false;
-    // Comparison opened over native text rebuilt the tile page; a swipe restores that page.
-    if (readerText === 'native') { void show(s); return; }
-    requestFineStatus(s);
-    return;
-  }
   const pages = readerLayout(s);
   // Swiping down past the last page resumes live updates and fetches now.
   if (delta > 0 && !s.pageWriting && (s.offset ?? 0) >= pages.length - 1) {
@@ -289,7 +276,7 @@ function flipReader(s: TextScreen, delta: number) {
       const target = s.pageTarget!;
       const next = { ...s, offset: target };
       const content = bodyText(next);
-      if (s.fine) { if (!await paintFine(s, content, target)) return; }
+      if (s.fine) { if (!await paintFine(s, target)) return; }
       else if (!await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: BODY.containerID, containerName: BODY.containerName, content }))) throw new Error(tr('pageRejected'));
       if (current !== s) return;
       s.offset = target;
@@ -371,17 +358,14 @@ async function show(s: Screen, reloadText = false) {
   clearInterval(menuPoll);
   if (s.kind === 'text' && s.reader) s.activityLabel = s.reader.statusText?.() ?? s.activityLabel ?? readerStatus('unknown');
   if (s.kind === 'text' && s.reader && !s.voice) {
-    const compare = !!s.pendingPattern;
-    s.pendingPattern = false;
-    s.fine = readerText === 'native' ? (compare ? smallFont : undefined) : readerText;
+    s.fine = readerText === 'native' ? undefined : readerText;
     s.tiles = undefined; // A rebuild clears every image container.
     s.menuActions = readerMenu();
-    s.pattern = compare;
   }
   const previous = current;
   current = s;
   const content = s.kind === 'text' ? (s.voice ? voiceBodyText(s) : bodyText(s)) : '';
-  const fine = s.kind === 'text' && !!s.reader && !!s.fine;
+  const fine = s.kind === 'text' && !!s.fine && (!!s.reader || !!s.comparison);
   const uploadText = !fine && (reloadText || (s.kind === 'text' && !!s.reader && s.text.length > 900) || new TextEncoder().encode(content).length > 999);
   const head = new TextContainerProperty({ ...HEAD, ...(s.kind === 'text' && s.usageMode ? { height: 28 } : {}), ...(s.kind === 'text' && s.reader ? { xPosition: 16, yPosition: 2, width: 544, height: 28, zOrderIndex: 1 } : {}), content: clipBytes(screenTitle(s), TEXT_BYTES), isEventCapture: 0 });
   // Firmware retains Display off, Brightness and Close alongside these actions.
@@ -462,10 +446,10 @@ async function show(s: Screen, reloadText = false) {
       if (!accepted) throw new Error(tr('textLoadFailed'));
     }
     if (s.kind === 'list' && s.module === 'coding' && !s.compat) startMenuSpinner(s);
-    if (s.kind === 'text' && s.reader) {
-      if (s.fine && !s.voice) await paintFine(s, content, s.offset ?? 0, s.pattern);
-      else if (s.reader.coding) await bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: STATUS_ICON.containerID, containerName: STATUS_ICON.containerName, imageData: statusPixels(s.activityLabel![0] === '/' ? '' : s.activityLabel![0], inkByte(inkLevel)) })).catch(e => diag((e as Error).message));
-      startReaderUpdates(s);
+    if (s.kind === 'text') {
+      if (fine && !s.voice) await paintFine(s, s.offset ?? 0);
+      else if (s.reader?.coding) await bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: STATUS_ICON.containerID, containerName: STATUS_ICON.containerName, imageData: statusPixels(s.activityLabel![0] === '/' ? '' : s.activityLabel![0], inkByte(inkLevel)) })).catch(e => diag((e as Error).message));
+      if (s.reader) startReaderUpdates(s);
     }
   } catch (e) {
     if (current === s) current = previous;
@@ -476,9 +460,11 @@ async function show(s: Screen, reloadText = false) {
 
 // Draw a small-text page and upload only the tiles that changed. Returns false
 // when the screen changed meanwhile; throws if the glasses reject a tile.
-async function paintFine(s: TextScreen, content: string, page: number, pattern = false): Promise<boolean> {
+async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boolean> {
   const t0 = Date.now();
-  const tiles = pattern ? renderFontComparison(inkLevel) : renderFineScreen(content, s.fine!, fineStatus(s, page), inkLevel);
+  const tiles = s.comparison === 'fonts' ? renderFontComparison(inkLevel)
+    : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel)
+    : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel, turnBackground);
   let sent = 0;
   for (let i = 0; i < tiles.length; i++) {
     if (current !== s) return false;
@@ -519,23 +505,21 @@ function fineStatus(s: TextScreen, page: number): FineStatus {
     : { left: s.model ? `${s.model} ${label}` : label, right };
 }
 
-// Coalesced repaint of the current small-text page (status changes, dismissing
-// the font comparison). Serialized with page turns on the reader write queue; only
+// Coalesced repaint of the current small-text page on status changes.
+// Serialized with page turns on the reader write queue; only
 // tiles whose pixels changed are sent, usually the bottom two.
 function requestFineStatus(s: TextScreen) {
   if (s.fineQueued) return;
   s.fineQueued = true;
   const run = readerWrites.then(async () => {
     s.fineQueued = false;
-    if (current !== s || !s.fine || s.pageWriting || s.pattern) return;
-    await paintFine(s, bodyText(s), s.offset ?? 0);
+    if (current !== s || !s.fine || s.pageWriting) return;
+    await paintFine(s, s.offset ?? 0);
   });
   readerWrites = run.catch(e => diag((e as Error).message));
 }
 
-// Reader long-press menu. Fonts (native, every small face, and the comparison
-// page) and App Brightness each open a ten-row list. The Font line shows the
-// face in use and opens that list.
+// Reader long-press menu. The Font list includes background settings and comparisons.
 function readerMenu() {
   const name = readerText === 'native' ? tr('nativeText') : fineLabel(readerText);
   return [
@@ -566,18 +550,40 @@ function showTextPicker(reader: TextScreen, labels: string[], selected: number, 
   return open(Math.floor(at / TEXT_PICKER_ROWS), at % TEXT_PICKER_ROWS);
 }
 
-// Native, then every small font largest first, then the comparison page.
+// Native, every small font largest first, then backgrounds and comparisons.
 function showFonts() {
   const reader = current;
   if (reader?.kind !== 'text' || !reader.reader) return;
   const fonts = [...FINE_FONTS].reverse();
-  const rows: { label: string; run: () => unknown }[] = [
+  const rows = [
     { label: tr('nativeText'), run: () => setReaderText('native', reader) },
     ...fonts.map(font => ({ label: fineLabel(font), run: () => setReaderText(font, reader) })),
-    { label: tr('compareFonts'), run: () => openComparison(reader) },
+    { label: tr('background', turnBackgroundLabel(turnBackground)), run: () => showBackgrounds(reader) },
+    { label: tr('compareFonts'), run: () => openComparison(reader, 'fonts') },
+    { label: tr('compareBackgrounds'), run: () => openComparison(reader, 'backgrounds') },
   ];
   const currentIndex = readerText === 'native' ? 0 : fonts.indexOf(readerText) + 1;
-  return showTextPicker(reader, rows.map((row, i) => i === currentIndex ? `${row.label} ✓` : row.label), currentIndex, i => rows[i].run(), true);
+  return showTextPicker(reader, rows.map((row, i) => i === currentIndex ? `${row.label} ✓` : row.label), currentIndex, i => {
+    void rows[i]?.run().catch(e => diag((e as Error).message));
+  }, true);
+}
+
+function showBackgrounds(reader: TextScreen) {
+  const selected = TURN_BACKGROUNDS.indexOf(turnBackground);
+  const labels = TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : ''));
+  let saving = false;
+  return showTextPicker(reader, labels, selected, async i => {
+    const option = TURN_BACKGROUNDS[i];
+    if (saving || !option) return;
+    const picker = current;
+    saving = true;
+    try {
+      if (!await bridge.setLocalStorage('reader-turn-bg', option)) throw new Error(tr('backgroundSaveFailed'));
+      turnBackground = option;
+      if (current === picker) await show(reader);
+    } catch (e) { diag((e as Error).message); }
+    finally { saving = false; }
+  }, true);
 }
 
 // Steps 15 down to 1, ten per page. A swipe past either end wraps to the other.
@@ -594,11 +600,10 @@ function showBrightness() {
   }, true);
 }
 
-// Paint the font comparison into the tiles. From native text this rebuilds the
-// tile page in the saved small font; the next swipe restores the reader.
-function openComparison(reader: TextScreen) {
-  reader.pendingPattern = true;
-  return show(reader);
+// Both comparisons use the reader's tiles and return to the same page on a swipe.
+function openComparison(reader: TextScreen, comparison: Comparison) {
+  const back = () => { void show(reader).catch(e => diag((e as Error).message)); };
+  return show({ kind: 'text', title: ' ', text: '', fine: reader.fine ?? smallFont, comparison, onBack: back });
 }
 
 // Switch fonts in place and keep the reader near the same text: the first
@@ -611,12 +616,11 @@ async function setReaderText(mode: ReaderText, screen: Screen | null = current) 
   if (s?.kind !== 'text' || !s.reader || s.voice) return;
   const pages = readerLayout(s);
   const atEnd = (s.offset ?? 0) >= pages.length - 1;
-  const chars = (text: string) => text.replace(/\s/g, '').length; // wrapping only adds/drops spaces
-  const before = chars(pages.slice(0, s.offset ?? 0).join(''));
+  const before = pages.slice(0, s.offset ?? 0).reduce((count, page) => count + readerChars(page.text), 0);
   s.fine = mode === 'native' ? undefined : mode;
   const next = readerLayout(s);
   let index = 0, seen = 0;
-  while (index < next.length - 1 && seen + chars(next[index]) <= before) seen += chars(next[index++]);
+  while (index < next.length - 1 && seen + readerChars(next[index].text) <= before) seen += readerChars(next[index++].text);
   s.offset = atEnd ? next.length - 1 : index;
   s.openAtResponse = false;
   await show(s);
@@ -634,7 +638,7 @@ async function updateText(title: string, text: string, openingOffset?: number) {
       if (!await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: HEAD.containerID, containerName: HEAD.containerName, content: clipBytes(screenTitle(next), TEXT_BYTES) }))) throw new Error('Glasses rejected the title update.');
     }
     if (current !== screen || (screen.reader && screen.reading)) return;
-    if (screen.fine) { if (!await paintFine(screen, content, next.offset ?? 0)) return; }
+    if (screen.fine) { if (!await paintFine(screen, next.offset ?? 0, next)) return; }
     else if (!await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: BODY.containerID, containerName: BODY.containerName, content }))) throw new Error('Glasses rejected the live text update. Retrying.');
     if (current === screen && !(screen.reader && screen.reading)) {
       Object.assign(screen, { title, text, openingOffset: next.openingOffset, offset: next.offset,
@@ -1722,7 +1726,8 @@ function onEvent(e: EvenHubEvent) {
     return;
   }
   if (s.kind === 'text' && (type === OsEventTypeList.SCROLL_TOP_EVENT || type === OsEventTypeList.SCROLL_BOTTOM_EVENT)) {
-    if (s.reader) flipReader(s, type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
+    if (s.comparison) s.onBack?.();
+    else if (s.reader) flipReader(s, type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
     else s.reading = true;
     return;
   }
@@ -1869,8 +1874,10 @@ async function main() {
   viewProvider = (await bridge.getLocalStorage('view-provider')) || 'all';
   const savedText = await bridge.getLocalStorage('reader-text');
   if (FINE_FONTS.includes(savedText as FineFont)) readerText = savedText as FineFont;
+  else if (REMOVED_FONTS.includes(savedText)) readerText = DEFAULT_SMALL_FONT;
   const savedFont = await bridge.getLocalStorage('reader-font');
-  smallFont = FINE_FONTS.includes(savedFont as FineFont) ? savedFont as FineFont : readerText === 'native' ? 'terminus' : readerText;
+  smallFont = FINE_FONTS.includes(savedFont as FineFont) ? savedFont as FineFont : readerText === 'native' ? DEFAULT_SMALL_FONT : readerText;
+  turnBackground = parseTurnBackground(await bridge.getLocalStorage('reader-turn-bg'));
   inkLevel = parseInk(await bridge.getLocalStorage('reader-ink'));
   const resetMode = await bridge.getLocalStorage('usage-reset-mode');
   if (RESET_MODES.includes(resetMode as ResetMode)) usageResetMode = resetMode as ResetMode;

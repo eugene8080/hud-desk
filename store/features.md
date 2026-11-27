@@ -1,12 +1,15 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-26. Current beta: **1.0.62**. Public: **1.0.36**.
+Updated: 2026-11-26. Current beta: **1.0.63**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.63,
+  updated 2026-11-26). It is the agent's translation; a native review is still pending.
+  Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
   characters (`npm run beta:update` refuses longer text).
 
@@ -14,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.62)
+## Feature list (beta 1.0.63)
 
 ### All modules
 
@@ -24,11 +27,15 @@ Rule for every agent: each beta release updates this file in the release commit:
   refreshes in place.
 - Phone page (in the Even app): the same module switch, linked both ways with row 0.
 - Reader shared by every module: nine text rows, whole-page swipes with `Pg X/Y` in the status row,
-  hanging indents on wrapped lines, one Font list (Native text and pixel fonts: Misc Fixed 9x15,
-  GohuFont 8x14, Departure 7x14, Misc Fixed 6x13, Shinonome 6x12, Terminus 6x12, GohuFont 6x11,
-  Scientifica 5x11; Compare fonts screen), App Brightness 15 down to 1. Both lists wrap at the ends.
+  hanging indents on wrapped lines, one Font list (Native text and pixel fonts: Departure 7x14,
+  Misc Fixed 6x13, Terminus 6x12, GohuFont 6x11, Scientifica 5x11; Compare fonts screen), App
+  Brightness 15 down to 1. Both lists wrap at the ends.
+- With a pixel font, the user's turns sit on a light background (Background: None, Ink 1-3 or a
+  1px frame; default Ink 2) so they stand out; a Compare backgrounds screen shows every option.
+  Native text has no background option in the SDK.
 - Keeps loading with the phone screen off.
-- English and Japanese (switch in the phone app); Shinonome covers Japanese in small text.
+- English and Japanese (switch in the phone app); Japanese in small text uses Shinonome 12x12
+  glyphs in every pixel font.
 - Bridge on Windows; macOS bridge scripts exist but are not verified on a real Mac.
 
 ### Coding (Orca and Hermes agents)
@@ -48,8 +55,8 @@ Rule for every agent: each beta release updates this file in the release commit:
 ### Email (Gmail; only when the bridge has a mail set-up)
 
 - Read-only: no sending, drafts, archive or label changes. Opening a thread marks it read in Gmail.
-- List of eight threads a page, newest first, sender and subject, time today or date, unread marker,
-  unread count on row 0.
+- List of eight threads a page, newest first, sender and subject, time today or date, `/` for unread
+  and `--` for read in the gutter, unread count on row 0.
 - Several Gmail accounts. Filter by email address on the
   phone page and in the glasses label picker (the address row is a checkbox); with two mailboxes
   on, each row shows the account letter (`[W] 14:05`). A newly added mailbox starts with its Inbox.
@@ -79,9 +86,9 @@ Coding:
 
 Email (Gmail, when your bridge is set up for it):
 - Read only: no sending, drafts or archive. Opening a thread marks it read.
-- One or more Gmail accounts. Filter by email address and Filter by Label on the glasses or the phone, with voice search on the glasses. Eight threads a page, unread markers. Threads open at the newest message with quoted history removed and plain text reflowed.
+- One or more Gmail accounts. Filter by email address and Filter by Label on the glasses or the phone, with voice search on the glasses. Eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
 
-Reader for both: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Misc Fixed, GohuFont, Departure, Shinonome, Terminus, Scientifica), App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
+Reader for both: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica), your turns on a light background, App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
 
 Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge. The packaged connection targets a configured private PC over Tailscale; self-service setup for any PC is not offered yet. Agents and mail access run on your PC, not the glasses. Try the demo without a PC.
 
@@ -93,5 +100,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.62: Row 0 shows the module as a button: [Coding] or [Email]. Email takes more than one Gmail account: Filter by email address on the phone and in the glasses label picker, the mailbox address over each account's labels, and an account letter on each thread row when two mailboxes are on.
+1.0.63: In the reader, your turns sit on a light background with a pixel font; Compare backgrounds in the Font list shows the options (None, Ink 1-3, 1px frame) and Background: saves your choice. Email marks unread threads / and read threads --. Removed fonts: Misc Fixed 9x15, GohuFont 8x14 and Shinonome 6x12 (Japanese still shows in every small font).
 <!-- whatsnew:end -->

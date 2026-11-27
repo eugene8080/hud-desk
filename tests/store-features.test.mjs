@@ -20,6 +20,14 @@ test('store description block matches store/description.txt and fits the portal 
   assert(length(description) <= 2000, `description is ${length(description)} characters`);
 });
 
+test('the Japanese store description fits the portal limit and keeps the source links', () => {
+  const ja = read('store/description.ja.txt');
+  assert(length(ja.trimEnd()) <= 2000, `Japanese description is ${length(ja.trimEnd())} characters`);
+  for (const line of read('store/description.txt').split('\n').filter(line => /^(?:Source\/setup|Original): /.test(line))) {
+    assert(ja.includes(line), `Japanese description keeps "${line}"`);
+  }
+});
+
 test('what is new block fits the beta changelog limit and names the current version', () => {
   const features = read('store/features.md');
   const whatsNew = block(features, 'whatsnew');

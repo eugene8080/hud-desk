@@ -1,14 +1,19 @@
 # Orca Glass TODOs
 Updated: 2026-11-26
 
-Current beta: **1.0.62** ([Coding]/[Email] row 0; Filter by email address; personal account). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
+Current beta: **1.0.63** (user-turn backgrounds; three fonts removed; Email / and -- marks). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
 Workspace-filter preview approved, released and retired with merged worktree cleanup.
 Future visual changes require preview approval before beta upload.
 Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
-- [ ] **Super app: Coding, Email, Chat, Reader in one app -- 1.0.62 (E2); consent + restart pending:**
+- [ ] **Super app: Coding, Email, Chat, Reader in one app -- 1.0.62 E2 live; Chat in progress:**
+  2026-11-26 beta 1.0.63: pick a reader Background on G2 (Compare backgrounds), then remove the
+  other options. Consent done, bridge restarted (supervisor 43672, server 52048); both mailboxes read
+  live. G2 check of 1.0.62 pending. Workers: reader highlight + font removal, Chat (Beeper token
+  from Eugene needed), global Cursor tab names (pc-settings). Open question from Eugene: Email when
+  PSCAP11 is off (options in the 2026-11-26 reply; no decision yet).
   2026-11-26 Eugene: voice works on G2 (1.0.61). Beta 1.0.62: [Coding]/[Email] row 0, address
   headings, Filter by email address (phone + glasses picker), account letters. Personal account in
   config; waits on Eugene's consent (scripts/mail-auth.mjs --account personal) and a bridge restart
