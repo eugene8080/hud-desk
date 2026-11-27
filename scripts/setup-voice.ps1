@@ -1,7 +1,7 @@
 # Install the upstream whisper.cpp engine locally, without changing PATH.
 param([switch]$Multilingual)
 $ErrorActionPreference = 'Stop'
-if (-not $IsWindows -or [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') {
+if ([Environment]::OSVersion.Platform -ne 'Win32NT' -or [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') {
     throw 'This installer requires Windows x64.'
 }
 $voiceDir = Join-Path $PSScriptRoot '../.local/voice'

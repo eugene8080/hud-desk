@@ -53,7 +53,8 @@ const en = {
   codeLabel: 'Pairing code (run <code>npm run pair</code> on your PC and paste)',
   langLabel: 'Language',
   save: 'Save and reconnect',
-  addressLabel: 'Bridge address (optional; blank uses the built-in address)',
+  addressLabel: 'Bridge address (optional override)',
+  codeAddress: 'Address in pairing code: {0}',
   badAddress: 'Bridge address must be https://name or https://name:port, with no path.',
   diagLabel: 'Status',
   tryDemo: 'Try the demo (no PC needed)',
@@ -323,7 +324,8 @@ const ja: Record<Key, string> = {
   codeLabel: '接続コード(PC で <code>npm run pair</code> を実行して貼り付け)', // upstream (Mac -> PC)
   langLabel: '言語', // upstream
   save: '保存して再接続', // upstream
-  addressLabel: 'ブリッジのアドレス(任意。空欄なら組み込みのアドレス)',
+  addressLabel: 'ブリッジのアドレス(任意で上書き)',
+  codeAddress: '接続コードのアドレス: {0}',
   badAddress: 'ブリッジのアドレスは https://名前 または https://名前:ポート で、パスは付けません。',
   diagLabel: '状態',
   tryDemo: 'デモを試す(PC なし)', // upstream (Mac -> PC)

@@ -73,7 +73,8 @@
         <div id="conn-body" hidden>
           <form id="conn">
             <label data-i18n="codeLabel"></label>
-            <input id="code" placeholder="Pairing code" autocomplete="off" />
+            <input id="code" placeholder="Pairing code" autocomplete="off" aria-describedby="pair-code-origin" />
+            <p id="pair-code-origin" class="muted" role="status" style="overflow-wrap:anywhere" hidden></p>
             <label data-i18n="addressLabel"></label>
             <input id="bridge-origin" placeholder="https://your-pc.your-tailnet.ts.net:8443" autocomplete="off" inputmode="url" />
             <button type="submit" data-i18n="save"></button>

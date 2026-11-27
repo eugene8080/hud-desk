@@ -8,9 +8,13 @@ This is Eugene's Windows/Android fork of [2ero20ne's Orca Glass](https://github.
 
 ## Availability
 
-As of 2026-11-27 the Even Hub **public build is 1.0.36** (Coding only) and the **beta is 1.0.91**. Email, Chat, pictures and the keyboard need the beta. The installed build connects to one configured PC over Tailscale; self-service setup for any PC is not offered yet. Orca and the companion bridge must keep running on the PC.
+As of 2026-11-27 the Even Hub **public build is 1.0.36** (Coding only) and the **beta is 1.0.93**. Email, Chat, pictures and the keyboard need the beta.
 
 See [current work](TODOS.md), [beta setup and release history](docs/beta-install.md) and the [feature list](store/features.md).
+
+## Set up on your PC
+
+Run the one-command Windows setup, then paste the pairing code into HUD Desk on your phone. The bridge runs on your PC and connects through your private Tailscale network. Use a phone build that supports address-carrying pairing codes. [Self-host setup](docs/self-host.md)
 
 ## Features
 

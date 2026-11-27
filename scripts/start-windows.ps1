@@ -1,4 +1,6 @@
 # Hidden Task Scheduler entrypoint; keep logs outside source control.
+param([string]$NodePath)
+
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $localDirectory = Join-Path $repoRoot '.local'
@@ -15,12 +17,12 @@ try {
         Add-Content (Join-Path $localDirectory 'startup.log') "$(Get-Date -Format o) Port8787 already occupied; startup skipped."
         exit 0
     }
-    $nodePath = (Get-Command node.exe -ErrorAction Stop).Source
+    if (-not $NodePath) { $NodePath = (Get-Command node.exe -ErrorAction Stop).Source }
     Set-Location -LiteralPath $repoRoot
     $env:HOST = '127.0.0.1'
     $env:PORT = '8787'
     Add-Content (Join-Path $localDirectory 'startup.log') "$(Get-Date -Format o) Starting Orca Glass."
-    $process = Start-Process -FilePath $nodePath -ArgumentList 'scripts/start.mjs' `
+    $process = Start-Process -FilePath $NodePath -ArgumentList 'scripts/start.mjs' `
         -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput (Join-Path $localDirectory 'custom-output.log') `
         -RedirectStandardError (Join-Path $localDirectory 'custom-error.log')

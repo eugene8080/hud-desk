@@ -96,9 +96,9 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     '@evenrealities/even_hub_sdk': sdk,
     './api': { api, setDemo() {}, setApiLang() {}, setConnection() {}, currentBase: () => '' },
     // options.paired: run as a paired (non-demo) app; the stored code must then be 'eho1.fixture.code'.
-    './pairing': options.paired
+    './pairing': options.pairing ?? (options.paired
       ? { parseCode: code => code === 'eho1.fixture.code' ? { topic: 'fixture', token: 'code' } : null, resolveBase: async () => 'https://bridge.fixture.test' }
-      : { parseCode: () => null },
+      : { parseCode: () => null }),
     // Real dictionary; the page-filling DOM step is a no-op without a document.
     './i18n': { ...i18nExports, applyPage() {} },
     './text': textExports,
@@ -159,6 +159,23 @@ const voiceHint = h => {
 };
 
 const moduleHarness = options => harness(15, false, 'tap', '', 0, false, '', '', '', options);
+
+test('pasting an address-carrying code shows a read-only hint and keeps the manual override', async () => {
+  const origin = 'https://pc.fixture.test:8444';
+  const pairing = { parseCode: code => code === 'eho3.address.token' ? { topic: '', token: 'token', origin } : null };
+  const h = await moduleHarness({ pairing, storage: { 'bridge-origin': 'https://override.fixture.test' } });
+  const input = h.elements.get('code');
+  const hint = h.elements.get('pair-code-origin');
+  assert.equal(hint.hidden, true);
+  input.value = 'eho3.address.token';
+  input.listeners.input();
+  assert.equal(hint.hidden, false);
+  assert.match(hint.textContent, /https:\/\/pc\.fixture\.test:8444/);
+  assert.equal(h.elements.get('bridge-origin').value, 'https://override.fixture.test');
+  input.value = '';
+  input.listeners.input();
+  assert.equal(hint.hidden, true);
+});
 // What the glasses show in a container: the latest page's text, or a newer in-place update of it
 // (Email fills its rows in place after the loading screen).
 const pageMarks = new WeakMap();

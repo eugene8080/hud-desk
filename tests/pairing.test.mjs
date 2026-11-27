@@ -3,13 +3,18 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import ts from '../app/node_modules/typescript/lib/typescript.js';
+import * as bridgeOrigin from '../app/src/bridge-origin.mjs';
+import { pairingCode, printPairingCode } from '../scripts/pair.mjs';
 
 function pairing(origin, fetch, relayOrigin = '') {
   const exports = {};
   const source = ts.transpileModule(readFileSync(new URL('../app/src/pairing.ts', import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  vm.runInNewContext(source, { exports, __BRIDGE_ORIGIN__: origin, __RELAY_ORIGIN__: relayOrigin, fetch, require: () => ({}) });
+  vm.runInNewContext(source, {
+    exports, __BRIDGE_ORIGIN__: origin, __RELAY_ORIGIN__: relayOrigin, fetch, atob, btoa,
+    require: name => name === './bridge-origin.mjs' ? bridgeOrigin : undefined,
+  });
   return exports;
 }
 const noNetwork = () => { throw new Error('Unexpected network request'); };
@@ -60,4 +65,56 @@ test('a typed bridge address must be a bare HTTPS origin and wins over the build
   assert.equal(await api.resolveBase(direct, 'https://their-pc.tail1234.ts.net:8443'), 'https://their-pc.tail1234.ts.net:8443');
   assert.equal(await api.resolveBase(direct, 'not an address'), 'https://pc.example:8443');
   assert.equal(await api.resolveBase(direct, ''), 'https://pc.example:8443');
+});
+
+const fixtureSecrets = { getTopic: () => 'fixture', getToken: () => 'secret_1' };
+const publicOrigin = 'https://pc.tailnet.ts.net:8444';
+
+test('eho3 round-trips a canonical HTTPS origin and respects the address precedence', async () => {
+  const buildOrigin = 'https://build.example:8443';
+  const app = pairing(buildOrigin, noNetwork);
+  const code = pairingCode({ ...fixtureSecrets, publicOrigin: ' https://PC.Tailnet.ts.net:8444/ ' });
+  const direct = app.parseCode(code);
+  assert.deepEqual({ ...direct }, { topic: '', token: 'secret_1', origin: publicOrigin });
+  assert.equal(await app.resolveBase(direct), publicOrigin);
+  assert.equal(await app.resolveBase(direct, 'https://typed.example:10000'), 'https://typed.example:10000');
+  assert.equal(await app.resolveBase(direct, 'invalid address'), publicOrigin);
+  assert.equal(await app.resolveBase(app.parseCode('eho1.fixture.secret_1')), buildOrigin);
+});
+
+test('eho3 rejects invalid addresses and malformed base64url', () => {
+  const app = pairing('', noNetwork);
+  for (const origin of ['http://pc.example', 'https://pc.example/path', 'https://localhost', 'https://pc.example:0',
+    'https://pc.example#fragment', 'https://user@pc.example', 'https://pc.example:65536']) {
+    assert.equal(app.parseCode(`eho3.${Buffer.from(origin).toString('base64url')}.token`), null, origin);
+    assert.throws(() => pairingCode({ ...fixtureSecrets, publicOrigin, origin }), /--origin requires/);
+  }
+  assert.equal(app.parseCode('eho3.a.token'), null);
+  // The last character may differ in pad bits only, which forgiving decoders ignore.
+  const canonical = Buffer.from('https://a.b').toString('base64url');
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const noncanonical = canonical.slice(0, -1) + alphabet[alphabet.indexOf(canonical.at(-1)) + 1];
+  assert.equal(app.parseCode(`eho3.${canonical}.token`).origin, 'https://a.b');
+  assert.equal(app.parseCode(`eho3.${noncanonical}.token`), null);
+  const code = pairingCode({ ...fixtureSecrets, publicOrigin, origin: 'https://override.example:443' });
+  assert.equal(app.parseCode(code).origin, 'https://override.example');
+});
+
+test('pair prints and copies the same code with and without publicOrigin', () => {
+  for (const address of [undefined, 'http://invalid.example', publicOrigin]) {
+    const code = pairingCode({ ...fixtureSecrets, publicOrigin: address });
+    assert.equal(code, address === publicOrigin
+      ? `eho3.${Buffer.from(publicOrigin).toString('base64url')}.secret_1`
+      : 'eho1.fixture.secret_1');
+    const lines = [], clipboard = [];
+    printPairingCode(code, { print: line => lines.push(line), copy: value => clipboard.push(value) });
+    assert(lines.includes(code));
+    assert.deepEqual(clipboard, [code]);
+  }
+});
+
+test('a configured relay remains the fallback when there is no direct address', () => {
+  const relay = { getRelayCode: () => 'eho2.route.key' };
+  assert.equal(pairingCode({ ...fixtureSecrets, ...relay }), 'eho2.route.key');
+  assert.match(pairingCode({ ...fixtureSecrets, ...relay, publicOrigin }), /^eho3\./);
 });
