@@ -56,6 +56,15 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-26 Cursor tab names are global now (Eugene: "meant to be a global setting, not for this repo").
+pc-settings dace6b8 (Codex worker ctx_f9d7691874ce, fast-forwarded to origin/main): user-level Cursor
+beforeSubmitPrompt hook ~/.cursor/hooks/pc-settings-orca-title.py, installed and live-verified on
+new scratch Cursor sessions; Orca's own hook entries kept. Guide: pc-settings
+guides/orca-cursor-tab-titles.md. Orca-restart survival not yet observed (worker kept the desktop
+running). The uncommitted orca-glass prototype (cursor-title.mjs, nameCursorTabs, Cursor-ready
+title retention) was removed from this checkout; a copy is in .local/cursor-title-prototype.patch
+(+ the two .mjs files). The running bridge keeps the prototype in memory until its next restart.
+
 2026-11-26 beta 1.0.63: reader worker efc03a6 (merged 33c9166) highlights user turns in pixel-font
 modes (Background: None/Ink 1/2/3/1px frame, default Ink 2, pref reader-turn-bg; Compare
 backgrounds screen); native text unchanged (SDK 0.0.16 has no text background). Removed Misc Fixed
