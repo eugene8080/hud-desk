@@ -6,7 +6,9 @@ Orca, the Even Realities Android app, and G2 glasses.
 
 ## Explicit user constraint
 
-New agent launches remain Codex-only.2026-11-04 Eugene authorizes reading his
+Agent choice: the Codex-only rule for new agent launches is CANCELLED (Eugene, 2026-11-27: "that
+was just worth for before when I was running out of Claude usage"; "use whichever model is
+appropriate"). Pick the agent and model per task. 2026-11-04 Eugene authorizes reading his
 existing Claude sessions and user-initiated G2 numbered/voice input. Do not
 autonomously prompt, launch or submit live Claude choices for tests. Use synthetic
 fixtures for interaction tests. Historical upstream code grants no broader scope.
@@ -55,6 +57,15 @@ with GitHub/Discord open. Confirm the dedicated profile from fresh browser inven
 do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
+
+2026-11-27 growth steps dispatched (Eugene: "start step 1", then one worker per step in its own
+worktree; see docs/growth-options.md). Run run_b1377f132b90, Codex workers in child worktrees under
+C:/Users/eugen/orca/workspaces/orca-glass/: relay (step 1: relay at one fixed origin + end-to-end
+encryption + pairing v2, because Even's whitelist takes full origins only, no wildcards;
+dispatch ctx_bd8cc41e35d7), local-agents (step 2: plain Claude Code / Codex sessions without Orca;
+ctx_2ba72376710a), mail-imap (step 3: IMAP/SMTP provider + bring-your-own Google project;
+ctx_2737e645d94a). Workers may not restart the bridge, upload betas, deploy, or send real
+messages/emails/prompts; the coordinator merges. Relay hosting/domain is Eugene's decision (open).
 
 2026-11-27 beta 1.0.91 (Eugene: "do all the not done things", Usage bars as drawing code, swap the
 kettle for the fractal, restart the bridge). Usage page is a drawn tile page (renderUsagePage in
