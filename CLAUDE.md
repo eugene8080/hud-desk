@@ -58,6 +58,15 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 Eugene: "close the worker worktrees. go ahead and update evenhub and submit the latest
+version for review". Worktrees relay, local-agents, mail-imap, setup-win, setup-mac removed with
+their local branches (worker terminals closed; local-agents' leftover empty folder pruned by hand;
+origin branches kept; main node_modules intact). Even Hub: the 1.0.93 review had been withdrawn
+(build shows Private); description updated to store/description.txt (1,993 chars: Orca optional,
+Windows PC or Mac, IMAP, Tailscale on the phone, one-command setup); v1.0.94 selected and SUBMITTED
+for review (Nov 27 4:23 PM portal time, "In review / Awaiting review"). Screenshots, name, tagline,
+icon unchanged. The setup is still untested on a second machine and on a real Mac.
+
 2026-11-27 beta 1.0.94: self-host setup merged. setup-mac eebc64d (merge f559ee9: scripts/setup-macos.sh,
 docs/self-host-macos.md, LaunchAgent gets Node's absolute path) and setup-win 0d71631 (merge: eho3
 pairing code = base64url(publicOrigin) + token, address precedence typed > code > build;
