@@ -7,6 +7,9 @@ Open this file when you update a release in Even Hub:
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
+- **Japanese description:** `store/description.ja.txt` (1,143 characters; matches the English text of
+  beta 1.0.62, updated 2026-11-26). It is the agent's translation; a native review is still pending.
+  Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
   characters (`npm run beta:update` refuses longer text).
 
