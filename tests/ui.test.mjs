@@ -81,8 +81,8 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     getLocalStorage: async key => storage.get(key) ?? (key === 'code' ? 'demo' : key === 'recording-mode' ? mode : key === 'lang' ? 'en' : key === 'view-provider' ? savedView : key === 'view-workspaces' ? savedWorkspaces : key === 'usage-reset-mode' ? savedUsage : key === 'open-thread' ? savedOpen : ''),
     setLocalStorage: async (key, value) => { storage.set(key, value); return true; },
     shutDownPageContainer: async () => { exited++; },
-    createStartUpPageContainer: async p => { pages.push(p); return startupResult; },
-    rebuildPageContainer: async p => { pages.push(p); return !(rejectAlignedMenu && p.textObject.some(c => c.containerName === 'menu-right') && (rejectAlignedMenu !== 'images' || !!p.imageObject)); },
+    createStartUpPageContainer: async p => { pages.push(p); pageMarks.set(p, upgrades.length); return startupResult; },
+    rebuildPageContainer: async p => { pages.push(p); pageMarks.set(p, upgrades.length); return !(rejectAlignedMenu && p.textObject.some(c => c.containerName === 'menu-right') && (rejectAlignedMenu !== 'images' || !!p.imageObject)); },
     textContainerUpgrade: async value => { upgrades.push(value); return true; },
     onEvenHubEvent: fn => { event = fn; },
     audioControl: async on => { mic.push(on); return true; },
@@ -138,7 +138,15 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
 const voiceBody = h => h.upgrades.findLast(u => u.containerName === 'voice-body')?.content;
 
 const moduleHarness = options => harness(15, false, 'tap', '', 0, false, '', '', '', options);
-const container = (h, name) => h.pages.at(-1).textObject.find(c => c.containerName === name);
+// What the glasses show in a container: the latest page's text, or a newer in-place update of it
+// (Email fills its rows in place after the loading screen).
+const pageMarks = new WeakMap();
+const container = (h, name) => {
+  const page = h.pages.at(-1);
+  const base = page.textObject.find(c => c.containerName === name);
+  const update = h.upgrades.slice(pageMarks.get(page) ?? 0).findLast(u => u.containerName === name);
+  return base && update && update.content !== undefined ? { ...base, content: update.content } : base;
+};
 const mailFixture = () => {
   const date = new Date(2026, 10, 25, 14, 5).getTime();
   const item = { account: 'work', id: 'news-1', from: 'Test Desk', subject: 'Field survey', date, unread: true, count: 2 };
@@ -386,7 +394,7 @@ test('a cached module paints before its delayed refresh and applies new rows wit
   assert.match(container(h, 'body').content, /All workspaces/);
 });
 
-test('An Email page the bridge marks loading is read again and redrawn in place', async () => {
+test('Email opens on a moving-dot loading screen, then fills an incomplete page in place', async () => {
   const { fixture, requests } = mailFixture();
   const full = fixture.threads;
   let calls = 0;
@@ -396,15 +404,36 @@ test('An Email page the bridge marks loading is read again and redrawn in place'
     return ++calls === 1 ? { ...result, items: result.items.slice(0, 1), loading: true } : { ...result, loading: false };
   };
   const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] }, storage: { module: 'email' }, mail: fixture });
-  const rows = () => container(h, 'body').content.split('\n').length;
-  assert.equal(rows(), 2);
+  // The first page drawn is the loading screen: Filter, then a busy row with no thread yet.
+  const loadingPage = h.pages.at(-1);
+  assert.match(loadingPage.textObject.find(c => c.containerName === 'body').content, /Loading email…/);
+  assert.equal(loadingPage.textObject.find(c => c.containerName === 'menu-count').content.trim(), '');
+  // Its rows were then rewritten in place: one thread and a 'Loading more' row with the dot.
+  const rows = () => container(h, 'body').content.split('\n');
+  assert.equal(rows().length, 3);
+  assert.match(rows()[2], /Loading more…/);
+  const dots = [...h.timers.values()];
+  assert.equal(dots.length, 1);
+  dots[0](); await h.flush();
+  assert.match(container(h, 'menu-cursor').content.split('\n')[3], /·/);
   const pagesBefore = h.pages.length;
   assert.deepEqual([...h.timeouts.values()].map(t => t.delay), [1500]);
   await h.debounce(); await h.flush();
   assert.equal(requests.length, 2);
   assert.equal(h.pages.length, pagesBefore); // rows rewritten in place, no page rebuild
-  assert.equal(h.upgrades.findLast(u => u.containerName === 'body').content.split('\n').length, 9);
+  assert.equal(rows().length, 9);
+  assert.doesNotMatch(container(h, 'body').content, /Loading/);
+  assert.equal(h.timers.size, 0); // the dot stops with the last busy row
   assert.equal(h.timeouts.size, 0); // complete: no further reads
+});
+
+test('a failed first Email load replaces the loading row with Email unavailable', async () => {
+  const { fixture } = mailFixture();
+  fixture.threads = async () => { throw new Error('offline'); };
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] }, storage: { module: 'email' }, mail: fixture });
+  assert.match(container(h, 'body').content, /Email unavailable/);
+  assert.doesNotMatch(container(h, 'body').content, /Loading/);
+  assert.equal(h.timers.size, 0);
 });
 
 test('Email rows mark unread with / and read with -, and both fit the cursor gutter', () => {
@@ -1868,14 +1897,14 @@ test('small text draws the whole screen, status row included, as four tiles and 
   const saved = [];
   h.bridge.setLocalStorage = async (key, value) => { saved.push([key, value]); };
   await h.pick(2);
-  // Fonts and both comparisons fit in one list. Terminus 6x12 is the third small face.
+  // Fonts and the comparison fit in one list. Terminus 6x12 is the third small face.
   await h.menu(1101);
   assert.deepEqual(menuItems(h), ['Native text ✓', 'Departure 7x14', 'Misc Fixed 6x13', 'Terminus 6x12',
-    'GohuFont 6x11', 'Scientifica 5x11', 'Background: Ink 1', 'Compare fonts', 'Compare backgrounds']);
+    'GohuFont 6x11', 'Scientifica 5x11', 'Compare fonts']);
   assert.deepEqual(Object.keys(glyphExports), ['DEPARTURE_MONO', 'TERMINUS', 'GOHU', 'SCIENTIFICA', 'FIXED', 'SHINONOME_K12']);
   const fontCursor = () => h.pages.at(-1).textObject.find(c => c.containerName === 'body').content.split('\n').findIndex(row => row.startsWith('>'));
   await h.scroll('up');
-  assert.equal(fontCursor(), 8);
+  assert.equal(fontCursor(), 6); // wraps to the last row, Compare fonts
   await h.scroll('down');
   assert.equal(fontCursor(), 0);
   await h.pick(3);
@@ -1949,7 +1978,7 @@ test('small text draws the whole screen, status row included, as four tiles and 
   for (const tile of turned) assert.equal(JSON.stringify(tile.imageData), JSON.stringify(want[Number(tile.containerName.slice(5))]));
   assert.ok(!h.upgrades.some(u => ['body', 'voice', 'hint'].includes(u.containerName)));
   // The display test replaces the tiles; the next swipe restores the page.
-  await h.menu(1101); await h.pick(7); await h.flush();
+  await h.menu(1101); await h.pick(6); await h.flush();
   assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison()));
   await h.scroll('down'); await h.flush();
   const restored = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
@@ -2004,8 +2033,8 @@ test('saved removed reader modes and the saved comparison font fall back to Term
   await h.pick(2);
   const native = container(h, 'body').content;
   await h.menu(1101);
-  await h.pick(8);
-  assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus')));
+  await h.pick(6);
+  assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderFontComparison()));
   await h.scroll('up');
   assert.equal(h.pages.at(-1).containerTotalNum, 7);
   assert.equal(container(h, 'body').content, native);
@@ -2024,15 +2053,16 @@ test('user turn background follows wrapped and indented rows across pages withou
   await h.pick(2);
   const tiles = sentFineTiles(h);
   const right = textX + textWidth - 1;
-  for (let y = 4; y < 4 + line * 2; y++) assert.equal(tilePixel(tiles, right, y), 17);
+  const dot = (x, y) => (x + y) % 2 === 0 ? 17 : 0;
+  for (let y = 4; y < 4 + line * 2; y++) assert.equal(tilePixel(tiles, right, y), dot(right, y));
   const secondPage = textExports.readerPages(text, fineExports.fineMeasure('terminus'), textWidth, rows, Infinity)[1];
   const plain = fineExports.renderFineScreen(secondPage, 'terminus',
-    { left: '/Status unknown', right: '[Tap&Hold for Input] Pg2/2' }, 15, 'none');
+    { left: '/Status unknown', right: '[Tap&Hold for Input] Pg2/2' }, 15, false);
   for (let y = 0; y < 288; y++) {
     for (let x = 0; x < 576; x++) {
       const old = tilePixel(plain, x, y);
       const inUserBand = y >= 4 && y < 4 + line * 2 && x >= textX && x <= right;
-      assert.equal(tilePixel(tiles, x, y), inUserBand && old === 0 ? 17 : old, `pixel ${x},${y}`);
+      assert.equal(tilePixel(tiles, x, y), inUserBand && old === 0 ? dot(x, y) : old, `pixel ${x},${y}`);
     }
   }
   assert.equal(tilePixel(tiles, right, dividerY), 255);
@@ -2042,64 +2072,28 @@ test('user turn background follows wrapped and indented rows across pages withou
   await h.scroll('up');
   const changed = new Map(h.images.slice(before).map(image => [image.containerName, image.imageData]));
   const earlier = tiles.map((tile, i) => changed.get(`fine-${i}`) ?? tile);
-  assert.equal(tilePixel(earlier, right, 4 + (rows - 1) * line), 17);
+  const lastRow = 4 + (rows - 1) * line;
+  assert.equal(tilePixel(earlier, right, lastRow) + tilePixel(earlier, right, lastRow + 1), 17);
   assert.equal(tilePixel(earlier, right, 4 + (rows - 2) * line), 0);
 });
 
-test('background picker saves, redraws and restores, and comparison shows every pattern and outline', async () => {
-  const { line, textX, textWidth } = fineExports.fineLayout('terminus');
+test('user turns always use the Dots 1/2 checker at Ink 1, and none is drawn at App Brightness 1', async () => {
+  const { textX, textWidth } = fineExports.fineLayout('terminus');
   const right = textX + textWidth - 1;
   const text = '/ Check this.\n> Checked.';
-  const storage = { 'reader-text': 'terminus' };
-  const h = await moduleHarness({ storage });
+  // A value saved by the removed Background picker no longer changes anything.
+  const h = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-turn-bg': '3' } });
   h.api.thread = async () => ({ text });
   await h.pick(2);
+  const tiles = sentFineTiles(h);
+  const dot = (x, y) => (x + y) % 2 === 0 ? 17 : 0;
+  for (const [x, y] of [[right, 4], [right, 5], [right - 1, 4], [right - 1, 5]]) assert.equal(tilePixel(tiles, x, y), dot(x, y));
   await h.menu(1101);
-  await h.pick(8);
-  const comparison = sentFineTiles(h);
-  // Each block: label left, the sample turn row then the reply row, then a 4px gap.
-  const block = i => 4 + i * (2 * line + fineExports.BACKGROUND_GAP);
-  const band = i => Array.from({ length: line }, (_, r) => [right - 1, right].map(x => tilePixel(comparison, x, block(i) + r)));
-  const lit = (i, test) => band(i).every((pair, r) => pair.every((value, k) => value === (test(right - 1 + k, block(i) + r) ? 17 : 0)));
-  assert.ok(lit(0, () => false), 'None');
-  assert.ok(lit(1, () => true), 'Ink 1');
-  assert.ok(lit(2, (_x, y) => y % 2 === 0), 'Lines 1/2');
-  assert.ok(lit(3, (_x, y) => y % 3 === 0), 'Lines 1/3');
-  assert.ok(lit(4, (x, y) => (x + y) % 2 === 0), 'Dots 1/2');
-  assert.ok(lit(5, (x, y) => x % 2 === 0 && y % 2 === 0), 'Dots 1/4');
-  for (let i = 0; i < 6; i++) assert.equal(tilePixel(comparison, right, block(i) + line + 1), 0, `reply row ${i}`);
-  // The frame keeps Ink 2 on its outline only.
-  const frameY = block(6);
-  assert.equal(tilePixel(comparison, right, frameY + 1), 34);
-  assert.equal(tilePixel(comparison, right - 1, frameY), 34);
-  assert.equal(tilePixel(comparison, right - 1, frameY + 1), 0);
-  // The labels sit left of the samples and all seven blocks end above the bottom frame.
-  const { labelCells, sample } = fineExports.backgroundComparisonLayout('terminus');
-  assert.equal(sample.textX, textX + labelCells * 6);
-  for (const font of fineExports.FINE_FONTS) {
-    const { line: fontLine } = fineExports.fineLayout(font);
-    assert.ok(4 + 7 * (2 * fontLine + fineExports.BACKGROUND_GAP) + 8 + fontLine <= 287, font);
-  }
-  await h.scroll('down');
-  assert.equal(tilePixel(sentFineTiles(h), right, 5), 17);
-  await h.menu(1101);
-  await h.pick(6);
-  assert.deepEqual(menuItems(h), ['None', 'Ink 1 ✓', 'Lines 1/2', 'Lines 1/3', 'Dots 1/2', 'Dots 1/4', '1px frame']);
-  await h.pick(2);
-  const saved = h.storage.get('reader-turn-bg');
-  assert.equal(saved, 'lines2');
-  assert.equal(tilePixel(sentFineTiles(h), right, 4), 17);
-  assert.equal(tilePixel(sentFineTiles(h), right, 5), 0);
-  const reopened = await moduleHarness({ storage: { ...storage, 'reader-turn-bg': saved, 'reader-ink': '1' } });
-  reopened.api.thread = async () => ({ text });
-  await reopened.pick(2);
-  assert.equal(tilePixel(sentFineTiles(reopened), right, 4), 0); // no step left below Ink 1 text
-  await reopened.menu(1101);
-  assert.equal(menuItems(reopened)[6], 'Background: Lines 1/2');
-  await reopened.pick(6);
-  assert.equal(menuItems(reopened)[2], 'Lines 1/2 ✓');
-  // A saved Ink 2 or Ink 3 (removed 2026-11-27) falls back to Ink 1.
-  for (const old of ['2', '3']) assert.equal(fineExports.parseTurnBackground(old), '1');
+  assert.equal(menuItems(h).some(item => /Background/.test(item)), false);
+  const dim = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-ink': '1' } });
+  dim.api.thread = async () => ({ text });
+  await dim.pick(2);
+  for (const y of [4, 5]) assert.equal(tilePixel(sentFineTiles(dim), right, y), 0); // no step left below Ink 1 text
 });
 
 test('reader ink follows the panel steps 1 through 15', () => {

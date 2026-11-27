@@ -25,8 +25,8 @@ import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
-import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
+import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, inkByte, nativeTextColor, parseInk, type FineFont, type FineStatus } from './fine-text';
+import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, chatColumns, CHAT_NETWORKS_KEY } from './chat';
 
@@ -100,13 +100,12 @@ let releaseCapture: (() => void) | null = null;
 let viewProvider = 'all';
 // Reader text: the firmware's native font, or small text drawn as image tiles.
 type ReaderText = 'native' | FineFont;
-type Comparison = 'fonts' | 'backgrounds';
+type Comparison = 'fonts';
 const DEFAULT_SMALL_FONT: FineFont = 'terminus';
 const REMOVED_FONTS = ['fixed9', 'gohu14', 'shinonome'];
 let readerText: ReaderText = 'native';
 // The small font the menu offers when native text is on (last one used).
 let smallFont: FineFont = DEFAULT_SMALL_FONT;
-let turnBackground: TurnBackground = DEFAULT_TURN_BACKGROUND;
 // Reader ink, panel steps 1..15. 15 is full white. 0 is not offered: it would blank the font and frame. This is not the system brightness.
 let inkLevel = 15;
 const textBrightness = () => nativeTextColor(inkLevel);
@@ -446,6 +445,7 @@ async function show(s: Screen, reloadText = false) {
       if (!accepted) throw new Error(tr('textLoadFailed'));
     }
     if (s.kind === 'list' && s.module === 'coding' && !s.compat) startMenuSpinner(s);
+    else if (s.kind === 'list' && s.module) syncLoadingDots(s);
     if (s.kind === 'text') {
       if (fine && !s.voice) await paintFine(s, s.offset ?? 0);
       else if (s.reader?.coding) await bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: STATUS_ICON.containerID, containerName: STATUS_ICON.containerName, imageData: statusPixels(s.activityLabel![0] === '/' ? '' : s.activityLabel![0], inkByte(inkLevel)) })).catch(e => diag((e as Error).message));
@@ -463,8 +463,7 @@ async function show(s: Screen, reloadText = false) {
 async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boolean> {
   const t0 = Date.now();
   const tiles = s.comparison === 'fonts' ? renderFontComparison(inkLevel)
-    : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel)
-    : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel, turnBackground);
+    : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel);
   let sent = 0;
   for (let i = 0; i < tiles.length; i++) {
     if (current !== s) return false;
@@ -519,7 +518,7 @@ function requestFineStatus(s: TextScreen) {
   readerWrites = run.catch(e => diag((e as Error).message));
 }
 
-// Reader long-press menu. The Font list includes background settings and comparisons.
+// Reader long-press menu. The Font list includes the font comparison.
 function readerMenu() {
   const name = readerText === 'native' ? tr('nativeText') : fineLabel(readerText);
   return [
@@ -550,7 +549,7 @@ function showTextPicker(reader: TextScreen, labels: string[], selected: number, 
   return open(Math.floor(at / TEXT_PICKER_ROWS), at % TEXT_PICKER_ROWS);
 }
 
-// Native, every small font largest first, then backgrounds and comparisons.
+// Native, every small font largest first, then the font comparison.
 function showFonts() {
   const reader = current;
   if (reader?.kind !== 'text' || !reader.reader) return;
@@ -558,31 +557,11 @@ function showFonts() {
   const rows = [
     { label: tr('nativeText'), run: () => setReaderText('native', reader) },
     ...fonts.map(font => ({ label: fineLabel(font), run: () => setReaderText(font, reader) })),
-    { label: tr('background', turnBackgroundLabel(turnBackground)), run: () => showBackgrounds(reader) },
     { label: tr('compareFonts'), run: () => openComparison(reader, 'fonts') },
-    { label: tr('compareBackgrounds'), run: () => openComparison(reader, 'backgrounds') },
   ];
   const currentIndex = readerText === 'native' ? 0 : fonts.indexOf(readerText) + 1;
   return showTextPicker(reader, rows.map((row, i) => i === currentIndex ? `${row.label} ✓` : row.label), currentIndex, i => {
     void rows[i]?.run().catch(e => diag((e as Error).message));
-  }, true);
-}
-
-function showBackgrounds(reader: TextScreen) {
-  const selected = TURN_BACKGROUNDS.indexOf(turnBackground);
-  const labels = TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : ''));
-  let saving = false;
-  return showTextPicker(reader, labels, selected, async i => {
-    const option = TURN_BACKGROUNDS[i];
-    if (saving || !option) return;
-    const picker = current;
-    saving = true;
-    try {
-      if (!await bridge.setLocalStorage('reader-turn-bg', option)) throw new Error(tr('backgroundSaveFailed'));
-      turnBackground = option;
-      if (current === picker) await show(reader);
-    } catch (e) { diag((e as Error).message); }
-    finally { saving = false; }
   }, true);
 }
 
@@ -686,6 +665,19 @@ function compatibilityText(screen: SessionMenuScreen, selected = screen.selected
     }
     return screen.headings?.includes(i) ? clipBytes(item, 48) : `${i === selected ? '>' : ' '} ${clipBytes(item, 48)}`;
   }).join('\n');
+}
+// Email loading rows (Eugene, 2026-11-27: "show a animated loading screen ... so ppl know it's
+// working"): the same dot that moves in the gutter of a busy Coding session, 500 ms a step.
+function syncLoadingDots(screen: SessionMenuScreen) {
+  clearInterval(menuAnimation);
+  menuAnimation = undefined;
+  if (screen.compat || !screen.columns?.some(row => row.busy)) return;
+  screen.menuFrame ??= 0;
+  menuAnimation = setInterval(() => {
+    if (current !== screen || screen.paging) return;
+    screen.menuFrame = ((screen.menuFrame || 0) + 1) % MENU_DOTS.length;
+    if (!screen.cursorWriting) sessionCursorWrites = updateSessionCursor(screen);
+  }, 500);
 }
 function startMenuSpinner(screen: SessionMenuScreen) {
   let polling = false;
@@ -834,6 +826,7 @@ function refreshModuleRows(mounted: SessionMenuScreen, fresh: SessionMenuScreen,
         paintedCursor: menuCursorText(fresh.columns!, cursor, mounted.menuFrame),
         onPick: (i: number) => { if (i === 0) cycleModule(mounted); else if (!modulePending) pick(i - 1); } });
       positions[mounted.module!].cursor = cursor;
+      if (mounted.module !== 'coding') syncLoadingDots(mounted);
     } catch (error) {
       if (current !== mounted || revision !== moduleRevision) return;
       // A rejected update can leave only one column refreshed. Rebuild the
@@ -908,11 +901,25 @@ let mailRetryTimer: ReturnType<typeof setTimeout> | undefined;
 async function mailHome(page = positions.email.page, selected = positions.email.cursor, mounted?: SessionMenuScreen, retry = 0) {
   clearTimeout(mailRetryTimer);
   selectThread(null);
-  const owner = current;
+  let owner = current;
+  let placeholder = false;
   const revision = moduleRevision;
   const filterRevision = mailFilterRevision;
   const active = () => current === owner && revision === moduleRevision && filterRevision === mailFilterRevision;
   try {
+    // Nothing cached yet (first open after a start): show the Email screen at once with a moving
+    // dot, then fill its rows in place. No count, so this placeholder is never cached.
+    if (!mounted && !moduleCache.has('email')) {
+      mounted = await showModuleList('email', page, selected, {
+        columns: [{ marker: '*', title: tr('mailFilter'), right: '' }, { marker: '', title: tr('mailLoading'), right: '', busy: true }],
+        items: [tr('mailFilter'), tr('mailLoading')],
+        menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
+        onPick: i => { if (i === 0) void mailLabels(0, 0, true); },
+      });
+      if (current !== mounted || revision !== moduleRevision || filterRevision !== mailFilterRevision) return;
+      owner = mounted;
+      placeholder = true;
+    }
     let result = await mail.list(page);
     // A changed filter or external mailbox activity can remove the last page.
     // Bridges before 1.0.65 send no loading flag: a short page that has a next page is incomplete.
@@ -920,6 +927,8 @@ async function mailHome(page = positions.email.page, selected = positions.email.
     while (page > 0 && !result.items.length && !result.hasMore && !loading() && active()) result = await mail.list(--page);
     if (!active()) return;
     const columns = [{ marker: '*', title: tr('mailFilter'), right: result.filterColumn }, ...result.items.map(item => mailColumns(item, result.letter(item)))];
+    // An incomplete page keeps a moving-dot row below its threads while it fills in.
+    if (loading() && retry < MAIL_RETRIES && result.items.length < 8) columns.push({ marker: '', title: tr('mailLoadingMore'), right: '', busy: true });
     const shown = await showModuleList('email', page, selected, { columns, count: tr('mailUnread', result.unread),
       items: columns.map(row => `${row.marker || ' '} ${row.title} ${row.right}`),
       onPreviousPage: page > 0 ? () => mailHome(page - 1, -1) : undefined,
@@ -935,7 +944,8 @@ async function mailHome(page = positions.email.page, selected = positions.email.
       }, MAIL_RETRY_MS);
     }
   } catch {
-    if (mounted) return;
+    // A failed refresh keeps the rows on screen; a failed first load replaces the loading row.
+    if (mounted && !placeholder) return;
     if (active()) await showModuleList('email', page, 0, {
       columns: [{ marker: '*', title: tr('mailFilter'), right: '' }, { marker: '', title: tr('mailUnavailable'), right: '' }],
       items: [tr('mailFilter'), tr('mailUnavailable')],
@@ -1891,7 +1901,6 @@ async function main() {
   else if (REMOVED_FONTS.includes(savedText)) readerText = DEFAULT_SMALL_FONT;
   const savedFont = await bridge.getLocalStorage('reader-font');
   smallFont = FINE_FONTS.includes(savedFont as FineFont) ? savedFont as FineFont : readerText === 'native' ? DEFAULT_SMALL_FONT : readerText;
-  turnBackground = parseTurnBackground(await bridge.getLocalStorage('reader-turn-bg'));
   inkLevel = parseInk(await bridge.getLocalStorage('reader-ink'));
   const resetMode = await bridge.getLocalStorage('usage-reset-mode');
   if (RESET_MODES.includes(resetMode as ResetMode)) usageResetMode = resetMode as ResetMode;

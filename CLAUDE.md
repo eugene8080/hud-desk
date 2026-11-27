@@ -56,6 +56,19 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.66 (user on G2 after 1.0.65: picked Dots 1/2; first Email open now fills; asked
+for an animated Email loading screen and for frozen text while the glasses show 'connection lost').
+Email: with nothing cached, a list with Filter + 'Loading email…' and the moving gutter dot shows at
+once, then rows fill in place; an incomplete page keeps a 'Loading more…' dot row while it re-reads;
+a failed first load shows Email unavailable. Reader: Dots 1/2 (1px checker at Ink 1) is the only
+user-turn style; Background picker, Compare backgrounds, other options and strings removed. 218
+tests, build pass. Connection lost: drawn by the glasses when Bluetooth to the phone drops; the app
+runs on the phone and can send nothing then. SDK 0.0.16 has onDeviceStatusChanged (phone side) but
+no way to keep the last page on the lenses; not built. Beeper: Eugene put his Orca Glass token in
+.env (gitignored, never committed); copied without printing to .local/beeper-token.txt (the bridge
+accepts token files under .local/ only) and added the beeper block to bridge/config.local.json.
+Live after the next bridge restart (ask); then a read-only check, no sends.
+
 2026-11-27 beta 1.0.65 (user on G2 after 1.0.64: Email / and -- work; asked for '-' instead of '--',
 a fix for the first Email open showing one thread, Ink 1 for now, dimmer and patterned backgrounds).
 Read mark '-' in Email and Chat. First-open cause: bridge listThreads returns what arrived within

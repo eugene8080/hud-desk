@@ -1,7 +1,7 @@
 # Orca Glass TODOs
 Updated: 2026-11-26
 
-Current beta: **1.0.65** (read mark '-'; Email first-open re-read; Ink 1 + patterned backgrounds). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
+Current beta: **1.0.66** (Email loading dot; Dots 1/2 user-turn background; read mark '-'). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
 Workspace-filter preview approved, released and retired with merged worktree cleanup.
 Future visual changes require preview approval before beta upload.
 Completed/superseded release notes: [history](docs/todo-history.md).
@@ -9,8 +9,11 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 ## Open work
 
 - [ ] **Super app: Coding, Email, Chat, Reader in one app -- Chat in beta 1.0.64; live set-up pending:**
-  2026-11-27 beta 1.0.65: G2 pick among Ink 1 / Lines / Dots backgrounds pending; confirm the first
-  Email open fills in (bridge loading flag live only after the next approved restart).
+  2026-11-27 beta 1.0.66: Eugene picked Dots 1/2 (now the only style) and confirmed the first Email
+  open fills (1.0.65). G2 check of the Email loading dot pending. Beeper token in
+  .local/beeper-token.txt + beeper block in config.local.json: needs an approved bridge restart, which
+  also makes the bridge's loading flag live. Glasses 'connection lost' screen: firmware, not fixable
+  in the app with SDK 0.0.16 (an SDK request to Even is possible, not filed).
   2026-11-26 Chat built (merged 4e7f417). Waits on Eugene: Beeper token in .local/beeper-token.txt,
   then the coordinator adds the `beeper` block and restarts the bridge (ask) for a read-only check.
   2026-11-26 beta 1.0.63: pick a reader Background on G2 (Compare backgrounds), then remove the
