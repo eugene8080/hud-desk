@@ -10,9 +10,9 @@ const chatId = fixtureChatId(0);
 const messagesPath = `/v1/chats/${encodeURIComponent(chatId)}/messages`;
 const readToken = async () => 'fixture-token\r\n';
 
-async function serve(t, { config = {}, mailConfig = null, transport = () => assert.fail('Unexpected Beeper request'), coldWaitMs, sleep } = {}) {
+async function serve(t, { config = {}, mailConfig = null, transport = () => assert.fail('Unexpected Beeper request'), coldWaitMs, sleep, speech, ollamaTransport } = {}) {
   const server = createBridge({ token: 'bridge-fixture', mailConfig, beeperConfig: config,
-    privateHosts: ['127.0.0.1'], beeperOptions: { coldWaitMs, clientOptions: { transport, readToken, sleep } },
+    privateHosts: ['127.0.0.1'], beeperOptions: { coldWaitMs, speech, ollamaTransport, clientOptions: { transport, readToken, sleep } },
   }).listen(0, '127.0.0.1');
   t.after(() => new Promise(resolve => server.close(resolve)));
   await once(server, 'listening');
@@ -37,6 +37,14 @@ test('Beeper token configuration defaults under the gitignored local directory',
   assert.equal(readBeeperConfig({ tokenFile: '.local/../token.txt' }), null);
   assert.equal(readBeeperConfig({ refreshSeconds: 0 }), null);
   assert.equal(readBeeperConfig(undefined), null);
+  const defaults = readBeeperConfig({});
+  assert.equal(defaults.translationModel, 'qwen3.8:27b');
+  assert.deepEqual({ language: defaults.speech.language, script: defaults.speech.script }, { language: 'yue', script: 's2hk' });
+  const configured = readBeeperConfig({ asrLanguage: 'zh', asrScript: 'none', asrPython: '.local/fixture/python', ffmpegPath: '.local/fixture/ffmpeg' });
+  assert.equal(configured.speech.language, 'zh');
+  assert.equal(configured.speech.script, 'none');
+  assert.match(configured.speech.python, /[\\/]fixture[\\/]python$/);
+  assert.match(configured.speech.ffmpeg, /[\\/]fixture[\\/]ffmpeg$/);
 });
 
 test('Beeper allowlist refuses other operations and text mutations before credentials or transport', async () => {
@@ -59,6 +67,14 @@ test('Beeper allowlist refuses other operations and text mutations before creden
     ['GET', '/v1/accounts?extra=1'],
     ['GET', '//example.test/v1/accounts'],
   ]) await assert.rejects(client(method, path, { body }), { code: 'disallowed' });
+  for (const [method, path, url] of [
+    ['GET', '/v1/assets/download', 'mxc://fixture.test/audio'],
+    ['POST', '/v1/assets/serve', 'mxc://fixture.test/audio'],
+    ['GET', '/v1/assets/serve', 'file:///fixture/private'],
+    ['GET', '/v1/assets/serve', 'https://fixture.test/audio'],
+    ['GET', '/v1/assets/serve?url=other', 'mxc://fixture.test/audio'],
+    ['GET', '/v1/assets/serve', undefined],
+  ]) await assert.rejects(client(method, path, { query: { url } }), { code: 'disallowed' });
   assert.equal(calls, 0);
 });
 
@@ -89,7 +105,107 @@ test('Chat routes require private host and bearer, including the send and CORS g
   assert.equal((await request('/api/chat/networks', { headers: { authorization: '' } })).status, 401);
   assert.equal((await request('/api/chat/list', { method: 'OPTIONS', headers: { authorization: '', 'cf-ray': '' } })).status, 403);
   assert.equal((await request('/api/chat/list', { method: 'OPTIONS', headers: { authorization: '' } })).status, 204);
+  for (const path of ['transcribe', 'translate']) {
+    const route = `/api/chat/${path}`;
+    assert.equal((await request(route, { method: 'POST', headers: { 'cf-ray': '' }, body: {} })).status, 403);
+    assert.equal((await request(route, { method: 'POST', headers: { authorization: '' }, body: {} })).status, 401);
+  }
   assert.equal(fixture.calls.length, 0);
+});
+
+test('Chat keeps each supported media type and exposes only voice metadata', async t => {
+  const kinds = ['TEXT', 'NOTICE', 'VOICE', 'AUDIO', 'IMAGE', 'VIDEO', 'STICKER', 'FILE', 'LOCATION', 'REACTION'];
+  const items = kinds.map(type => ({ id: type.toLowerCase(), type, text: ['TEXT', 'NOTICE', 'IMAGE', 'REACTION'].includes(type) ? 'Synthetic caption.' : '' }));
+  items[2].attachments = [{ type: 'audio', srcURL: 'mxc://fixture.test/first', duration: 12.9,
+    transcription: { transcription: '巴士已經到站。', language: 'yue' }, fileName: 'synthetic.ogg' }];
+  items.push({ id: 'hidden', type: 'VOICE', isHidden: true }, { id: 'deleted', type: 'TEXT', text: 'Deleted.', isDeleted: true },
+    { id: 'voice-note', type: 'TEXT', attachments: [{ type: 'audio', isVoiceNote: true }] });
+  const request = await serve(t, { transport: url => {
+    assert.equal(url.pathname, messagesPath);
+    return Response.json({ items });
+  } });
+  const { data } = await request(`/api/chat/messages?id=${encodeURIComponent(chatId)}`);
+  assert.deepEqual(data.messages.map(({ media }) => media), [undefined, undefined, 'Voice', 'Audio', 'Photo', 'Video',
+    'Sticker', 'File', 'Location', 'Voice']);
+  assert.equal(data.messages[4].text, 'Synthetic caption.');
+  assert.deepEqual(data.messages[2].voice, { id: 'voice', duration: 12.9, transcript: '巴士已經到站。', language: 'yue' });
+  assert.deepEqual(data.messages[3].voice, { id: 'audio' });
+  assert.doesNotMatch(JSON.stringify(data), /mxc|fileName|synthetic\.ogg/);
+});
+
+test('Chat transcribes only the selected attachment and caches the transcript', async t => {
+  const calls = [];
+  let inferences = 0;
+  const audio = 'fake-audio-bytes';
+  const asset = 'mxc://fixture.test/audio';
+  const request = await serve(t, {
+    transport: (url, options) => {
+      calls.push([options.method, url.pathname]);
+      if (url.pathname === messagesPath) return Response.json({ items: [
+        { id: 'voice', type: 'VOICE', attachments: [{ type: 'audio', id: asset }] },
+        { id: 'missing', type: 'VOICE' },
+        { id: 'deleted', type: 'VOICE', isDeleted: true, attachments: [{ type: 'audio', id: asset }] },
+      ] });
+      assert.equal(url.pathname, '/v1/assets/serve');
+      assert.equal(url.searchParams.get('url'), asset);
+      return new Response(audio);
+    },
+    speech: { async transcribe(loadAudio) {
+      assert.equal((await loadAudio()).toString(), audio);
+      inferences++;
+      return { text: '電車が着きました。', language: 'japanese' };
+    } },
+  });
+  const post = (messageId, extra = {}) => request('/api/chat/transcribe', { method: 'POST', body: { chatId, messageId, ...extra } });
+  assert.equal((await post('voice', { url: asset })).status, 400);
+  assert.equal((await post('missing')).status, 404);
+  assert.equal((await post('deleted')).status, 404);
+  const [first, second] = await Promise.all([post('voice'), post('voice')]);
+  assert.deepEqual(first.data, { text: '電車が着きました。', language: 'japanese' });
+  assert.deepEqual(second.data, first.data);
+  assert.equal(inferences, 1);
+  const { data } = await request(`/api/chat/messages?id=${encodeURIComponent(chatId)}`);
+  assert.equal(data.messages[0].voice.transcript, first.data.text);
+  assert.deepEqual(calls.filter(([, path]) => path !== messagesPath), [['GET', '/v1/assets/serve']]);
+});
+
+test('Chat batches translation, keeps English and blocks remote Ollama models before sending text', async t => {
+  const source = '巴士已經到站。';
+  const items = [
+    { id: 'english', type: 'TEXT', text: 'Synthetic English.' },
+    { id: 'voice', type: 'AUDIO', attachments: [{ type: 'audio', transcription: { transcription: source, language: 'yue' } }] },
+    { id: 'english-voice', type: 'VOICE', attachments: [{ type: 'audio', transcription: { transcription: 'Already English.', language: 'en-US' } }] },
+  ];
+  const calls = [];
+  let remote = false;
+  const request = await serve(t, {
+    config: { translationModel: 'fixture:local' },
+    transport: () => Response.json({ items }),
+    ollamaTransport: (url, options) => {
+      const { pathname, origin } = new URL(url);
+      assert.equal(origin, 'http://127.0.0.1:11434');
+      calls.push(pathname);
+      const body = JSON.parse(options.body);
+      assert.equal(body.model, 'fixture:local');
+      if (pathname === '/api/show') return Response.json({
+        model_info: { 'general.architecture': 'fixture' }, ...(remote && { remote_host: 'https://example.test' }),
+      });
+      assert.equal(pathname, '/api/chat');
+      assert.equal(body.think, false);
+      assert.equal(body.stream, false);
+      assert.deepEqual(JSON.parse(body.messages[1].content), ['Synthetic English.', source]);
+      return Response.json({ message: { content: '[null, "The bus has arrived."]' } });
+    },
+  });
+  const post = () => request('/api/chat/translate', { method: 'POST', body: { chatId, messageIds: ['english', 'voice', 'english-voice', 'absent'] } });
+  const expected = { items: [{ id: 'english', text: null }, { id: 'voice', voice: 'The bus has arrived.' }, { id: 'english-voice' }] };
+  assert.deepEqual((await post()).data, expected);
+  assert.deepEqual((await post()).data, expected);
+  assert.deepEqual(calls, ['/api/show', '/api/chat']);
+  remote = true;
+  items[0].text = 'Synthetic edit.';
+  assert.equal((await post()).status, 502);
+  assert.deepEqual(calls, ['/api/show', '/api/chat', '/api/show']);
 });
 
 test('Capabilities add Chat only with a Beeper config and put it after Email', async t => {
