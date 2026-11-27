@@ -78,6 +78,17 @@ bridge also limits concurrent relayed work to four requests. A shared public rel
 by enough registrations or traffic. Public abuse controls such as ingress connection limits can be
 added at the reverse proxy without giving it the pairing keys.
 
+## Chosen hosting (Eugene, 2026-11-27)
+
+A DigitalOcean droplet (his existing account) runs `relay/server.mjs`, and Tailscale Funnel on that
+droplet gives the public HTTPS origin `https://<droplet-name>.tailf91bf7.ts.net` (free, certificate
+managed by Tailscale, no domain purchase). The droplet needs no public web ports: Funnel brings the
+traffic in through Tailscale. Trade-offs he accepted: the address is tied to his Tailscale account
+and tailnet name, and Funnel has bandwidth limits; a bought domain can replace it later, at the cost
+of a new app build that every user installs. Deploy access: SSH key `~/.ssh/hud-desk-relay` on
+PSCAP11 (ed25519, SHA256:kLcmAJHJrwr4agwLbsczQol3iHmhrQNkRnr2OwKiyF4), public half added to the
+droplet by Eugene. Open: WebSocket upgrade through Funnel (verify after deploy).
+
 ## Hosting options
 
 Prices checked 2026-11-27. No provider or domain is configured.

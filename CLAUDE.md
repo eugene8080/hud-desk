@@ -58,6 +58,11 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 relay hosting chosen by Eugene: DigitalOcean droplet + Tailscale Funnel address (free
+.ts.net name, no domain). SSH key created with his OK: ~/.ssh/hud-desk-relay (no passphrase; public
+key comment hud-desk-relay@PSCAP11). Waiting on Eugene: create the droplet with that public key and
+send its IP. Details docs/relay.md "Chosen hosting".
+
 2026-11-27 bridge restarted with Eugene's approval for 1.0.92's bridge code (old supervisor 72036/
 server 65452/whisper 9024; new supervisor 40464, server 44168, whisper 72344 --vad); local and tailnet
 healthz ok. Counts-only check: modules coding+email+chat, orca true, localAgents claude+codex with
