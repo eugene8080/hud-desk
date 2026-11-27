@@ -56,6 +56,15 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.86 (Eugene: Coding [session/agent] not right-aligned and titles cut off, Email
+titles cut off, Chat dates not right-aligned; wants [27Nov/Signal]). Symptoms = the compact fallback,
+which one rejected aligned rebuild latched for the whole run (compactMenuOnly). Likely trigger: fast
+keyboard navigation overlapping page rebuilds (unverified: the phone log line 'aligned layout
+rejected' was not read). Fix: rebuildPage() serializes rebuildPageContainer; a rejected aligned menu is
+retried once; compact for that screen only, latched after 3 rejected screens in a row; an accepted
+aligned page resets the count. Chat: bridge list items carry network; chatColumns right =
+[27Nov/Signal]. 271 tests, build pass. Bridge part (network) needs an approved restart.
+
 2026-11-27 beta 1.0.85 (Eugene: views 'Picture, Zoom, AI Readout', then 'or maybe try to improve the
 outline first... lines too thick'; caption blocked the border). Views Original Picture, Zoom, Outline,
 AI Readout (Outline kept pending his G2 look). bridge/image.mjs thinEdges: Sobel + non-maximum

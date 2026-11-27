@@ -89,7 +89,8 @@ const viewQuery = (request: ImageRequest) => ({ ...(request.view && { view: requ
   ...(request.negative && { negative: request.negative }) });
 // Optional Chat features the bridge PC can serve; a bridge before 1.0.72 omits this (both offered).
 export type ChatFeatures = { transcribe: boolean; translate: boolean };
-export type ChatItem = { id: string; title: string; date: number; unread: boolean; readOnly?: boolean };
+// network: the chat app (WhatsApp, Signal, ...); bridges before 1.0.86 do not send it.
+export type ChatItem = { id: string; title: string; date: number; unread: boolean; readOnly?: boolean; network?: string };
 export type ChatPage = { items: ChatItem[]; hasMore: boolean; unread: number };
 export type ChatMessage = {
   id?: string;

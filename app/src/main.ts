@@ -72,6 +72,20 @@ let bridge: EvenAppBridge;
 let current: Screen | null = null;
 let started = false;
 let compactMenuOnly = false;
+// Aligned-menu rejections in a row (Eugene, 2026-11-27: right columns stopped being right-aligned and
+// titles were cut off, i.e. the compact fallback, after fast keyboard use). One rejection no longer
+// latches the compact menu for the rest of the run: it takes three in a row, and an accepted aligned
+// page clears the count.
+let alignedRejections = 0;
+const COMPACT_AFTER = 3;
+// Page rebuilds one at a time: fast keys could start a rebuild while the previous one was in
+// flight, and the glasses rejected one of them.
+let pageBuilds: Promise<unknown> = Promise.resolve();
+function rebuildPage(page: object): Promise<boolean> {
+  const run = pageBuilds.then(() => bridge.rebuildPageContainer(new RebuildPageContainer(page as never)));
+  pageBuilds = run.catch(() => false);
+  return run;
+}
 let poll: ReturnType<typeof setInterval> | undefined;
 let menuPoll: ReturnType<typeof setInterval> | undefined;
 let menuAnimation: ReturnType<typeof setInterval> | undefined;
@@ -507,11 +521,17 @@ async function show(s: Screen, reloadText = false) {
       s.compat = true; page = compatibilityMenu(s, menu) as typeof page;
     }
     if (s.kind === 'list' && (s.workspacePicker || s.agentPicker || s.textPicker)) { s.compat = true; page = compatibilityMenu(s, {}) as typeof page; }
-    let accepted = await bridge.rebuildPageContainer(new RebuildPageContainer(page));
-    if (!accepted && s.kind === 'list' && s.module && !s.compat) {
+    let accepted = await rebuildPage(page);
+    const aligned = s.kind === 'list' && !!s.module && !s.compat;
+    // A rejected aligned menu is tried once more before the compact one.
+    if (!accepted && aligned) accepted = await rebuildPage(page);
+    if (aligned && accepted) alignedRejections = 0;
+    if (!accepted && aligned && s.kind === 'list') {
+      alignedRejections++;
       s.compat = true;
-      accepted = await bridge.rebuildPageContainer(new RebuildPageContainer(compatibilityMenu(s, menu)));
-      if (accepted) { compactMenuOnly = true; diag(`${sessionHeading()}: aligned layout rejected; compact compatibility menu active.`); }
+      accepted = await rebuildPage(compatibilityMenu(s, menu));
+      if (accepted && alignedRejections >= COMPACT_AFTER) { compactMenuOnly = true; diag(`${sessionHeading()}: aligned layout rejected ${alignedRejections} times; compact compatibility menu active.`); }
+      else if (accepted) diag(`${sessionHeading()}: aligned layout rejected (${alignedRejections}/${COMPACT_AFTER}); compact menu for this screen only.`);
     }
     if (!accepted) throw new Error(`${sessionHeading()}: ${s.kind === 'list' && s.module ? 'both aligned and compact menus rejected' : tr('screenRejected')}.`);
     if (s.kind === 'list' && s.module) document.getElementById('menu-layout')!.textContent = s.compat

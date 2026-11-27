@@ -1867,22 +1867,40 @@ test('startup uses a minimal native page and recovers an already-consumed startu
   assert.equal(h.pages[2].containerTotalNum, 6);
 });
 
-test('hardware rejecting aligned layout gets an operable compact fallback', async () => {
+test('Chat rows show [day/app] on the right, e.g. [27Nov/Signal]', () => {
+  const date = new Date(2026, 10, 27, 9, 30).getTime();
+  const chatModuleExports = chatModule({});
+  assert.equal(chatModuleExports.chatColumns({ id: 'c', title: 'Group', date, unread: true, network: 'Signal' }).right, '[27Nov/Signal]');
+  assert.equal(chatModuleExports.chatColumns({ id: 'c', title: 'Group', date, unread: false }).right, '[27Nov]');
+});
+
+test('hardware rejecting aligned layout gets an operable compact fallback, kept only after three rejections in a row', async () => {
   const h = await harness(2, false, 'tap', '', 0, true);
+  const aligned = () => h.pages.filter(p => p.containerTotalNum === 6).length;
   assert.equal(h.pages[0].containerTotalNum, 2);
+  // The aligned menu is tried twice, then this screen shows the compact one.
   assert.equal(h.pages[1].containerTotalNum, 6);
+  assert.equal(h.pages[2].containerTotalNum, 6);
   assert.equal(h.pages.at(-1).containerTotalNum, 3);
   assert.equal(h.pages.at(-1).imageObject, undefined);
-  assert.match(h.elements.get('diag').textContent, /compact compatibility menu active/);
+  assert.match(h.elements.get('diag').textContent, /compact menu for this screen only/);
   await h.scroll('down');
   assert.equal(h.upgrades.at(-1).containerName, 'body');
   await h.scroll('down');
   await h.scroll('down');
   await h.tap();
   assert.equal(h.pages.at(-1).textObject[1].content, 'Content terminal-0');
+  // Back: the next list tries aligned again (one rejection no longer latches the compact menu).
   await h.back();
   assert.equal(h.pages.at(-1).containerTotalNum, 3);
-  assert.equal(h.pages.filter(p => p.containerTotalNum === 6).length, 1);
+  assert.equal(aligned(), 4);
+  // A third rejected list in a row keeps the compact menu from then on.
+  await h.menu(1001);
+  assert.equal(aligned(), 6);
+  assert.match(h.elements.get('diag').textContent, /compact compatibility menu active/);
+  await h.menu(1001);
+  assert.equal(aligned(), 6, 'no more aligned attempts');
+  assert.equal(h.pages.at(-1).containerTotalNum, 3);
 });
 
 test('voice review shows a multi-line transcript on the full-screen page', async () => {

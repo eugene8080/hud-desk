@@ -21,9 +21,15 @@ function durationTag(duration?: number) {
   return ` ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+// The right column: [27Nov/Signal], the last activity's day and the chat app (Eugene, 2026-11-27).
+export function chatDay(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${date.getDate()}${new Intl.DateTimeFormat('en-GB', { month: 'short' }).format(date)}`;
+}
 export function chatColumns(chat: ChatItem): SessionColumns {
+  const parts = [chat.date ? chatDay(chat.date) : '', chat.network ?? ''].filter(Boolean);
   return { marker: chat.unread ? '/' : '-', title: chatTitle(chat),
-    right: chat.date ? mailDate(chat.date) : '', preserveSuffix: false };
+    right: parts.length ? `[${parts.join('/')}]` : '', preserveSuffix: false };
 }
 
 export function chatReaderText(conversation: ChatConversation, statuses = new Map<string, VoiceStatus>(),

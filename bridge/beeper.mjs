@@ -266,7 +266,8 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech 
         networks.has(catalog.get(item.account) ?? item.network)).sort((a, b) => b.date - a.date);
       const start = page * PAGE_SIZE;
       return {
-        items: matches.slice(start, start + PAGE_SIZE).map(({ id, title, date, unread, readOnly }) => ({ id, title, date, unread, readOnly })),
+        items: matches.slice(start, start + PAGE_SIZE).map(({ id, title, date, unread, readOnly, account, network }) =>
+          ({ id, title, date, unread, readOnly, network: catalog.get(account) ?? network ?? '' })),
         unread: matches.filter(item => item.unread).length, hasMore: start + PAGE_SIZE < matches.length || (partial && start < matches.length),
       };
     },
