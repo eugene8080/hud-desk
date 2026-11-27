@@ -62,7 +62,9 @@ message text carries the chat app's formatting as HTML. bridge/chat-text.mjs cha
 fallback dropped, other tags stripped, entities decoded; used for every chat message's text in
 bridge/beeper.mjs. Read-only scan of 60 recent chats (981 messages, 142 with HTML): tags br li ul ol
 strong em a p code span del, entities amp quot gt lt nbsp; none left after conversion (counts only,
-no text kept). 278 tests, build pass. Bridge part needs an approved restart.
+no text kept). 278 tests, build pass. Bridge restarted with Eugene's approval (old supervisor
+13584/server 69656/whisper 53264; new supervisor 70992, server 44288, whisper 72152 --vad); healthz ok;
+live: 24 chats, 445 messages through /api/chat/messages, 0 with tags left, 10 with bullets.
 
 2026-11-27 beta 1.0.87 (Eugene: inline images not showing, e.g. the Bloomberg 'Holiday washout'
 newsletter). Newsletter pictures are <img src=https://...> links, not MIME parts. bridge/mail-text.mjs
