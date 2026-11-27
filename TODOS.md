@@ -11,7 +11,8 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 - [ ] **HUD Desk listing (2026-11-27, beta 1.0.91):** done: rename, tagline, icon, description,
   screenshots, Usage bars, bridge restart (task 'HUD Desk Bridge'), repo eugene8080/hud-desk,
   privacy text, Japanese text. Portal privacy attachment stays as it is (Eugene, 2026-11-27: "no
-  update to privacy statement needed"). Open: Japanese text needs a native reader; G2 check of Usage bars.
+  update to privacy statement needed"). Eugene 2026-11-27: Usage bars confirmed on G2; he submitted the
+  listing for review himself (public build pending Even's review). Open: Japanese text needs a native reader.
   Public release only on his request.
 - [ ] **Super app: Coding, Email, Chat, Reader in one app -- Chat live since the 2026-11-27 reboot:**
   2026-11-27 beta 1.0.67: mailbox toggle + no blank chat rows; G2 check pending. Eugene confirmed
