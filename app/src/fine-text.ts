@@ -14,23 +14,33 @@
 // fitted to the cell; anything else via the WebView monospace font, thresholded
 // to on/off pixels. East Asian wide characters take two cells.
 import { getLang, t } from './i18n';
-import { DEPARTURE_MONO, TERMINUS, GOHU, GOHU_14, SCIENTIFICA, FIXED, FIXED_9, SHINONOME, SHINONOME_K12 } from './fonts/glyphs';
+import { readerPages, type ReaderPage } from './text';
+import { DEPARTURE_MONO, TERMINUS, GOHU, SCIENTIFICA, FIXED, SHINONOME_K12 } from './fonts/glyphs';
 
 // Menu order: narrowest cell first, then by height. (2026-11-10: Spleen, Monogram,
 // Cozette, Pixeloid Mono and JetBrains Mono removed at the user's request.)
 const TABLES = {
-  scientifica: SCIENTIFICA, gohu: GOHU, terminus: TERMINUS, shinonome: SHINONOME, fixed: FIXED,
-  departure: DEPARTURE_MONO, gohu14: GOHU_14, fixed9: FIXED_9,
+  scientifica: SCIENTIFICA, gohu: GOHU, terminus: TERMINUS, fixed: FIXED, departure: DEPARTURE_MONO,
 };
 export type FineFont = keyof typeof TABLES;
 export const FINE_FONTS = Object.keys(TABLES) as FineFont[];
 const NAMES: Record<FineFont, string> = {
-  scientifica: 'Scientifica', gohu: 'GohuFont', terminus: 'Terminus', shinonome: 'Shinonome', fixed: 'Misc Fixed',
-  departure: 'Departure', gohu14: 'GohuFont', fixed9: 'Misc Fixed',
+  scientifica: 'Scientifica', gohu: 'GohuFont', terminus: 'Terminus', fixed: 'Misc Fixed', departure: 'Departure',
 };
 // 'Cozette 6x13': short name and native cell. The glasses menu truncates labels
 // beyond about 210px, so names are short (Pixeloid Mono -> Pixeloid).
 export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].width}x${TABLES[font].height}`;
+export const TURN_BACKGROUNDS = ['none', '1', '2', '3', 'frame'] as const;
+export type TurnBackground = typeof TURN_BACKGROUNDS[number];
+export const DEFAULT_TURN_BACKGROUND: TurnBackground = '2';
+export function parseTurnBackground(value: string | null | undefined): TurnBackground {
+  return TURN_BACKGROUNDS.find(option => option === value) ?? DEFAULT_TURN_BACKGROUND;
+}
+export function turnBackgroundLabel(option: TurnBackground): string {
+  if (option === 'none') return t('backgroundNone');
+  if (option === 'frame') return t('backgroundFrame');
+  return t('backgroundInk', option);
+}
 // The panel is 4-bit: 16 steps, numbered 0 through 15. Full white is 15, which is
 // what the app drew before this control. An 8-bit image byte of n*17 lands on step n
 // whether the glasses keep the high nibble or scale 0..255 onto 0..15.
@@ -134,7 +144,19 @@ class Surface {
     const v = level ?? this.ink;
     if (x >= 0 && y >= 0 && x < SCREEN.width && y < SCREEN.height) this.pixels[y * SCREEN.width + x] = v;
   }
-  rect(x: number, y: number, w: number, h: number, level?: number) { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.set(x + i, y + j, level); }
+  rect(x: number, y: number, w: number, h: number, level = this.ink) {
+    const left = Math.max(0, x), right = Math.min(SCREEN.width, x + w);
+    if (right <= left) return;
+    const bottom = Math.min(SCREEN.height, y + h);
+    for (let row = Math.max(0, y); row < bottom; row++) {
+      const start = row * SCREEN.width;
+      this.pixels.fill(level, start + left, start + right);
+    }
+  }
+  frame() {
+    this.rect(0, 0, SCREEN.width, FRAME); this.rect(0, SCREEN.height - FRAME, SCREEN.width, FRAME);
+    this.rect(0, 0, FRAME, SCREEN.height); this.rect(SCREEN.width - FRAME, 0, FRAME, SCREEN.height);
+  }
   // Draw text from (x, y) in whole cells; stops at maxCells. Returns cells used.
   text(text: string, x: number, y: number, maxCells: number): number {
     const { width: cw, height: ch } = TABLES[this.font];
@@ -230,12 +252,34 @@ export function scannerLevels(frame: number): number[] {
 }
 
 export type FineStatus = { left: string; right: string; model?: string; scanner?: number };
-export function renderFineScreen(text: string, font: FineFont, status: FineStatus, level = INK_MAX): number[][] {
+function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: TurnBackground) {
+  const { line, rows, columns, textX, textWidth } = fineLayout(s.font);
+  const lines = page.text.split('\n').slice(0, rows);
+  // Keep at least one ink step between the letters and the background at low brightness.
+  const ink = Math.max(0, Math.min(inkByte(background === 'frame' ? 2 : Number(background)), s.ink - inkByte(1)));
+  if (background !== 'none' && ink > 0) {
+    lines.forEach((_, r) => {
+      const turn = page.userTurns[r];
+      if (!turn) return;
+      const y = top + r * line;
+      if (background !== 'frame') {
+        s.rect(textX, y, textWidth, line, ink);
+      } else {
+        s.rect(textX, y, 1, line, ink);
+        s.rect(textX + textWidth - 1, y, 1, line, ink);
+        if (page.userTurns[r - 1] !== turn) s.rect(textX, y, textWidth, 1, ink);
+        if (r === lines.length - 1 || page.userTurns[r + 1] !== turn) s.rect(textX, y + line - 1, textWidth, 1, ink);
+      }
+    });
+  }
+  lines.forEach((row, r) => s.text(row, textX, top + r * line, columns));
+}
+
+export function renderFineScreen(page: ReaderPage, font: FineFont, status: FineStatus, level = INK_MAX, background = DEFAULT_TURN_BACKGROUND): number[][] {
   const s = new Surface(font, inkByte(level));
-  const { line, rows, columns, textX, textWidth, statusY, dividerY } = fineLayout(font);
-  s.rect(0, 0, SCREEN.width, FRAME); s.rect(0, SCREEN.height - FRAME, SCREEN.width, FRAME);
-  s.rect(0, 0, FRAME, SCREEN.height); s.rect(SCREEN.width - FRAME, 0, FRAME, SCREEN.height);
-  text.split('\n').slice(0, rows).forEach((row, r) => s.text(row, textX, TOP + r * line, columns));
+  const { line, columns, textX, textWidth, statusY, dividerY } = fineLayout(font);
+  s.frame();
+  drawTurnRows(s, page, TOP, background);
   s.rect(textX, dividerY, textWidth, 1);
   const rightCells = Math.min(fineCells(status.right), columns);
   s.text(status.right, textX + (columns - rightCells) * TABLES[font].width, statusY, rightCells);
@@ -262,8 +306,7 @@ export const FONT_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvw
 export const FONT_SAMPLE_JA = 'あいうえお アイウエオ 日本語の表示、漢字。「東雲」 ABC abc 0123';
 export function renderFontComparison(level = INK_MAX): number[][] {
   const s = new Surface(FINE_FONTS[0], inkByte(level));
-  s.rect(0, 0, SCREEN.width, FRAME); s.rect(0, SCREEN.height - FRAME, SCREEN.width, FRAME);
-  s.rect(0, 0, FRAME, SCREEN.height); s.rect(SCREEN.width - FRAME, 0, FRAME, SCREEN.height);
+  s.frame();
   const nameCells = Math.max(...FINE_FONTS.map(font => fineLabel(font).length)) + 2;
   let y = TOP;
   for (const font of FINE_FONTS) {
@@ -277,6 +320,22 @@ export function renderFontComparison(level = INK_MAX): number[][] {
   const back = fineLayout(s.font);
   s.rect(back.textX, y + 2, back.textWidth, 1);
   s.text(t('compareBack'), back.textX, y + 8, back.columns);
+  return s.tiles();
+}
+
+export function renderBackgroundComparison(font: FineFont, level = INK_MAX): number[][] {
+  const s = new Surface(font, inkByte(level));
+  const { line, columns, textX, textWidth, rows } = fineLayout(font);
+  const [sample] = readerPages(t('backgroundSample'), fineMeasure(font), textWidth, rows, Infinity);
+  s.frame();
+  let y = TOP;
+  for (const option of TURN_BACKGROUNDS) {
+    s.text(turnBackgroundLabel(option), textX, y, columns);
+    drawTurnRows(s, sample, y + line, option);
+    y += (sample.userTurns.length + 1) * line + 5;
+  }
+  s.rect(textX, y + 2, textWidth, 1);
+  s.text(t('compareBack'), textX, y + 8, columns);
   return s.tiles();
 }
 
