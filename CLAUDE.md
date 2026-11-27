@@ -56,6 +56,13 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.74: merged the Fusion Pixel 12 zh_HK CJK table (Codex worker ctx_d4dbfd4e5187,
+caceaa3, merge 2035a92): 6,557 Fusion glyphs, 1 alias (㩒 -> 撳), 32 Shinonome fallbacks; table
+355,723 B raw / 104,865 B gzipped; Latin tables byte-identical; OFL licence bundled
+(app/src/fonts/FUSION-PIXEL-LICENSE.txt). The worker's worker_done (msg_b5875b09a243) arrived while
+the coordinator was not woken; the coordinator told Eugene it was still running until he asked.
+235 tests, build pass. Preview: chat-voice worktree .local/fusion-preview/cantonese-reader.png.
+
 2026-11-27 bridge restarted with Eugene's approval for 1.0.73 (old supervisor 6768/server 62660/
 whisper 62444/tunnel watcher 56512/cloudflared 11712; new supervisor 3012, server 57676, whisper
 61824 --vad; no tunnel or cloudflared process). Local and tailnet healthz ok; capabilities over the

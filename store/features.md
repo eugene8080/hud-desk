@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.73**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.74**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.73,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.74,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.73)
+## Feature list (beta 1.0.74)
 
 ### All modules
 
@@ -123,5 +123,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.73: Tailscale only. The app connects to your PC only over your tailnet; the Cloudflare tunnel and the ntfy.sh discovery service are gone, so no outside service carries or sees your traffic.
+1.0.74: Chinese in the pixel fonts now uses Fusion Pixel 12 (Hong Kong variant): every common Traditional character plus Cantonese characters such as 啲 嘢 唔 嘅 咗 喺, alongside Japanese kana and kanji.
 <!-- whatsnew:end -->
