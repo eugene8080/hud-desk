@@ -898,11 +898,48 @@ function home(page = positions.coding.page, selected = positions.coding.cursor, 
 // incomplete, read it again and redraw the rows in place (bounded: about 15 s).
 const MAIL_RETRY_MS = 1500, MAIL_RETRIES = 10;
 let mailRetryTimer: ReturnType<typeof setTimeout> | undefined;
-async function mailHome(page = positions.email.page, selected = positions.email.cursor, mounted?: SessionMenuScreen, retry = 0) {
+
+// Rows above the threads: the mailbox on screen when there are two or more (a click switches to
+// the next one; Eugene, 2026-11-27), then Filter by Label.
+function mailLeadRows(mailbox: string, filterColumn: string): SessionColumns[] {
+  return [...(mailbox ? [{ marker: '*', title: mailbox, right: '' }] : []), { marker: '*', title: tr('mailFilter'), right: filterColumn }];
+}
+function pickMailLead(i: number, mailbox: string): boolean {
+  if (mailbox && i === 0) { void switchMailbox(); return true; }
+  if (i === (mailbox ? 1 : 0)) { void mailLabels(0, 0, true); return true; }
+  return false;
+}
+// The loading screen: the lead rows and a moving-dot row. No count, so it is never cached.
+function mailLoadingContent(mailbox: string): ModuleListContent {
+  const columns = [...mailLeadRows(mailbox, ''), { marker: '', title: tr('mailLoading'), right: '', busy: true }];
+  return { columns, items: columns.map(row => row.title),
+    menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
+    onPick: i => { pickMailLead(i, mailbox); } };
+}
+
+// Glasses: switch to the next mailbox, show its loading row in place at once, then its threads.
+async function switchMailbox() {
+  const next = mail.nextMailbox();
+  const list = current;
+  if (!next || list?.kind !== 'list' || list.module !== 'email') return;
+  await applyMailFilter(MAIL_ACCOUNTS_KEY, mail.selectMailbox(next), false);
+  if (current !== list) return;
+  await showModuleList('email', 0, 1, mailLoadingContent(mail.mailboxName()), list);
+  if (current === list) await mailHome(0, undefined, list, 0, true);
+}
+
+// Phone: choose a mailbox; the same refresh path as a label toggle.
+async function selectMailAccount(id: string) {
+  if (id === mail.currentMailbox()) return;
+  await applyMailFilter(MAIL_ACCOUNTS_KEY, mail.selectMailbox(id), true);
+}
+
+// loadingShown: the rows on screen are the loading screen, so a failure replaces them.
+async function mailHome(page = positions.email.page, selected = positions.email.cursor, mounted?: SessionMenuScreen, retry = 0, loadingShown = false) {
   clearTimeout(mailRetryTimer);
   selectThread(null);
   let owner = current;
-  let placeholder = false;
+  let placeholder = loadingShown;
   const revision = moduleRevision;
   const filterRevision = mailFilterRevision;
   const active = () => current === owner && revision === moduleRevision && filterRevision === mailFilterRevision;
@@ -910,12 +947,7 @@ async function mailHome(page = positions.email.page, selected = positions.email.
     // Nothing cached yet (first open after a start): show the Email screen at once with a moving
     // dot, then fill its rows in place. No count, so this placeholder is never cached.
     if (!mounted && !moduleCache.has('email')) {
-      mounted = await showModuleList('email', page, selected, {
-        columns: [{ marker: '*', title: tr('mailFilter'), right: '' }, { marker: '', title: tr('mailLoading'), right: '', busy: true }],
-        items: [tr('mailFilter'), tr('mailLoading')],
-        menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
-        onPick: i => { if (i === 0) void mailLabels(0, 0, true); },
-      });
+      mounted = await showModuleList('email', page, selected, mailLoadingContent(mail.mailboxName()));
       if (current !== mounted || revision !== moduleRevision || filterRevision !== mailFilterRevision) return;
       owner = mounted;
       placeholder = true;
@@ -923,18 +955,19 @@ async function mailHome(page = positions.email.page, selected = positions.email.
     let result = await mail.list(page);
     // A changed filter or external mailbox activity can remove the last page.
     // Bridges before 1.0.65 send no loading flag: a short page that has a next page is incomplete.
-    const loading = () => result.loading ?? (result.items.length < 8 && result.hasMore);
+    const loading = () => result.loading ?? (result.items.length < result.size && result.hasMore);
     while (page > 0 && !result.items.length && !result.hasMore && !loading() && active()) result = await mail.list(--page);
     if (!active()) return;
-    const columns = [{ marker: '*', title: tr('mailFilter'), right: result.filterColumn }, ...result.items.map(item => mailColumns(item, result.letter(item)))];
+    const lead = mailLeadRows(result.mailbox, result.filterColumn);
+    const columns = [...lead, ...result.items.map(item => mailColumns(item))];
     // An incomplete page keeps a moving-dot row below its threads while it fills in.
-    if (loading() && retry < MAIL_RETRIES && result.items.length < 8) columns.push({ marker: '', title: tr('mailLoadingMore'), right: '', busy: true });
+    if (loading() && retry < MAIL_RETRIES && result.items.length < result.size) columns.push({ marker: '', title: tr('mailLoadingMore'), right: '', busy: true });
     const shown = await showModuleList('email', page, selected, { columns, count: tr('mailUnread', result.unread),
       items: columns.map(row => `${row.marker || ' '} ${row.title} ${row.right}`),
       onPreviousPage: page > 0 ? () => mailHome(page - 1, -1) : undefined,
       onNextPage: result.hasMore ? () => mailHome(page + 1, 1) : undefined,
       menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
-      onPick: i => { if (i === 0) void mailLabels(0, 0, true); else if (result.items[i - 1]) void openMail(result.items[i - 1]); },
+      onPick: i => { if (!pickMailLead(i, result.mailbox) && result.items[i - lead.length]) void openMail(result.items[i - lead.length]); },
     }, mounted);
     if (loading() && retry < MAIL_RETRIES) {
       mailRetryTimer = setTimeout(() => {
@@ -946,12 +979,14 @@ async function mailHome(page = positions.email.page, selected = positions.email.
   } catch {
     // A failed refresh keeps the rows on screen; a failed first load replaces the loading row.
     if (mounted && !placeholder) return;
+    const mailbox = mail.mailboxName();
+    const lead = mailLeadRows(mailbox, '');
     if (active()) await showModuleList('email', page, 0, {
-      columns: [{ marker: '*', title: tr('mailFilter'), right: '' }, { marker: '', title: tr('mailUnavailable'), right: '' }],
-      items: [tr('mailFilter'), tr('mailUnavailable')],
-      headings: [2],
+      columns: [...lead, { marker: '', title: tr('mailUnavailable'), right: '' }],
+      items: [...lead.map(row => row.title), tr('mailUnavailable')],
+      headings: [lead.length + 1],
       menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
-      onPick: i => { if (i === 0) void mailLabels(0, 0, true); },
+      onPick: i => { pickMailLead(i, mailbox); },
     });
   }
 }
@@ -1036,11 +1071,6 @@ function saveMailPref(key: string, value: string) {
   return mailStorageWrites;
 }
 
-// Filter by email address: the same refresh path as a label toggle.
-async function toggleMailAccount(id: string, fromPhone = false) {
-  await applyMailFilter(MAIL_ACCOUNTS_KEY, mail.toggleAccount(id), fromPhone);
-}
-
 async function toggleMailLabel(key: string, fromPhone = false) {
   await applyMailFilter(MAIL_LABELS_KEY, mail.toggle(key), fromPhone);
 }
@@ -1080,10 +1110,9 @@ async function mailLabels(page: number, selected: number, refresh = false, searc
       onPick: async i => {
         const row = rows[i];
         if (i === 0) { await done(); return; }
-        if (!row?.key && !row?.account) return;
+        if (!row?.key) return;
         const picker = current;
-        if (row.account) await toggleMailAccount(row.account);
-        else await toggleMailLabel(row.key!);
+        await toggleMailLabel(row.key);
         if (current === picker) await mailLabels(page, i, false, search);
       }, onBack: search ? () => mailLabels(0, 0) : done,
       onHold: voiceAvailable ? () => { void record({ search: text => mailLabels(0, 0, false, text) }, true); } : undefined,
@@ -1917,8 +1946,8 @@ async function main() {
     mailLabels: () => mail?.labelGroups(true) ?? Promise.resolve([]),
     selectedMailLabels: () => mail?.selectedLabels() ?? new Set(),
     toggleMailLabel: key => toggleMailLabel(key, true),
-    mailAccountsOff: () => mail?.accountsOff() ?? new Set(),
-    toggleMailAccount: id => toggleMailAccount(id, true),
+    mailAccount: () => mail?.currentMailbox(),
+    selectMailAccount: id => selectMailAccount(id),
     chatNetworks: () => chat?.networks() ?? Promise.resolve([]),
     chatNetworkSelected: name => chat?.isSelected(name) ?? false,
     toggleChatNetwork: (name, networks) => toggleChatNetwork(name, networks, true),

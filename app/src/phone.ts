@@ -23,8 +23,8 @@ export type PhoneDeps = {
   selectedMailLabels(): ReadonlySet<string>;
   toggleMailLabel(key: string): Promise<void>;
   // Filter by email address: mailboxes switched off on both screens.
-  mailAccountsOff(): ReadonlySet<string>;
-  toggleMailAccount(id: string): Promise<void>;
+  mailAccount(): string | undefined;
+  selectMailAccount(id: string): Promise<void>;
   chatNetworks(): Promise<string[]>;
   chatNetworkSelected(name: string): boolean;
   toggleChatNetwork(name: string, networks: string[]): Promise<void>;
@@ -229,18 +229,30 @@ export function createPhone(deps: PhoneDeps) {
     return wrap;
   }
 
+  function choice(name: string, label: string, checked: boolean, onChange: () => Promise<void>) {
+    const wrap = el('label', 'check');
+    const input = el('input');
+    input.type = 'radio';
+    input.name = name;
+    input.checked = checked;
+    input.addEventListener('change', () => { if (input.checked) void onChange(); });
+    wrap.append(input, el('span', '', label));
+    return wrap;
+  }
+
   function renderMail() {
     const list = byId('mail-label-list');
     const query = byId<HTMLInputElement>('mail-label-search').value.trim();
     const chosen = deps.selectedMailLabels();
-    const off = deps.mailAccountsOff();
-    // One mailbox needs no address filter; two or more get a checkbox each.
+    const currentAccount = deps.mailAccount();
+    // One mailbox at a time: a choice per address (two or more mailboxes), and the labels of the
+    // chosen one below. The glasses toggle the same choice from the row under row 0.
     const groups = mailGroups ?? [];
     const accounts = byId('mail-account-filter');
     accounts.hidden = groups.length < 2;
     byId('mail-account-list').replaceChildren(...groups.map(({ account }) =>
-      checkbox(accountName(account), !off.has(account.id), async () => { await deps.toggleMailAccount(account.id); })));
-    const rows = groups.filter(({ account }) => !off.has(account.id)).flatMap(({ account, labels }) => {
+      choice('mail-account', accountName(account), account.id === currentAccount, async () => { await deps.selectMailAccount(account.id); })));
+    const rows = groups.filter(({ account }) => groups.length < 2 || account.id === currentAccount).flatMap(({ account, labels }) => {
       const visible = labels.filter(label => matchesMailLabel(label.name, query));
       if (query && !visible.length) return [];
       return [el('h5', 'section', accountName(account)), ...(!account.ok ? [el('p', 'muted', tr('mailUnavailable'))] : []),

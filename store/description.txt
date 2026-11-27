@@ -9,7 +9,7 @@ Coding:
 
 Email (Gmail, when your bridge is set up for it):
 - Read only: no sending, drafts or archive. Opening a thread marks it read.
-- One or more Gmail accounts. Filter by email address and Filter by Label on the glasses or the phone, with voice search on the glasses. Eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
+- One or more Gmail accounts, one at a time (click the address to switch). Filter by Label on the glasses or the phone, with voice search on the glasses. Seven or eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
 
 Chat (Beeper Desktop, when set up): chats with Filter by Network, voice replies with review.
 

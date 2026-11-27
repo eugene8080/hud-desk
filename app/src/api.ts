@@ -88,7 +88,7 @@ export const api = {
   mail: {
     accounts: () => call<MailAccount[]>('GET', '/api/mail/accounts'),
     labels: (account: string) => call<MailLabel[]>('GET', `/api/mail/labels?${new URLSearchParams({ account })}`),
-    threads: (filter: string[], page: number) => call<MailPage>('GET', `/api/mail/threads?${new URLSearchParams({ filter: filter.join(','), page: String(page), size: '8' })}`),
+    threads: (filter: string[], page: number, size = 8) => call<MailPage>('GET', `/api/mail/threads?${new URLSearchParams({ filter: filter.join(','), page: String(page), size: String(size) })}`),
     thread: (account: string, id: string) => call<MailConversation>('GET', `/api/mail/thread?${new URLSearchParams({ account, id })}`),
     read: (account: string, threadId: string) => call<{ ok: boolean }>('POST', '/api/mail/read', { account, threadId }),
   },

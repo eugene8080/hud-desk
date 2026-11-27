@@ -56,6 +56,19 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.67 (user on G2 after the reboot: chat works, Email loading screen works; wants
+to toggle between the work and personal mailbox instead of filtering both). Email shows one
+mailbox at a time: with two or more, the row under row 0 shows the address and a click switches
+to the next (in place, loading dot); Filter by Label lists only that mailbox; seven threads a page
+(eight with one mailbox); phone page has one radio choice per address. Pref mail-accounts keeps
+off = every other account; a saved two-on filter narrows to the first one on. Chat reader has no
+blank row between messages. 220 tests, build pass. Requested next: show voice messages, click to
+transcribe, and an option to translate (esp. Chinese) to English as 'original (English)'. Facts:
+bridge/beeper.mjs drops messages without text; Beeper Message.type has VOICE/AUDIO and attachments
+(isVoiceNote, duration, id mxc://, optional transcription); GET /v1/assets/serve streams a file.
+Local engines available: whisper.cpp (only ggml-base.en, English-only), Ollama 0.40.18 with
+qwen3.8:27b, RTX 5090, Ryzen 9 9950X3D; no ffmpeg.
+
 2026-11-27 PSCAP11 rebooted (boot 01:41:57 local); the sign-in task restarted the bridge with the
 1.0.65/1.0.66 bridge code and the beeper block: supervisor 20716, server 21108, whisper 21832
 --vad, tunnel watcher 21128 / cloudflared 21500; local and tailnet healthz ok. Read-only check

@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.66**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.67**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.66,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.67,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.66)
+## Feature list (beta 1.0.67)
 
 ### All modules
 
@@ -55,14 +55,14 @@ Rule for every agent: each beta release updates this file in the release commit:
 ### Email (Gmail; only when the bridge has a mail set-up)
 
 - Read-only: no sending, drafts, archive or label changes. Opening a thread marks it read in Gmail.
-- List of eight threads a page, newest first, sender and subject, time today or date, `/` for unread
+- Threads newest first, eight a page (seven with two mailboxes), sender and subject, time today or date, `/` for unread
   and `-` for read in the gutter, unread count on row 0. While a page loads, a moving dot shows
   Email is working (Loading email…, then Loading more… until the page is complete).
-- Several Gmail accounts. Filter by email address on the
-  phone page and in the glasses label picker (the address row is a checkbox); with two mailboxes
-  on, each row shows the account letter (`[W] 14:05`). A newly added mailbox starts with its Inbox.
-- Filter by Label on the glasses and the phone page (shared picks): one heading per mailbox
-  address, labels with unread counts, several at once. The phone has a type-to-narrow box; on the glasses,
+- Several Gmail accounts, one on screen at a time. With two or more, the row under row 0 shows the
+  mailbox address and a click switches to the next one; the phone page has a choice per address.
+  Each mailbox keeps its own label picks. A newly added mailbox starts with its Inbox.
+- Filter by Label on the glasses and the phone page (shared picks): the labels of the mailbox on
+  screen with unread counts, several at once. The phone has a type-to-narrow box; on the glasses,
   hold to search by voice (labels containing every spoken word; double-click clears).
 - Threads read oldest to newest and open at the top of the newest message; quoted reply history is
   removed and hard-wrapped plain text is reflowed to the glasses' width.
@@ -73,7 +73,8 @@ Rule for every agent: each beta release updates this file in the release commit:
 - Chats from the networks Beeper Desktop connects (WhatsApp, Signal, Telegram, ...), eight a page,
   most recent first, `/` unread and `-` read, unread chats counted on row 0.
 - Filter by Network on the glasses and the phone page (shared picks).
-- Reader opens at the newest message; your messages start `/ `, others `> ` with the sender.
+- Reader opens at the newest message; your messages start `/ `, others `> ` with the sender, with
+  no blank row between messages.
 - Voice reply as in Coding: hold, release to review, click to send, double-click to cancel. A send
   is never repeated automatically. Opening a chat does not mark it read in Beeper.
 
@@ -96,7 +97,7 @@ Coding:
 
 Email (Gmail, when your bridge is set up for it):
 - Read only: no sending, drafts or archive. Opening a thread marks it read.
-- One or more Gmail accounts. Filter by email address and Filter by Label on the glasses or the phone, with voice search on the glasses. Eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
+- One or more Gmail accounts, one at a time (click the address to switch). Filter by Label on the glasses or the phone, with voice search on the glasses. Seven or eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
 
 Chat (Beeper Desktop, when set up): chats with Filter by Network, voice replies with review.
 
@@ -112,5 +113,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.66: Email shows a moving dot while it loads (Loading email…, then Loading more… until the page is complete). Your turns in the reader use one dim dotted background; the Background picker and Compare backgrounds are gone.
+1.0.67: Email shows one mailbox at a time. With two Gmail accounts, the row under [Email] shows the address; click it to switch mailbox (the phone page has the same choice). Chat messages no longer have a blank row between them.
 <!-- whatsnew:end -->

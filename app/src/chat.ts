@@ -17,8 +17,10 @@ export function chatReaderText(conversation: ChatConversation): ReaderContent {
     const who = message.own ? '/' : `> ${line(message.from) || t('chatSender')}:`;
     return `${who} ${message.text.replace(/\r\n?|\n/g, '\n  ')}`;
   });
-  const earlier = messages.slice(0, -1).join('\n\n');
-  return { text: messages.join('\n\n') || t('chatEmpty'), openingOffset: earlier ? earlier.length + 2 : 0 };
+  // No blank row between messages (Eugene, 2026-11-27): the '/ ' and '> Sender:' prefixes
+  // already mark where each one starts.
+  const earlier = messages.slice(0, -1).join('\n');
+  return { text: messages.join('\n') || t('chatEmpty'), openingOffset: earlier ? earlier.length + 1 : 0 };
 }
 
 export class Chat {

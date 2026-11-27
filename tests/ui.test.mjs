@@ -158,9 +158,9 @@ const mailFixture = () => {
   const fixture = {
     accounts: async () => [{ id: 'work', short: 'W', ok: true }],
     labels: async () => [{ id: 'INBOX', name: 'Inbox', unread: Number(item.unread) }, { id: 'Label_1', name: 'Bulletins', unread: Number(item.unread) }],
-    threads: async (filter, page) => {
-      requests.push({ filter: [...filter], page });
-      return { items: Array.from({ length: 8 }, (_, i) => ({ ...item, id: `page${page}-${i}`, subject: page ? `Page ${page} survey` : item.subject })), hasMore: page === 0, unread: Number(item.unread) };
+    threads: async (filter, page, size = 8) => {
+      requests.push({ filter: [...filter], page, size });
+      return { items: Array.from({ length: size }, (_, i) => ({ ...item, id: `page${page}-${i}`, subject: page ? `Page ${page} survey` : item.subject })), hasMore: page === 0, unread: Number(item.unread) };
     },
     thread: async () => ({ subject: item.subject, messages }),
     read: async () => { item.unread = false; return { ok: true }; },
@@ -255,8 +255,10 @@ test('Shared reader page metadata carries Chat user turns across message continu
     { own: true, from: '', date: 1, text: 'Synthetic first line.\nSecond line.' },
     { own: false, from: 'Fixture sender', date: 2, text: 'Synthetic reply.\n/ Message text.' },
   ] });
+  // No blank row between messages (2026-11-27).
+  assert.equal(text, '/ Synthetic first line.\n  Second line.\n> Fixture sender: Synthetic reply.\n  / Message text.');
   const [page] = textExports.readerPages(text, str => str.length, 60);
-  assert.deepEqual([...page.userTurns], [1, 1, 0, 0, 0]);
+  assert.deepEqual([...page.userTurns], [1, 1, 0, 0]);
 });
 
 test('Chat shares Coding voice review, sends once per click, and cancels with no POST', async () => {
@@ -455,9 +457,9 @@ test('row zero brackets the module name so it reads as a button', () => {
 const twoMailboxes = fixture => {
   fixture.accounts = async () => [{ id: 'work', short: 'W', address: 'work@example.test', ok: true }, { id: 'home', short: 'H', address: 'home@example.test', ok: true }];
   const threads = fixture.threads;
-  fixture.threads = async (filter, page) => {
-    const result = await threads(filter, page);
-    return { ...result, items: result.items.map((item, i) => ({ ...item, account: i % 2 && filter.some(key => key.startsWith('home:')) ? 'home' : 'work' })) };
+  fixture.threads = async (filter, page, size) => {
+    const result = await threads(filter, page, size);
+    return { ...result, items: result.items.map(item => ({ ...item, account: filter.some(key => key.startsWith('home:')) ? 'home' : 'work' })) };
   };
   return fixture;
 };
@@ -481,32 +483,47 @@ test('a new mailbox starts with its Inbox, and saved picks of a known mailbox st
   assert.deepEqual([...parseAccountPrefs('not json').off], []);
 });
 
-test('Filter by email address: the glasses picker toggles a mailbox, and the list shows account letters', async () => {
+test('two mailboxes: the row under row 0 toggles one mailbox at a time, shared with the phone', async () => {
   const { fixture, requests } = mailFixture();
+  // Saved state from 1.0.62-1.0.66: work picked, home not seen yet. Home gets its Inbox but only
+  // one mailbox stays on (Eugene, 2026-11-27: toggle, not filter).
   const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] }, storage: { module: 'email', 'mail-labels': '["work:INBOX"]' }, mail: twoMailboxes(fixture) });
-  // home is new, so its Inbox joins the request; both letters show in the right column.
-  assert.deepEqual(requests.at(-1).filter, ['work:INBOX', 'home:INBOX']);
-  assert.match(container(h, 'menu-right').content, /\[W\] 14:05|\[W\] 25 Nov/);
-  assert.match(container(h, 'menu-right').content, /\[H\]/);
-  await h.pickRow(1);
-  const picker = container(h, 'body').content.split('\n');
-  assert.equal(picker[1], '  [x] work@example.test');
-  assert.ok(picker.includes('  [x] home@example.test'), picker.join('\n'));
-  // Switch home off from its address row.
-  const homeRow = picker.indexOf('  [x] home@example.test');
-  await h.pickRow(homeRow);
-  assert.match(container(h, 'body').content, /\[ \] home@example\.test/);
-  assert.doesNotMatch(container(h, 'body').content, /Unavailable/);
+  assert.deepEqual(requests.at(-1), { filter: ['work:INBOX'], page: 0, size: 7 });
   assert.equal(h.storage.get('mail-accounts'), '{"off":["home"],"known":["work","home"]}');
+  const body = () => container(h, 'body').content.split('\n').map(row => row.trim());
+  assert.deepEqual(body().slice(0, 2), ['work@example.test', 'Filter']);
+  assert.equal(body().length, 9); // mailbox row, Filter, seven threads
+  assert.doesNotMatch(container(h, 'menu-right').content, /\[W\]|\[H\]/);
+  // Click the mailbox row: home's Inbox, rows rewritten in place, cursor kept on that row.
+  const pages = h.pages.length;
+  await h.scroll('down'); await h.tap(); await h.flush();
+  assert.equal(h.pages.length, pages);
+  assert.deepEqual(requests.at(-1), { filter: ['home:INBOX'], page: 0, size: 7 });
+  assert.equal(h.storage.get('mail-accounts'), '{"off":["work"],"known":["work","home"]}');
+  assert.equal(body()[0], 'home@example.test');
+  assert.match(container(h, 'menu-cursor').content.split('\n')[1], /^>/);
+  // The label picker lists only the mailbox on screen.
+  await h.pickRow(2);
+  const picker = container(h, 'body').content;
+  assert.match(picker, /home@example\.test/);
+  assert.doesNotMatch(picker, /work@example\.test|Unavailable/);
   await h.pickRow(0);
-  assert.deepEqual(requests.at(-1).filter, ['work:INBOX']);
-  // One mailbox on: no letters.
-  assert.doesNotMatch(container(h, 'menu-right').content, /\[W\]/);
-  // The phone sees the same switch and can turn home back on.
+  // The phone shows and changes the same choice.
   const phone = h.phone();
-  assert.deepEqual([...phone.mailAccountsOff()], ['home']);
-  await phone.toggleMailAccount('home');
-  assert.deepEqual(requests.at(-1).filter, ['work:INBOX', 'home:INBOX']);
+  assert.equal(phone.mailAccount(), 'home');
+  await phone.selectMailAccount('work');
+  assert.deepEqual(requests.at(-1).filter, ['work:INBOX']);
+  assert.equal(phone.mailAccount(), 'work');
+});
+
+test('a saved two-mailbox filter narrows to the first mailbox that was on', async () => {
+  const { fixture, requests } = mailFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] },
+    storage: { module: 'email', 'mail-labels': '["work:INBOX","home:INBOX"]', 'mail-accounts': '{"off":[],"known":["work","home"]}' }, mail: twoMailboxes(fixture) });
+  assert.deepEqual(requests.at(-1).filter, ['work:INBOX']);
+  assert.equal(h.storage.get('mail-accounts'), '{"off":["home"],"known":["work","home"]}');
+  // home keeps its Inbox pick for when it is switched to.
+  assert.equal(h.storage.get('mail-labels'), '["work:INBOX","home:INBOX"]');
 });
 
 test('one mailbox keeps its address as a plain heading in the picker', async () => {

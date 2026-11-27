@@ -1,7 +1,7 @@
 # Orca Glass TODOs
 Updated: 2026-11-26
 
-Current beta: **1.0.66** (Email loading dot; Dots 1/2 user-turn background; read mark '-'). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
+Current beta: **1.0.67** (one mailbox at a time; no blank row in Chat; Email loading dot). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
 Workspace-filter preview approved, released and retired with merged worktree cleanup.
 Future visual changes require preview approval before beta upload.
 Completed/superseded release notes: [history](docs/todo-history.md).
@@ -9,6 +9,9 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 ## Open work
 
 - [ ] **Super app: Coding, Email, Chat, Reader in one app -- Chat live since the 2026-11-27 reboot:**
+  2026-11-27 beta 1.0.67: mailbox toggle + no blank chat rows; G2 check pending. Eugene confirmed
+  the Email loading screen and Chat. Next: Chat voice messages (show, click to transcribe, optional
+  translation to English 'original (English)'), local Whisper multilingual + Ollama.
   2026-11-27 reboot restarted the bridge: Chat offered and read live (counts only). Bridge fix for the
   over-eager mail loading flag (unread scan excluded) needs an approved restart. G2 checks pending:
   Chat list/reader and the first real voice reply (Eugene's own), Email loading dot.
