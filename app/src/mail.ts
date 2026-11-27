@@ -8,6 +8,7 @@ export type ReaderSource<Content extends ReaderContent = ReaderContent> = {
   load: () => Promise<Content>;
   statusText?: () => string;
   hold?: () => void;
+  refreshOnEnd?: boolean;
   afterDisplay?: () => Promise<void>;
 };
 

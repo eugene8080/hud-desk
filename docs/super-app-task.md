@@ -24,7 +24,7 @@ address, OAuth client file, origins; ask Eugene if it is missing), `docs/session
 | S0 | Module selector on row 0; Coding = today's app, unchanged | no | to build |
 | E1 | Email, work account: label filter, thread list, reader; opening a thread marks it read in Gmail | the Gmail unread flag only | to build with S0 |
 | E2 | Email: add the personal account | the Gmail unread flag only | when Eugene asks |
-| C | Chat: Beeper Desktop API through the bridge | chat replies | later |
+| C | Chat: Beeper Desktop API through the bridge | chat replies | implemented, live read check pending |
 | R | Reader: share-in, PDF and article to text, library | no | later; design notes only |
 
 Build S0 + E1 first, release them, and wait for Eugene's G2 check.
@@ -224,19 +224,20 @@ Input (Eugene chose cycling, 2026-11-26; show a simulator preview with the relea
 Add a second entry to `mail.accounts`, run `node scripts/mail-auth.mjs --account personal` for one more
 consent, and show the account letter in the list. No other change.
 
-## C: Chat (later)
+## C: Chat
 
-- The bridge calls the Beeper Desktop API on `127.0.0.1:23373` with its own Beeper token (mint one for Orca
-  Glass; do not share GazeChat's). The phone never talks to Beeper, so Beeper's Remote Access can be
-  switched off.
-- Port, do not embed: GazeChat (github.com/eugene8080/gazechat) is React with even-toolkit; Orca Glass is
-  plain TypeScript. Take the chat list, the message reader and the voice reply with review. Chat replies
-  keep a review step; never send to a real contact during development.
-- Facts (messenger-glass `docs/design.md` Q7): Eugene's WhatsApp, Signal and Telegram run on Beeper Cloud
-  (`bridge.provider: "cloud"`; on 2026-11-26 Beeper Desktop's only remote connections went to Beeper's
-  Matrix server), so chat content passes through Beeper's servers. Beeper does not bridge Telegram
-  channels. The Desktop API WebSocket `/v1/ws` needs an `Authorization` header; the `?access_token=` form
-  gets 401.
+- A configured bridge offers Chat after Email on row 0 and on the phone. The list shows eight chats per
+  page, newest activity first, with read and unread gutter marks. The phone and glasses share the saved
+  Filter by Network selection and the unread total reflects that selection.
+- Chat opens in the shared reader at the start of the latest message. Swipe down on the last page to
+  refresh. Opening a chat does not mark it read in Beeper.
+- Hold to dictate with local Whisper, release to review, click to send or double-click to cancel.
+  Chat shares Coding's recording flow. The status row reports whether Beeper acknowledged the submission.
+- The bridge calls Beeper Desktop on loopback with a dedicated Orca Glass token. Its four routes require
+  the bridge bearer token and an allowed private Host. The API client allows three Beeper reads and a
+  single text-send operation. See [Chat setup and limits](chat.md).
+- Bridge tests and Even simulator automation use synthetic data. The coordinator owns the live read
+  check with Eugene and the beta release.
 
 ## R: Reader (later; design notes only)
 

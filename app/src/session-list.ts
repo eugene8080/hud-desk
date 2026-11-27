@@ -14,14 +14,15 @@ export function sessionRow(title: string, handle: string, agent: string, state: 
 
 export type SessionColumns = { marker: string; title: string; right: string; busy?: boolean; handle?: string; preserveSuffix?: boolean };
 export const sessionHeading = () => `Orca-glass ${__APP_VERSION__}`;
-export type GlassModule = 'coding' | 'email';
+export type GlassModule = 'coding' | 'email' | 'chat';
 export type ModulePosition = { page: number; cursor: number };
 export function offeredModules(modules?: string[]): GlassModule[] {
-  const supported = [...new Set(modules)].filter((id): id is GlassModule => id === 'coding' || id === 'email');
-  return supported.length ? supported : ['coding'];
+  const optional = (['email', 'chat'] as const).filter(id => modules?.includes(id));
+  return ['coding', ...optional];
 }
 export const nextModule = (modules: GlassModule[], current: GlassModule) => modules[(modules.indexOf(current) + 1) % modules.length];
-export const moduleLabel = (id: GlassModule) => t(id === 'coding' ? 'moduleCoding' : 'moduleEmail');
+const MODULE_LABELS = { coding: 'moduleCoding', email: 'moduleEmail', chat: 'moduleChat' } as const;
+export const moduleLabel = (id: GlassModule) => t(MODULE_LABELS[id]);
 export const MENU_HEAD = { xPosition: 28, width: 548, height: 28 };
 export const MENU_COUNT = { containerID: 3, containerName: 'menu-count', xPosition: 300, yPosition: 0, width: 276, height: 28 };
 // Row 0 on the glasses: brackets mark the module name as a button ("[Email]"), because a

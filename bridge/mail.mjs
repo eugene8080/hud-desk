@@ -99,7 +99,7 @@ function pool(limit) {
   };
 }
 
-async function before(promise, deadline) {
+export async function before(promise, deadline) {
   let timer;
   try {
     return await Promise.race([promise, new Promise(resolve => {

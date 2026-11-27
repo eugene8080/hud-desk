@@ -82,7 +82,7 @@ function fixture() {
 
 async function serve(t, mailConfig, { transport, credentials }, coldWaitMs) {
   const server = createBridge({
-    token: 'fixture-bearer', mailConfig, privateHosts: [privateHost],
+    token: 'fixture-bearer', mailConfig, beeperConfig: null, privateHosts: [privateHost],
     mailOptions: { gmailOptions: { transport, credentials }, coldWaitMs },
   }).listen(0, '127.0.0.1');
   t.after(() => new Promise(resolve => server.close(resolve)));

@@ -25,6 +25,9 @@ export type PhoneDeps = {
   // Filter by email address: mailboxes switched off on both screens.
   mailAccountsOff(): ReadonlySet<string>;
   toggleMailAccount(id: string): Promise<void>;
+  chatNetworks(): Promise<string[]>;
+  chatNetworkSelected(name: string): boolean;
+  toggleChatNetwork(name: string, networks: string[]): Promise<void>;
   // The glasses own these values; the phone reads and writes them through main.ts
   // so both screens stay in step (main re-renders the glasses after a phone change).
   filters(): { provider: string; orca: Set<string> | null; hermes: Set<string> | null };
@@ -61,6 +64,9 @@ export function createPhone(deps: PhoneDeps) {
   let mailError = false;
   let mailRequest = 0;
   let mailLoading = false;
+  let networkCatalog: string[] | undefined;
+  let networkError = false;
+  let networkRequest: Promise<void> | undefined;
   const names = new Map<string, string>();
 
   // Tabs: Home (status, filters, usage, composer) and Settings (setup and log).
@@ -104,6 +110,7 @@ export function createPhone(deps: PhoneDeps) {
     mailRequest++;
     mailGroups = null;
     mailLoading = mailError = false;
+    resetNetworks();
     if (c.state === 'unpaired' || c.state === 'offline') setConnOpen(true);
     if (usable) { setConnOpen(false); if (deps.modules().selected === 'coding') void load(); }
     render();
@@ -156,16 +163,46 @@ export function createPhone(deps: PhoneDeps) {
       return button;
     }));
     const email = usable && selected === 'email';
+    const chat = usable && selected === 'chat';
     byId('mail-filters-card').hidden = !email;
-    byId('filters-card').hidden = byId('usage-card').hidden = !usable || email;
+    byId('chat-filters-card').hidden = !chat;
+    byId('filters-card').hidden = byId('usage-card').hidden = !usable || selected !== 'coding';
+    if (!chat) resetNetworks();
     if (email) {
       renderMail();
       if (mailGroups === null && !mailLoading) void refreshLabels();
+    } else if (chat) {
+      renderNetworks();
+      if (!networkCatalog && !networkRequest && !networkError) loadNetworks();
     } else if (usable) {
       if (!loaded && !loading) void load();
       renderFilters();
       renderUsage();
     }
+  }
+
+  function resetNetworks() {
+    networkCatalog = undefined;
+    networkError = false;
+    networkRequest = undefined;
+  }
+
+  function loadNetworks() {
+    const request = deps.chatNetworks().then(networks => {
+      if (networkRequest === request) networkCatalog = networks;
+    }, () => {
+      if (networkRequest === request) networkError = true;
+    }).finally(() => {
+      if (networkRequest === request) { networkRequest = undefined; renderNetworks(); }
+    });
+    networkRequest = request;
+  }
+
+  function renderNetworks() {
+    const networks = networkCatalog ?? [];
+    const rows = networks.map(name => checkbox(name, deps.chatNetworkSelected(name), () => deps.toggleChatNetwork(name, networks)));
+    byId('chat-network-list').replaceChildren(...(rows.length ? rows :
+      [el('p', 'muted', tr(networkError ? 'chatUnavailable' : networkCatalog ? 'chatNoNetworks' : 'refreshing'))]));
   }
 
   async function refreshLabels() {
