@@ -56,6 +56,11 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 bridge restarted with Eugene's approval for 1.0.75 (old supervisor 3012/server 57676/whisper
+61824; new supervisor 64448, server 64364, whisper 67084 --vad). Local and tailnet healthz ok.
+/api/threads over the tailnet: 27 rows, 2 Orca chats (this orca-glass Claude chat, busy; a Cursor
+chat in Bots, idle), both readOnly.
+
 2026-11-27 beta 1.0.75. (1) Eugene: G2 did not show this Orca chat or other worktree sessions. Cause:
 this coordinator runs as an Orca CHAT (ORCA_STRUCTURED_SESSION=1, session 73dad998...), and the bridge
 listed only `orca terminal list` panes. bridge/orca-chats.mjs adds chats from `orca agent list`
