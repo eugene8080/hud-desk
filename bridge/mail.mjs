@@ -1,9 +1,10 @@
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGmail, MailError } from './gmail.mjs';
+import { createImapAccount } from './mail-imap.mjs';
 import { bodyHtml, bodyText, header, htmlImages, parseFrom } from './mail-text.mjs';
 import { fetchPublicImage } from './remote-image.mjs';
-import { buildRaw, quotedOriginal, readDraft, replyFields } from './mail-compose.mjs';
+import { outgoing, readDraft, replyFields } from './mail-compose.mjs';
 import { readView } from './image.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -74,22 +75,46 @@ export function messagePictures(payload, text) {
 }
 
 export function readMailConfig(config) {
-  if (!string(config?.oauthClientFile) || !Array.isArray(config.accounts) || !config.accounts.length ||
+  if (!Array.isArray(config?.accounts) || !config.accounts.length ||
       !Number.isInteger(config.windowDays) || config.windowDays < 1 || config.windowDays > 365 ||
       !Number.isInteger(config.refreshSeconds) || config.refreshSeconds < 1 ||
       config.refreshSeconds * 1000 > 2 ** 31 - 1) return null;
   const accounts = [];
   const local = resolve(ROOT, '.local');
+  function privateFile(value) {
+    if (!string(value)) return null;
+    const file = resolve(ROOT, value);
+    const within = relative(local, file);
+    return within && within !== '..' && !within.startsWith('..' + sep) && !isAbsolute(within) ? file : null;
+  }
+  function endpoint(value) {
+    if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/i.test(value?.host ?? '') || typeof value.host !== 'string' ||
+        !Number.isInteger(value.port) || value.port < 1 || value.port > 65535 ||
+        (value.username !== undefined && (!string(value.username) || /[\x00-\x1f\x7f]/.test(value.username))) ||
+        !['implicit', 'starttls'].includes(value.tls)) return null;
+    return { host: value.host, port: value.port, tls: value.tls, username: value.username };
+  }
   for (const account of config.accounts) {
     if (!id(account?.id) || !string(account.short) ||
         !string(account.address) || !/^[^\s@]+@[^\s@]+$/.test(account.address) ||
-        !string(account.tokenFile) || accounts.some(a => a.id === account.id)) return null;
-    const tokenFile = resolve(ROOT, account.tokenFile);
-    const fromLocal = relative(local, tokenFile);
-    if (!fromLocal || fromLocal === '..' || fromLocal.startsWith('..' + sep) || isAbsolute(fromLocal)) return null;
-    accounts.push({ id: account.id, short: account.short, address: account.address, tokenFile });
+        accounts.some(a => a.id === account.id)) return null;
+    const provider = account.provider ?? 'gmail-api';
+    const identity = { id: account.id, short: account.short, address: account.address, provider };
+    if (provider === 'gmail-api') {
+      const tokenFile = privateFile(account.tokenFile);
+      const client = account.oauthClientFile ?? config.oauthClientFile;
+      if (!tokenFile || !string(client)) return null;
+      accounts.push({ ...identity, tokenFile, oauthClientFile: resolve(ROOT, client) });
+    } else if (provider === 'imap') {
+      const secretFile = privateFile(account.secretFile);
+      const imap = endpoint(account.imap);
+      const smtp = endpoint(account.smtp);
+      if (!secretFile || !imap || !smtp || !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+$/i.test(account.address) ||
+          (account.saveSent !== undefined && typeof account.saveSent !== 'boolean')) return null;
+      accounts.push({ ...identity, secretFile, local, imap, smtp, saveSent: account.saveSent });
+    } else return null;
   }
-  return { ...config, oauthClientFile: resolve(ROOT, config.oauthClientFile), accounts };
+  return { accounts, windowDays: config.windowDays, refreshSeconds: config.refreshSeconds };
 }
 
 function hostname(value) {
@@ -110,12 +135,15 @@ function snapshot(load, refreshMs) {
       if (!pending && Date.now() - attemptedAt >= refreshMs) {
         attemptedAt = Date.now();
         const started = generation;
-        pending = Promise.resolve().then(load).then(next => {
+        const attempt = Promise.resolve().then(load).then(next => {
           if (started === generation) {
             value = next;
             error = undefined;
           }
-        }, failure => { if (started === generation) error = failure; }).finally(() => { pending = undefined; });
+        }, failure => { if (started === generation) error = failure; }).finally(() => {
+          if (pending === attempt) pending = undefined;
+        });
+        pending = attempt;
       }
       return pending;
     },
@@ -124,9 +152,10 @@ function snapshot(load, refreshMs) {
       return value;
     },
     get ready() { return value !== undefined; },
-    invalidate() {
+    invalidate(discard = false) {
       generation++;
       attemptedAt = -Infinity;
+      if (discard) value = error = pending = undefined;
     },
   };
 }
@@ -185,11 +214,14 @@ function publicError(error) {
   return error instanceof MailError ? error.code : 'internal';
 }
 
-export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging, fetchRemote = fetchPublicImage } = {}) {
+export function createMail(config, { gmailOptions, imapOptions, coldWaitMs = 3000, imaging, fetchRemote = fetchPublicImage } = {}) {
   const refreshMs = config.refreshSeconds * 1000;
   const search = `newer_than:${config.windowDays}d`;
   const accounts = new Map(config.accounts.map(account => {
-    const call = createGmail(config.oauthClientFile, account, gmailOptions);
+    if (account.provider === 'imap') return [account.id, createImapAccount(account, {
+      snapshot: load => snapshot(load, refreshMs), windowDays: config.windowDays, imaging, fetchRemote, messageWithPictures,
+    }, imapOptions)];
+    const call = createGmail(account.oauthClientFile, account, gmailOptions);
     const run = pool(3);
     const gmail = (...args) => run(() => call(...args));
     // Retain successful writes that race a snapshot refresh until that refresh has settled.
@@ -222,9 +254,11 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging, f
     }, refreshMs);
 
     const selections = new Map();
-    function labelIndex(label) {
-      if (!selections.has(label)) selections.set(label, snapshot(() => listIds(gmail, search, label), refreshMs));
-      const index = selections.get(label);
+    function labelIndex(label, query) {
+      const key = query ? `${label}:${query}` : label;
+      if (!selections.has(key)) selections.set(key, snapshot(() => listIds(gmail, query ? `${search} (${query})` : search, label), refreshMs));
+      const index = selections.get(key);
+      index.label = label;
       index.usedAt = Date.now();
       return index;
     }
@@ -386,9 +420,10 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging, f
       else await gmail('POST', `/threads/${threadId}/modify`, { query: { fields: 'id' }, body: change });
       revision++;
       const cached = metadata.get(threadId)?.value;
-      if (action === 'archive') forget(threadId, selections.has('INBOX') ? [selections.get('INBOX')] : []);
+      const inbox = [...selections.values()].filter(index => index.label === 'INBOX');
+      if (action === 'archive') forget(threadId, inbox);
       else if (action === 'trash') { forget(threadId, indexes()); try { unread.read()?.delete(threadId); } catch { /* reload */ } }
-      else if (action === 'unarchive') await reload(selections.has('INBOX') ? [selections.get('INBOX')] : []);
+      else if (action === 'unarchive') await reload(inbox);
       else if (action === 'untrash') await reload(indexes());
       else if (action === 'unread') {
         recentlyRead.delete(threadId);
@@ -430,15 +465,9 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging, f
       const remembered = sends.get(draft.sendId);
       if (remembered) return remembered.result;
       const result = (async () => {
-        let thread, body = draft.body, inReplyTo = '', references = '';
-        if (draft.mode !== 'new') {
-          thread = threadId(input.threadId);
-          const original = await latest(thread);
-          body += quotedOriginal(original, draft.mode);
-          if (draft.mode !== 'forward') ({ messageId: inReplyTo, references } = original);
-          else thread = undefined; // A forward starts its own conversation, as in Gmail.
-        }
-        const raw = buildRaw({ to: draft.to, cc: draft.cc, subject: draft.subject, body, inReplyTo, references });
+        const original = draft.mode === 'new' ? undefined : threadId(input.threadId);
+        const raw = await outgoing(draft, original, latest);
+        const thread = draft.mode === 'forward' ? undefined : original;
         const sent = await gmail('POST', '/messages/send', { query: { fields: 'id,threadId' }, body: thread ? { raw, threadId: thread } : { raw } });
         revision++;
         for (const entry of indexes()) entry.invalidate();
@@ -505,7 +534,11 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging, f
       if (!filter.has(account)) filter.set(account, new Set());
       filter.get(account).add(label);
     }
-    const selected = [...filter].map(([account, labels]) => ({ account, indexes: [...labels].map(account.labelIndex) }));
+    const queryText = query.get('q')?.trim() || '';
+    if (queryText.length > 256 || /[\u0000-\u001f\u007f]/.test(queryText)) throw badRequest();
+    const selected = [...filter].map(([account, labels]) => ({
+      account, indexes: [...labels].map(label => account.labelIndex(label, queryText)),
+    }));
     const entries = selected.flatMap(({ account, indexes }) => [account.order, account.unread, ...indexes]);
     await warm(entries, deadline);
     // loading: the cold-start wait ran out before the rows were known (thread order, label index,

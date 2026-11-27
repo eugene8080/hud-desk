@@ -143,8 +143,10 @@ const messageId = value => /^<[^<>\s]+>$/.test(String(value ?? '').trim()) ? Str
 
 // The raw message for messages.send, base64url-encoded. Gmail adds From (your default send-as
 // name and address), Date and Message-ID.
-export function buildRaw({ to, cc, subject, body, inReplyTo = '', references = '' }) {
+export function buildRaw({ to, cc, subject, body, inReplyTo = '', references = '', sender, sentAt, id }) {
   const lines = [];
+  // SMTP needs the origin headers Gmail generates for API sends.
+  if (sender) lines.push(`From: ${formatAddress(sender)}`, `Date: ${sentAt.toUTCString()}`, `Message-ID: ${id}`);
   if (to.length) lines.push(`To: ${formatList(to)}`);
   if (cc.length) lines.push(`Cc: ${formatList(cc)}`);
   lines.push(`Subject: ${headerText(subject)}`);
@@ -156,6 +158,16 @@ export function buildRaw({ to, cc, subject, body, inReplyTo = '', references = '
   lines.push('MIME-Version: 1.0', 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '',
     wrap76(Buffer.from(body.replace(/\r?\n/g, '\r\n'), 'utf8').toString('base64')));
   return Buffer.from(lines.join('\r\n'), 'utf8').toString('base64url');
+}
+
+export async function outgoing(draft, thread, latest, origin) {
+  let body = draft.body, inReplyTo = '', references = '';
+  if (draft.mode !== 'new') {
+    const original = await latest(thread);
+    body += quotedOriginal(original, draft.mode);
+    if (draft.mode !== 'forward') ({ messageId: inReplyTo, references } = original);
+  }
+  return buildRaw({ ...draft, body, inReplyTo, references, ...origin });
 }
 
 // Validates what the app sends; returns the parsed recipients and text.
