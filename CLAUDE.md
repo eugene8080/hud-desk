@@ -69,7 +69,9 @@ every font. Status notes prefixed (statusNote) so a Coding reader does not drop 
 and palette menu actions open their page directly. Recent list: Tab with or without Ctrl, keyup
 fallback, wraps; Ctrl+E. Keyboard focus cannot be taken by the page (Android needs a tap); phone
 banner #key-focus shows while document.hasFocus() is false. 266 tests, build pass. Bridge part
-(views, read) needs an approved restart.
+(views, read) needs an approved restart. Restarted with Eugene's approval (old supervisor 63052/
+server 62336/whisper 65408; new supervisor 12028, server 56184, whisper 41124 --vad); healthz ok;
+imageRead true; his chart: zoom 4 sections 107 ms, outline 29 ms, read 7 s (values correct).
 
 2026-11-27 beta 1.0.82. IDE keys (Eugene chose all eight + Ctrl+,): ideKey() in app/src/main.ts;
 Ctrl+, lists the screen's menuActions (the firmware popup cannot be opened by an app); finder list
