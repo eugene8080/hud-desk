@@ -10,7 +10,7 @@ function check(name, ok, detail) {
   if (!ok) failed = true;
 }
 check('Node', Number(process.versions.node.split('.')[0]) >= 20, process.version);
-check('cloudflared', !!executable('cloudflared'), executable('cloudflared') || 'Install cloudflared and add it to PATH');
+check('Tailscale', !!executable('tailscale'), executable('tailscale') || 'Install Tailscale and publish the bridge: tailscale serve --bg --https=8443 http://127.0.0.1:8787');
 check('Web build', existsSync(new URL('../app/dist/index.html', import.meta.url)), 'npm --prefix app run build');
 const voiceHint = platform() === 'darwin'
   ? 'Run scripts/setup-voice.sh or brew install whisper-cpp'

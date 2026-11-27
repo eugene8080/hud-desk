@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const app = join(root, 'app');
 const manifest = JSON.parse(readFileSync(join(app, 'app.json'), 'utf8'));
 const allowed = manifest.permissions.find(p => p.name === 'network')?.whitelist ?? [];
-const origin = process.env.ORCA_GLASS_BRIDGE_ORIGIN || allowed.find(u => u !== 'https://ntfy.sh');
+const origin = process.env.ORCA_GLASS_BRIDGE_ORIGIN || allowed[0];
 if (!origin || new URL(origin).origin !== origin || !origin.startsWith('https://') || !allowed.includes(origin)) {
   throw new Error('Beta bridge must be an HTTPS origin explicitly listed in app/app.json');
 }

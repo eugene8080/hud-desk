@@ -1,11 +1,11 @@
-// 中継サーバとトンネル監視をまとめて起動する(どちらかが落ちたら両方止める)
+// Starts the bridge (and stops with it). Tailscale serve publishes it to the tailnet; the
+// Cloudflare quick tunnel and its watcher were removed 2026-11-27 (Tailscale only).
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('..', import.meta.url));
 const procs = [
   ['bridge', ['bridge/server.mjs'], { HOST: '127.0.0.1' }],
-  ['tunnel', ['tunnel/watch.mjs'], {}],
 ].map(([name, args, env]) => {
   const p = spawn(process.execPath, args, { cwd: here, windowsHide: true, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
   p.on('error', (error) => { console.error(error.message); process.exit(1); });
@@ -19,5 +19,5 @@ const procs = [
   });
   return p;
 });
-// Ctrl+C でも kill でも、子(bridge・トンネル)を残さない
+// Ctrl+C or kill: leave no bridge child behind.
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => procs.forEach((p) => p.kill()));

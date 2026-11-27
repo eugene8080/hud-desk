@@ -56,6 +56,14 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.73: Tailscale only (Eugene). Removed tunnel/watch.mjs, tunnel/quick.yml and the
+tunnel from scripts/start.mjs; app/src/pairing.ts no longer polls ntfy.sh (hmac.ts deleted);
+app/app.json whitelist is the tailnet origin only; doctor checks Tailscale instead of cloudflared;
+scripts/pair.mjs creates the secrets itself; pair-custom.mjs uses the manifest origin;
+docs/windows-android.md updated (tunnel section marked historical). 234 tests, build, doctor pass.
+The running supervisor still starts the old tunnel watcher + cloudflared until the next approved
+bridge restart (which also makes 1.0.72's chatFeatures live).
+
 2026-11-27 beta 1.0.72 (Eugene: turn off unavailable features automatically). Bridge capabilities
 report chatFeatures {transcribe, translate}: ffmpeg + Python interpreter found; Ollama answers
 /api/show for the configured local model (1-minute cache, never throws). App hides Translate (menu

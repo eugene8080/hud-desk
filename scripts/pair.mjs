@@ -1,17 +1,11 @@
-// 接続コード eho1.<トピック>.<トークン> を表示し、macOS ならクリップボードにも入れる
+// Prints the pairing code eho1.<topic>.<token> and copies it to the clipboard where possible.
+// The topic is part of the code format only (Tailscale only since 2026-11-27); both secrets are
+// created on first use.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { token, topic } from '../bridge/secrets.mjs';
 import { clipboardCommand } from '../bridge/platform.mjs';
 
-const dir = fileURLToPath(new URL('../bridge/', import.meta.url));
-for (const f of ['.token', '.topic']) {
-  if (!existsSync(dir + f)) {
-    console.error(`bridge/${f} がありません。先に npm start で一度起動してください。`);
-    process.exit(1);
-  }
-}
-const code = `eho1.${readFileSync(dir + '.topic', 'utf8').trim()}.${readFileSync(dir + '.token', 'utf8').trim()}`;
+const code = `eho1.${topic()}.${token()}`;
 const clipboard = clipboardCommand();
 try {
   if (!clipboard) throw new Error('clipboard unavailable');

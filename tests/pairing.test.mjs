@@ -9,21 +9,26 @@ function pairing(origin, fetch) {
   const source = ts.transpileModule(readFileSync(new URL('../app/src/pairing.ts', import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  vm.runInNewContext(source, { exports, __BRIDGE_ORIGIN__: origin, fetch,
-    require: () => ({ hmacSha256Hex: () => 'valid-signature' }) });
+  vm.runInNewContext(source, { exports, __BRIDGE_ORIGIN__: origin, fetch, require: () => ({}) });
   return exports;
 }
+const noNetwork = () => { throw new Error('Unexpected network request'); };
 
-test('beta connects to its whitelisted origin without temporary tunnel discovery', async () => {
-  const api = pairing('https://pc.example:8443', () => { throw new Error('Unexpected discovery request'); });
+test('beta connects to its whitelisted Tailscale origin without any discovery request', async () => {
+  const api = pairing('https://pc.example:8443', noNetwork);
   assert.equal(await api.resolveBase({ topic: 'private', token: 'secret' }), 'https://pc.example:8443');
 });
 
-test('prototype retains signed discovery and rejects an unsigned newer announcement', async () => {
-  const messages = [
-    { u: 'https://working.trycloudflare.com', t: 1, s: 'valid-signature' },
-    { u: 'https://forged.trycloudflare.com', t: 2, s: 'invalid' },
-  ].map(message => JSON.stringify({ event: 'message', message: JSON.stringify(message) })).join('\n');
-  const api = pairing('', async () => ({ ok: true, text: async () => messages }));
-  assert.equal(await api.resolveBase({ topic: 'private', token: 'secret' }), 'https://working.trycloudflare.com');
+test('a build without an origin resolves to nothing and never asks a discovery service', async () => {
+  const api = pairing('', noNetwork);
+  assert.equal(await api.resolveBase({ topic: 'private', token: 'secret' }), null);
+  assert.deepEqual({ ...api.parseCode('eho1.topic-1.token_2') }, { topic: 'topic-1', token: 'token_2' });
+  assert.equal(api.parseCode('not a code'), null);
+});
+
+test('the app manifest allows only the HTTPS bridge origin, no tunnel or discovery hosts', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../app/app.json', import.meta.url), 'utf8'));
+  const whitelist = manifest.permissions.find(p => p.name === 'network').whitelist;
+  assert.equal(whitelist.length, 1);
+  assert.match(whitelist[0], /^https:\/\/[a-z0-9.-]+\.ts\.net:8443$/);
 });

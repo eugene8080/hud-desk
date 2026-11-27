@@ -6,8 +6,10 @@ import { join } from 'node:path';
 const require = createRequire(new URL('../app/package.json', import.meta.url));
 const qr = require('qr-image');
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8').trim();
-const base = read('../tunnel/current-url');
-if (!/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(base)) throw new Error('No valid custom tunnel URL');
+// The bridge's Tailscale origin, as listed in the app manifest (Tailscale only since 2026-11-27).
+const manifest = JSON.parse(read('../app/app.json'));
+const base = process.env.ORCA_GLASS_BRIDGE_ORIGIN || manifest.permissions.find(p => p.name === 'network')?.whitelist?.[0];
+if (!base || !/^https:\/\/[a-z0-9.-]+(:\d+)?$/.test(base)) throw new Error('No HTTPS bridge origin in app/app.json');
 const token = read('../bridge/.token');
 const topic = read('../bridge/.topic');
 const response = await fetch(`${base}/api/capabilities`, {

@@ -1,9 +1,8 @@
-// 接続コード `eho1.<トピック>.<トークン>` と、連絡板(ntfy.sh)からの接続先解決
-import { hmacSha256Hex } from './hmac';
-
-const NTFY = 'https://ntfy.sh';
-// Beta builds must use an origin explicitly allowed by their manifest.
-// Prototype builds leave this empty and keep signed tunnel discovery.
+// Pairing code `eho1.<topic>.<token>` and the bridge origin.
+// Tailscale only (2026-11-27): the app reaches the bridge at the HTTPS origin its build names
+// (ORCA_GLASS_BRIDGE_ORIGIN, also listed in app/app.json's network whitelist). The Cloudflare
+// quick tunnel and the signed ntfy.sh discovery it needed were removed; the topic part of the code
+// is kept so existing codes still parse, and is no longer used.
 declare const __BRIDGE_ORIGIN__: string;
 
 export type Pairing = { topic: string; token: string };
@@ -13,23 +12,7 @@ export function parseCode(code: string): Pairing | null {
   return m ? { topic: m[1], token: m[2] } : null;
 }
 
-// 連絡板の直近の書き込みから、トークンで署名が合う最新の URL を返す(偽の書き込みは無視)
-export async function resolveBase(p: Pairing): Promise<string | null> {
-  if (__BRIDGE_ORIGIN__) return __BRIDGE_ORIGIN__;
-  const res = await fetch(`${NTFY}/${p.topic}/json?poll=1&since=12h`);
-  if (!res.ok) return null;
-  let best: { u: string; t: number } | null = null;
-  for (const line of (await res.text()).split('\n')) {
-    try {
-      const ev = JSON.parse(line);
-      if (ev.event !== 'message') continue;
-      const m = JSON.parse(ev.message);
-      if (typeof m.u !== 'string' || typeof m.t !== 'number' || !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(m.u)) continue;
-      if (hmacSha256Hex(p.token, `${m.u}|${m.t}`) !== m.s) continue;
-      if (!best || m.t > best.t) best = { u: m.u, t: m.t };
-    } catch {
-      // 壊れた行・他人の書き込みは読み飛ばす
-    }
-  }
-  return best?.u ?? null;
+// The build's bridge origin, or null for a build without one (only the demo works there).
+export async function resolveBase(_p: Pairing): Promise<string | null> {
+  return __BRIDGE_ORIGIN__ || null;
 }

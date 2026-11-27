@@ -8,14 +8,17 @@ The custom bridge is now running for the first Android/G2 hardware test.
 
 ## Connection
 
-G2 glasses ↔ Even Realities app on Android ↔ HTTPS Quick Tunnel ↔ local Node
-bridge on Windows ↔ Orca CLI. Orca and this bridge must remain running on the PC.
+G2 glasses ↔ Even Realities app on Android ↔ Tailscale (HTTPS `tailscale serve`
+on :8443) ↔ local Node bridge on Windows ↔ Orca CLI. The Cloudflare Quick Tunnel and
+ntfy.sh discovery were removed on 2026-11-27 (Eugene: "tailscale only"); the phone and
+the PC must be on the same tailnet. Orca and this bridge must remain running on the PC.
 The phone does not run the coding agent. This version does not use Orca Mobile
 as an intermediary or implement Orca's encrypted mobile protocol.
 
 ## Windows
 
-Requirements: Node 20+, installed/running Orca, cloudflared on PATH.
+Requirements: Node 20+, installed/running Orca, Tailscale on the PC and the phone, and
+`tailscale serve --bg --https=8443 http://127.0.0.1:8787` on the PC.
 
 ```powershell
 npm --prefix app ci
@@ -35,8 +38,8 @@ override it; explicit ORCA_CLI_COMMAND and ORCA_DEV_REPO_ROOT are respected.
 ## Android / G2
 
 Pair G2 in the Even Realities Android app. Enable its developer mode if needed.
-Use the developer QR scanner to open a QR made by `evenhub qr --url <tunnel-url>`.
-The URL is in tunnel/current-url after startup. This loads this fork, not the
+Use the developer QR scanner to open a QR made by `evenhub qr --url <tailnet-origin>`
+(the origin listed in `app/app.json`). This loads this fork, not the
 original creator's store version. A normal browser can show the page but cannot
 operate the glasses because it has no Even SDK bridge.
 
@@ -60,7 +63,7 @@ and a separate package ID. No marketplace publication has been performed.
 
 ## Services and privacy
 
-### Quick Tunnel metrics and restart safety
+### Quick Tunnel metrics and restart safety (historical: tunnel removed 2026-11-27)
 
 `tunnel/quick.yml` pins cloudflared metrics and readiness to loopback
 `127.0.0.1:20261` (`/metrics` and `/ready`). This stays outside cloudflared's
@@ -98,9 +101,10 @@ the change; final verification is recorded in `TODOS.md`.
 ### Data handling
 
 The bridge listens on loopback and requires a bearer token for session APIs.
-Cloudflare carries bridge traffic; ntfy.sh receives a random topic, tunnel URL,
-timestamp, and HMAC signature, never the pairing token. Quick Tunnels have no
-uptime guarantee. QR files containing a pairing code are credentials.
+Tailscale carries bridge traffic inside the tailnet (WireGuard, end to end); no
+third-party relay or discovery service sees the traffic or the bridge address.
+Until 2026-11-27 a Cloudflare Quick Tunnel carried it and ntfy.sh held a signed
+tunnel URL; both are gone. QR files containing a pairing code are credentials.
 
 ## Verification
 
