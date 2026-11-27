@@ -8,7 +8,11 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
-- [ ] **Super app: Coding, Email, Chat, Reader in one app -- 1.0.62 (E2); consent + restart pending:**
+- [ ] **Super app: Coding, Email, Chat, Reader in one app -- 1.0.62 E2 live; Chat in progress:**
+  2026-11-26 consent done, bridge restarted (supervisor 43672, server 52048); both mailboxes read
+  live. G2 check of 1.0.62 pending. Workers: reader highlight + font removal, Chat (Beeper token
+  from Eugene needed), global Cursor tab names (pc-settings). Open question from Eugene: Email when
+  PSCAP11 is off (options in the 2026-11-26 reply; no decision yet).
   2026-11-26 Eugene: voice works on G2 (1.0.61). Beta 1.0.62: [Coding]/[Email] row 0, address
   headings, Filter by email address (phone + glasses picker), account letters. Personal account in
   config; waits on Eugene's consent (scripts/mail-auth.mjs --account personal) and a bridge restart

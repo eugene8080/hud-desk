@@ -56,6 +56,18 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-26 E2 live: Eugene completed the personal consent (.local/mail/personal.json, scope
+gmail.modify only) and approved a restart. Old tree supervisor 70236/server 80148/whisper 78156/
+tunnel 23316; new supervisor 43672, server 52048, whisper 36876 --vad, tunnel watcher 60488;
+local and tailnet healthz ok. Read-only live check (counts only): both accounts ok with the
+configured address, labels 143 work / 54 personal, Inbox page 0 returns 8 threads each, cf-ray
+403. Unreleased: Email marks unread '/' and read '--' (d6ae554); Japanese store description
+rewritten for 1.0.62 (f5a9f9c, native review pending). Dispatched Codex workers (run
+run_5b2c33f58055): reader user-turn background + Compare backgrounds + remove Misc Fixed 9x15,
+GohuFont 8x14, Shinonome 6x12 (ctx_0cb6366b760e); Chat module with voice replies (ctx_1f9653766d58;
+needs Eugene's Orca Glass Beeper token for the live check); global Cursor tab names in pc-settings
+(ctx_f9d7691874ce; then remove the uncommitted Cursor-title prototype from this checkout).
+
 2026-11-26 beta 1.0.62 (user on G2 after 1.0.61: "G2 voice chat works"; asked for the address
 instead of W, the personal account plus Filter by email address, and [] around Coding/Email).
 Row 0 reads [Coding]/[Email]. Bridge /api/mail/accounts now returns the configured address (behind
