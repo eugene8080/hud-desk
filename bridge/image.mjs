@@ -1,7 +1,12 @@
 // Images for the glasses (Eugene, 2026-11-27: Chat photos, Email images, Coding screenshots).
 // ffmpeg decodes the picture once (stdin only, image demuxers only, one frame, size and time limits)
 // to 8-bit grey at up to 2400 px; the views are computed here from that copy:
-// - fit:     the whole picture inside 576x288, contrast stretched, dithered to 16 levels.
+// - fit:     the whole picture inside 576x288 in the G2 picture style below.
+// G2 picture style (Eugene on G2 with 1.0.83: "the actual pictures are all bad"; the G2oom port's
+// pipeline, r/EvenRealities 2026): contrast stretch, gamma 0.45 to lift mid-tones, Sobel edges at
+// full brightness, every other pixel at 60 % through a 4x4 Bayer matrix to on/off. Smooth greys and
+// error-diffused noise blur on the waveguide; bright outlines and a stable dot pattern stay crisp.
+// A mostly white picture (a light-mode screenshot) is made negative first, so its edges stay lit.
 // - zoom:    at least twice the fit size (a tall screenshot fills the width), read in 576x288
 //            sections in reading order; `region` picks the section, `regions` says how many.
 // - outline: edges only (Sobel), lit lines on black, no dithering (G2 1.0.81: dithered greys of
@@ -114,8 +119,8 @@ export function stretch(pixels) {
   return out;
 }
 
-// Sobel edge strength, scaled so the strongest 1% reach full level; weak edges are dropped.
-export function outline({ width, height, pixels }) {
+// Sobel edge strength per pixel, and the 99th percentile (the scale for "full strength").
+function sobel({ width, height, pixels }) {
   const magnitude = new Float32Array(width * height);
   for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
     const p = (dx, dy) => pixels[(y + dy) * width + x + dx];
@@ -124,12 +129,57 @@ export function outline({ width, height, pixels }) {
     magnitude[y * width + x] = Math.hypot(gx, gy);
   }
   const sorted = Float32Array.from(magnitude).sort();
-  const top = sorted[Math.floor(sorted.length * 0.99)] || 1;
+  return { magnitude, top: sorted[Math.floor(sorted.length * 0.99)] || 1 };
+}
+
+// Edges only, scaled so the strongest 1% reach full level; weak edges are dropped.
+export function outline(picture) {
+  const { width, height } = picture;
+  const { magnitude, top } = sobel(picture);
   const levels = new Uint8Array(width * height);
   for (let i = 0; i < levels.length; i++) {
     const v = Math.min(1, magnitude[i] / top);
     levels[i] = v < 0.18 ? 0 : Math.round(Math.sqrt(v) * 15);
   }
+  return levels;
+}
+
+const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+// The G2 picture style for a scaled grey picture (levels 0..15, edges 15, dots 15).
+export function g2Picture(picture) {
+  const { width, height } = picture;
+  const lifted = new Uint8Array(picture.pixels.length);
+  const tone = stretch(picture.pixels);
+  for (let i = 0; i < tone.length; i++) lifted[i] = Math.round(255 * Math.pow(tone[i] / 255, 0.45));
+  const { magnitude, top } = sobel({ width, height, pixels: lifted });
+  const levels = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = y * width + x;
+    if (magnitude[i] / top > 0.3) { levels[i] = 15; continue; }
+    // Absolute screen position for the matrix keeps the pattern still between sections.
+    // Dark areas stay black (no dots below 30 %), so a dark background is not a field of dots.
+    const fill = Math.max(0, (lifted[i] / 255 - 0.3) / 0.7) * 0.6;
+    levels[i] = fill * 16 > BAYER4[y & 3][x & 3] + 0.5 ? 15 : 0;
+  }
+  return levels;
+}
+
+// Charts, screenshots and documents are a few flat tones; photos spread over the whole range. On a
+// 16-bin histogram, a graphic puts most of its pixels in its three largest bins. (G2oom edges make
+// hollow, double-stroked letters, so text-heavy pictures must not get them.)
+export function pictureStyle(pixels) {
+  const bins = new Uint32Array(16);
+  for (const v of pixels) bins[v >> 4]++;
+  const top = [...bins].sort((a, b) => b - a);
+  return (top[0] + top[1] + top[2]) / Math.max(1, pixels.length) > 0.7 ? 'graphic' : 'photo';
+}
+
+// A graphic: contrast stretched, then four flat levels (0, 5, 10, 15), no dithering, so letters stay
+// solid and flat areas stay even on the waveguide.
+export function flatLevels(pixels) {
+  const tone = stretch(pixels);
+  const levels = new Uint8Array(tone.length);
+  for (let i = 0; i < tone.length; i++) levels[i] = Math.min(3, Math.round(tone[i] / 85)) * 5;
   return levels;
 }
 
@@ -149,16 +199,21 @@ export function layout(width, height, view, region = 0) {
   return { w, h, regions, region: r, x, y };
 }
 
-// One 576x288 screen of a decoded picture for a view (fit, zoom or outline).
-export function screenView(source, view = 'fit', region = 0) {
+// One 576x288 screen of a decoded picture for a view (fit, zoom or outline). negative: true or
+// false as asked, undefined = automatic (mostly white pictures).
+export function screenView(source, view = 'fit', region = 0, negative) {
   const { w, h, regions, region: r, x, y } = layout(source.width, source.height, view, region);
-  const scaled = resample(source, w, h);
+  const resampled = resample(source, w, h);
+  const brightness = mean(resampled.pixels);
+  const inverted = view !== 'outline' && (negative ?? brightness > 0.6);
+  const scaled = inverted ? { ...resampled, pixels: resampled.pixels.map(v => 255 - v) } : resampled;
   const screen = new Uint8Array(IMAGE_WIDTH * IMAGE_HEIGHT);
   // Centre a smaller picture; crop a section of a larger one.
   const ox = w < IMAGE_WIDTH ? (IMAGE_WIDTH - w) >> 1 : -x, oy = h < IMAGE_HEIGHT ? (IMAGE_HEIGHT - h) >> 1 : -y;
-  // Outline works on the picture alone, so the edge between the picture and the black padding
-  // does not become a line.
-  const tone = view === 'outline' ? outline(scaled) : stretch(scaled.pixels);
+  // Both work on the picture alone, so the edge between the picture and the black padding does not
+  // become a line.
+  const style = view === 'outline' ? 'outline' : pictureStyle(scaled.pixels);
+  const tone = style === 'outline' ? outline(scaled) : style === 'graphic' ? flatLevels(scaled.pixels) : g2Picture(scaled);
   for (let yy = 0; yy < h; yy++) {
     const sy = yy + oy;
     if (sy < 0 || sy >= IMAGE_HEIGHT) continue;
@@ -167,8 +222,7 @@ export function screenView(source, view = 'fit', region = 0) {
       if (sx >= 0 && sx < IMAGE_WIDTH) screen[sy * IMAGE_WIDTH + sx] = tone[yy * w + xx];
     }
   }
-  if (view === 'outline') return { width: IMAGE_WIDTH, height: IMAGE_HEIGHT, data: packLevels(screen), mean: 0, view, regions, region: r };
-  return { ...glassImage(screen), view, regions, region: r };
+  return { width: IMAGE_WIDTH, height: IMAGE_HEIGHT, data: packLevels(screen), mean: brightness, negative: inverted, style, view, regions, region: r };
 }
 
 function run(ffmpeg, args, bytes, limit) {
@@ -258,10 +312,10 @@ export function createImaging({ ffmpeg, model, transport = fetch } = {}) {
     available: () => Boolean(path()),
     readable,
     // key: a stable id for the source (chat message, mail part) or null (not cached).
-    async render(key, load, { view = 'fit', region = 0 } = {}) {
+    async render(key, load, { view = 'fit', region = 0, negative } = {}) {
       if (!VIEWS.has(view) || !Number.isSafeInteger(region) || region < 0 || region > 99) throw new ImageError('bad request', 400);
       const picture = await source(key, load);
-      return view === 'read' ? read(key, picture) : screenView(picture, view, region);
+      return view === 'read' ? read(key, picture) : screenView(picture, view, region, negative);
     },
   };
 }
@@ -270,6 +324,8 @@ export function createImaging({ ffmpeg, model, transport = fetch } = {}) {
 export function readView(get) {
   const view = get('view') ?? 'fit';
   const region = Number(get('region') ?? 0);
-  if (!VIEWS.has(view) || !Number.isSafeInteger(region) || region < 0 || region > 99) throw new ImageError('bad request', 400);
-  return { view, region };
+  const negative = get('negative');
+  if (!VIEWS.has(view) || !Number.isSafeInteger(region) || region < 0 || region > 99 ||
+      ![undefined, null, 'auto', 'on', 'off', true, false].includes(negative)) throw new ImageError('bad request', 400);
+  return { view, region, negative: negative === 'on' || negative === true ? true : negative === 'off' || negative === false ? false : undefined };
 }

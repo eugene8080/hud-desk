@@ -80,11 +80,13 @@ export type MailConversation = { subject: string; messages: { id: string; from: 
   images?: { part: string; name: string }[] }[] };
 // A picture for the glasses (2026-11-27): 576x288, two 4-bit panel levels a byte, base64; mean
 // brightness 0..1 (the app shows a mostly white picture in negative by default).
-export type GlassImage = { width: number; height: number; data: string; mean: number; view?: string; regions?: number; region?: number };
+export type GlassImage = { width: number; height: number; data: string; mean: number; view?: string; regions?: number; region?: number; negative?: boolean };
 // The viewer asks for a view (fit, zoom, outline, read) and, in zoom, a section; read answers with text.
-export type ImageRequest = { view?: 'fit' | 'zoom' | 'outline' | 'read'; region?: number };
+// negative: 'on'/'off', or left out for automatic (the bridge decides; 1.0.84).
+export type ImageRequest = { view?: 'fit' | 'zoom' | 'outline' | 'read'; region?: number; negative?: 'on' | 'off' };
 export type ImageAnswer = GlassImage & { text?: string };
-const viewQuery = (request: ImageRequest) => ({ ...(request.view && { view: request.view }), ...(request.region !== undefined && { region: String(request.region) }) });
+const viewQuery = (request: ImageRequest) => ({ ...(request.view && { view: request.view }), ...(request.region !== undefined && { region: String(request.region) }),
+  ...(request.negative && { negative: request.negative }) });
 // Optional Chat features the bridge PC can serve; a bridge before 1.0.72 omits this (both offered).
 export type ChatFeatures = { transcribe: boolean; translate: boolean };
 export type ChatItem = { id: string; title: string; date: number; unread: boolean; readOnly?: boolean };

@@ -62,8 +62,9 @@ export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].widt
 // - Underline: a 1px line under the letters of each row of yours (the VT100 underline attribute).
 // - Dim replies: no background; the other rows' letters at 55 % (the IBM 3270's normal versus
 //   intensified fields). Email has no turns of yours, so its reader shows it as None.
-// - Halo (a toggle, not an option): with Ink, Lines, Dots or Tube, the background pixels that touch a
-//   letter (8 neighbours) stay dark, so each letter stands on black.
+// - Halo (a toggle, not an option; on by default): with Ink, Lines, Dots or Tube, the background
+//   pixels within HALO_RADIUS of a letter (square neighbourhood) stay dark, so each letter stands on
+//   black. 1 px in 1.0.79-1.0.83; 2 px from 1.0.84 (Eugene: "make it stronger still").
 // Default Lines 1/3 (Eugene, 2026-11-27). Ink 2/3 were dropped; a saved one falls back to the default.
 export const TURN_BACKGROUNDS = ['none', 'ink58', 'ink12', 'ink14', 'lines3', 'lines4', 'dots3', 'dots14',
   'dots18', 'tubedim', 'tubexdim', 'tube', 'frame', 'bar', 'underline', 'dimreplies'] as const;
@@ -71,6 +72,7 @@ export const TURN_BACKGROUNDS = ['none', 'ink58', 'ink12', 'ink14', 'lines3', 'l
 type MarkBackground = 'none' | 'frame' | 'bar' | 'underline' | 'dimreplies';
 const MARKS: readonly string[] = ['none', 'frame', 'bar', 'underline', 'dimreplies'];
 const BAR_INK = 5, UNDERLINE_INK = 4, DIM_REPLIES = 0.55;
+export const HALO_RADIUS = 2;
 // Saved values from earlier betas that map onto an option that still exists.
 // Tube 1/8 (tubexxdim) was removed on 2026-11-27; a saved one shows as Tube 1/4.
 const RENAMED: Record<string, TurnBackground> = { dots2: 'ink12', dots4: 'ink14', tubexxdim: 'tubexdim' };
@@ -407,17 +409,18 @@ function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: Tur
       s.rect(textX + start * cell, top + r * line + line - 1, Math.max(0, cells - start - (row.length - row.trimEnd().length)) * cell, 1, ink);
     }
   });
-  // Halo: background pixels next to a letter go dark. A letter pixel is brighter than the
-  // background level, which is always at least one step below the text.
+  // Halo: background pixels within HALO_RADIUS of a letter go dark. A letter pixel is brighter than
+  // the background level, which is always at least one step below the text; cleared pixels are 0,
+  // so clearing one never makes another look like a letter.
   if (halo && !MARKS.includes(background) && ink > 0) {
-    const { pixels } = s, W = SCREEN.width;
+    const { pixels } = s, W = SCREEN.width, R = HALO_RADIUS;
     lines.forEach((_, r) => {
       if (!page.userTurns[r]) return;
       const y0 = top + r * line, y1 = Math.min(SCREEN.height, y0 + line);
       for (let y = y0; y < y1; y++) for (let x = textX; x < textX + textWidth; x++) {
         if (pixels[y * W + x] !== ink) continue;
         let touches = false;
-        for (let dy = -1; dy <= 1 && !touches; dy++) for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -R; dy <= R && !touches; dy++) for (let dx = -R; dx <= R; dx++) {
           const nx = x + dx, ny = y + dy;
           if ((dx || dy) && nx >= 0 && ny >= 0 && nx < W && ny < SCREEN.height && pixels[ny * W + nx] > ink) { touches = true; break; }
         }

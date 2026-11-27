@@ -301,7 +301,7 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech 
     },
     // A photo or sticker for the glasses (2026-11-27): the asset from Beeper, dithered by imaging.
     'POST /api/chat/image': async (_params, input) => {
-      const extra = Object.keys(input ?? {}).filter(key => !['chatId', 'messageId', 'view', 'region'].includes(key));
+      const extra = Object.keys(input ?? {}).filter(key => !['chatId', 'messageId', 'view', 'region', 'negative'].includes(key));
       if (!input || extra.length || !validId(input.chatId) || !validId(input.messageId)) throw badRequest();
       if (!imaging) throw new BeeperError('images-unavailable', 503);
       const { chatId, messageId } = input;

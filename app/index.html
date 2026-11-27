@@ -48,6 +48,10 @@
       .fill { height: 100%; background: #3a7; border-radius: 2px; }
       .note { color: #888; font-size: 12px; margin: 10px 0 0; }
       #usage-refresh { margin-top: 12px; padding: 6px 12px; font-size: 13px; background: #333; }
+      /* Keyboard button: amber until keys can arrive, green while they do. */
+      #key-focus { display: block; width: 100%; margin: 0 0 10px; padding: 12px 16px; font-size: 16px; font-weight: 600; background: #b7791f; color: #fff; }
+      #key-focus[data-state="armed"] { background: #2f7d5b; }
+      #key-focus[data-state="working"] { background: #3a7; }
     </style>
   </head>
   <body>
@@ -58,9 +62,11 @@
         <button type="button" id="tab-settings" class="tab" data-i18n="tabSettings">Settings</button>
       </nav>
     </header>
+    <!-- Bluetooth keyboard (Eugene, 2026-11-27: one press instead of toggling a module back and
+         forth). Android gives the keys to the Even app's page only after a tap on it; this button is
+         that tap, on every page of the phone app. main.ts sets its label (no data-i18n). -->
+    <button type="button" id="key-focus" data-state="off">Enable BT keyboard</button>
     <main id="page-home">
-      <!-- Shown while the page has no keyboard focus (2026-11-27): one tap here connects the keyboard. -->
-      <button type="button" id="key-focus" class="card" hidden data-i18n="keyFocusTap">Keyboard not connected yet: tap here once to use the Bluetooth keyboard.</button>
       <div class="seg" id="module-switch" role="group" aria-label="Module" data-i18n-aria="moduleSelect" hidden></div>
       <section class="card">
         <button type="button" id="conn-toggle" class="status"><span id="conn-dot" class="dot"></span><span id="conn-text" data-i18n="connConnecting">Connecting…</span><span id="conn-chevron">▾</span></button>

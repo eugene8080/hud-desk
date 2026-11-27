@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.83**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.84**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.83,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.84,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.83)
+## Feature list (beta 1.0.84)
 
 ### All modules
 
@@ -35,12 +35,13 @@ Rule for every agent: each beta release updates this file in the release commit:
   1/4, Lines 1/3 (default) and 1/4, Dots 1/3, 1/4 and 1/8, Tube 1/2 and 1/4, Tube, 1px frame,
   and three terminal-style marks that light nothing behind the letters: Left bar (a quote bar in
   place of the '/'), Underline, and Dim replies (the other side's text dimmer; Email shows None).
-  Halo keeps the background dark next to every letter. Font and Background open their comparison
+  Halo (on by default, 2 px) keeps the background dark next to every letter. Font and Background open their comparison
   pages directly: swipe moves the '>' mark, click uses it (on the Halo row: toggles it), double-click
   goes back unchanged. Compare fonts lists Native text first, then the pixel fonts large to small.
 - Images: [Photo N] in Chat, [Image N] under a mail's text and [Image N] where a picture was pasted
   into a Claude or Codex session. A click on the page opens its first picture. A click cycles the
-  views: Picture (whole, contrast stretched, a mostly white picture in negative), Zoom (at least twice
+  views: Picture (whole; a chart or screenshot in four flat tones, a photo as bright outlines over a
+  dot pattern, as G2oom draws its scenes; a mostly white picture in negative), Zoom (at least twice
   the size, in sections; a tall screenshot fills the width), Outline (edges only, lit lines on black)
   and Read (the PC's local vision model reads it as text: chart values, screen text, or what a photo
   shows). Swipe moves through sections or text pages, then pictures; n toggles negative; a caption
@@ -121,8 +122,9 @@ Rule for every agent: each beta release updates this file in the release commit:
   Ctrl to open), Ctrl+F find in the conversation (Enter or F3 next), Ctrl+1/2/3 modules,
   Ctrl+Home/End first and last page, Ctrl+R refresh, Ctrl+N new session or mail, Alt+Left/Right
   back and forward. Ctrl+E is the recent list without holding Ctrl. The ? page shows every key in
-  two columns in the pixel font. The phone page says when the keyboard is not connected yet (one tap
-  on the phone page connects it).
+  two columns in the pixel font. An "Enable BT keyboard" button at the top of the phone page connects
+  the keyboard with one press and shows whether keys arrive. Pages opened from Ctrl+, or Ctrl+Shift+P
+  go back one layer, to that menu.
 
 ### Not yet built
 
@@ -159,5 +161,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.83: Pictures get four views (click to cycle): Picture, Zoom in sections, Outline (edges only) and Read, where the local AI on your PC reads a chart or screenshot as text. n toggles negative. The ? page shows every key in two columns. Ctrl+E recent list; Tab moves the Ctrl+Tab list. Find no longer shows 'nd'; Ctrl+, opens menus without a flash; the phone says when to tap for the keyboard.
+1.0.84: Pictures redrawn for the G2: charts and screenshots in flat tones with solid text, photos as bright outlines over a dot pattern; negative is drawn on the PC, so edges stay lit. An Enable BT keyboard button on the phone page connects the keyboard in one press. Ctrl+, and Ctrl+Shift+P pages go back one layer. Halo is on by default and 2 px wide.
 <!-- whatsnew:end -->

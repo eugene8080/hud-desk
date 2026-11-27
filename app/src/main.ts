@@ -65,8 +65,8 @@ const TEXT_BYTES = 999;
 const POLL_MS = 1000;
 
 type Screen =
-  | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; firstItem?: number; mailItems?: MailThread[]; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
-  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; compareSelected?: number; imageView?: ImageView; keysPage?: boolean; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
+  | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: (up?: Up) => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; firstItem?: number; mailItems?: MailThread[]; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
+  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; compareSelected?: number; imageView?: ImageView; keysPage?: boolean; menuActions?: { id: number; label: string; run: (up?: Up) => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
 let current: Screen | null = null;
@@ -117,8 +117,30 @@ let readerText: ReaderText = 'native';
 // The small font the menu offers when native text is on (last one used).
 let smallFont: FineFont = DEFAULT_SMALL_FONT;
 let turnBackground: TurnBackground = DEFAULT_TURN_BACKGROUND;
-// Halo (2026-11-27): background pixels touching a letter stay dark; a toggle in the Background menu.
-let turnHalo = false;
+// Halo (2026-11-27): background pixels near a letter stay dark; a toggle in the Background menu.
+// On by default (Eugene, 2026-11-27, with the 2 px halo of 1.0.84). Saved under a new key, so a
+// Halo turned off in 1.0.79-1.0.83 (the 1 px version) comes back on once.
+let turnHalo = true;
+const HALO_KEY = 'reader-halo';
+
+// One layer at a time (Eugene, 2026-11-27: "you exit one layer at a time"). A page opened from an
+// app-drawn menu (Ctrl+, or Ctrl+Shift+P) goes back to that menu, not to the screen under it.
+// `Up` reopens the menu. Single pages take it as an argument; pickers that redraw themselves
+// (paging, toggles, typed search, a phone or language change) keep it in `pageUp` until they are
+// left, and every way into such a picker sets or clears it first. The glasses' long-press menu is
+// drawn by the firmware and cannot be reopened by an app, so its pages still go back to the screen.
+type Up = () => unknown;
+type UpPage = 'agents' | 'workspaces' | 'mailLabels' | 'chatNetworks' | 'usage' | 'newSession';
+const pageUp: Partial<Record<UpPage, Up>> = {};
+function enterPage(page: UpPage, up?: Up) {
+  if (up) pageUp[page] = up;
+  else delete pageUp[page];
+}
+function leavePage(page: UpPage, fallback: Up): unknown {
+  const up = pageUp[page];
+  delete pageUp[page];
+  return (up ?? fallback)();
+}
 // Email has no turns of yours: Dim replies would dim the whole mail, so its reader shows None.
 const backgroundFor = (s: TextScreen): TurnBackground => turnBackground === 'dimreplies' && s.reader?.mail ? 'none' : turnBackground;
 // Reader ink, panel steps 1..15. 15 is full white. 0 is not offered: it would blank the font and frame. This is not the system brightness.
@@ -579,9 +601,10 @@ function readerMenu(screen: TextScreen) {
   const name = readerText === 'native' ? tr('nativeText') : fineLabel(readerText);
   return [
     // Straight into the comparison pages, where the choice is made (Eugene, 2026-11-27).
-    { id: 1101, label: tr('usingFont', name), run: () => openComparison(screen, 'fonts') },
-    { id: 1109, label: tr('background', turnBackgroundLabel(turnBackground)), run: () => openComparison(screen, 'backgrounds') },
-    { id: 1107, label: tr('brightness', inkLevel), run: () => showBrightness(screen) },
+    // `up` is set when Ctrl+, or Ctrl+Shift+P opened the page: going back returns to that menu.
+    { id: 1101, label: tr('usingFont', name), run: (up?: Up) => openComparison(screen, 'fonts', up) },
+    { id: 1109, label: tr('background', turnBackgroundLabel(turnBackground)), run: (up?: Up) => openComparison(screen, 'backgrounds', up) },
+    { id: 1107, label: tr('brightness', inkLevel), run: (up?: Up) => showBrightness(screen, up) },
     ...(screen.reader instanceof ChatReader && chatFeatures.translate
       ? [{ id: 1108, label: tr(chatTranslate ? 'chatTranslateEnglish' : 'chatTranslateOff'), run: () => setChatTranslation(!chatTranslate) }]
       : []),
@@ -592,7 +615,7 @@ function readerMenu(screen: TextScreen) {
 // last row opens the next page; a swipe past the first opens the previous one.
 // Both lists wrap: past the first row lands on the last, and the reverse.
 const TEXT_PICKER_ROWS = 10;
-function showTextPicker(reader: TextScreen, labels: string[], selected: number, onPick: (i: number) => unknown, wrap = false) {
+function showTextPicker(reader: TextScreen, labels: string[], selected: number, onPick: (i: number) => unknown, wrap = false, up?: Up) {
   const pageCount = Math.max(1, Math.ceil(labels.length / TEXT_PICKER_ROWS));
   const open = (page: number, cursor: number): Promise<void> => {
     const start = page * TEXT_PICKER_ROWS;
@@ -603,7 +626,7 @@ function showTextPicker(reader: TextScreen, labels: string[], selected: number, 
       onPreviousPage: page > 0 ? () => open(page - 1, -1) : wrap ? () => open(pageCount - 1, -1) : undefined,
       onNextPage: page + 1 < pageCount ? () => open(page + 1, 0) : wrap ? () => open(0, 0) : undefined,
       onPick: i => onPick(start + i),
-      onBack: () => show(reader),
+      onBack: () => up ? up() : show(reader),
     });
   };
   const at = Math.max(0, Math.min(selected, labels.length - 1));
@@ -612,7 +635,7 @@ function showTextPicker(reader: TextScreen, labels: string[], selected: number, 
 
 // Steps 15 down to 1, ten per page. A swipe past either end wraps to the other.
 // Click one and the reader comes back at that ink.
-function showBrightness(reader: Screen | null = current) {
+function showBrightness(reader: Screen | null = current, up?: Up) {
   if (reader?.kind !== 'text' || !reader.reader) return;
   const levels = Array.from({ length: 15 }, (_, i) => 15 - i);
   const at = Math.max(0, levels.indexOf(inkLevel));
@@ -620,15 +643,15 @@ function showBrightness(reader: Screen | null = current) {
     inkLevel = levels[i];
     await bridge.setLocalStorage('reader-ink', String(inkLevel));
     await show(reader);
-  }, true);
+  }, true, up);
 }
 
 // Both comparisons use the reader's tiles and return to the same page on a swipe.
 // Choose on the comparison page itself (Eugene, 2026-11-27): a swipe moves the '>' (wrapping),
 // a click uses the marked font or background and returns to the reader, a double-click returns
-// unchanged. Opens on the current choice.
-function openComparison(reader: TextScreen, comparison: Comparison) {
-  const back = () => { void show(reader).catch(e => diag((e as Error).message)); };
+// unchanged (to the Ctrl+, or Ctrl+Shift+P menu when one opened the page). Opens on the current choice.
+function openComparison(reader: TextScreen, comparison: Comparison, up?: Up) {
+  const back = () => { void Promise.resolve(up ? up() : show(reader)).catch(e => diag((e as Error).message)); };
   const fonts = comparison === 'fonts';
   // Compare fonts: row 0 is Native text, then the pixel fonts largest first. Compare backgrounds:
   // row 0 is the Halo switch, then the options.
@@ -683,8 +706,9 @@ function imageViewTiles(view: ImageView): number[][] {
     smallFont, { left: `${label}${position}`, right: '' }, inkLevel, 'none');
   const bytes = Uint8Array.from(atob(view.image.data), ch => ch.charCodeAt(0));
   const top = inkByte(inkLevel);
-  // Negative: the n key, else automatic for a mostly white picture (never for outlines).
-  const invert = view.mode !== 'outline' && (view.invert ?? view.image.mean > 0.6);
+  // The bridge draws the negative itself (before finding the edges); bridges before 1.0.84 send
+  // no `negative` field, and there the app still inverts a mostly white picture.
+  const invert = view.mode !== 'outline' && view.image.negative === undefined && (view.invert ?? view.image.mean > 0.6);
   const tiles = FINE_TILES.map(tile => {
     const out = new Array<number>(tile.width * tile.height);
     for (let y = 0; y < tile.height; y++) for (let x = 0; x < tile.width; x++) {
@@ -740,7 +764,7 @@ async function loadImage(s: TextScreen) {
   const { n, mode, region } = view;
   if (mode === 'read') { view.note = tr('imageReading'); await repaintImage(s); view.note = ''; }
   try {
-    const answer = await view.load(n, { view: mode, region });
+    const answer = await view.load(n, { view: mode, region, ...(view.invert !== undefined && { negative: view.invert ? 'on' : 'off' }) });
     if (current !== s || view.n !== n || view.mode !== mode || view.region !== region) return;
     if (mode === 'read') view.text = answer.text ?? '';
     else {
@@ -779,7 +803,7 @@ function moveImage(s: TextScreen, step: number) {
 
 // The Halo row of Compare backgrounds: toggles, saves and redraws the page (it stays open).
 async function toggleHalo(s: TextScreen) {
-  if (!await bridge.setLocalStorage('reader-turn-halo', turnHalo ? 'off' : 'on')) throw new Error(tr('backgroundSaveFailed'));
+  if (!await bridge.setLocalStorage(HALO_KEY, turnHalo ? 'off' : 'on')) throw new Error(tr('backgroundSaveFailed'));
   turnHalo = !turnHalo;
   await repaintImage(s);
 }
@@ -1097,8 +1121,8 @@ function home(page = positions.coding.page, selected = positions.coding.cursor, 
     const start = page * pageSize;
     const visible = threads.slice(start, start + pageSize);
     const actions: { label: string; run: () => unknown }[] = [
-      { label: `* ${tr('filterAgent')} [${providerFilterLabel()}]`, run: () => viewOptions() },
-      { label: `* ${tr('filterWorkspace')} [${workspaceFilter}]`, run: () => workspaceOptions() },
+      { label: `* ${tr('filterAgent')} [${providerFilterLabel()}]`, run: () => { enterPage('agents'); return viewOptions(); } },
+      { label: `* ${tr('filterWorkspace')} [${workspaceFilter}]`, run: () => { enterPage('workspaces'); return workspaceOptions(); } },
       ...visible.map(t => ({ label: sessionRow(t.title, t.handle, t.agent, t.state, t.workspaceName), run: () => thread(t) })),
     ];
     const columns = actions.map((a, i): SessionColumns => {
@@ -1112,8 +1136,8 @@ function home(page = positions.coding.page, selected = positions.coding.cursor, 
       onNextPage: page + 1 < pageCount ? () => home(page + 1, 1) : undefined,
       menuActions: [
         { id: 1001, label: tr('refreshSessions'), run: () => home(page, 1) },
-        { id: 1002, label: tr('menuNewSession'), run: newSession },
-        { id: 1003, label: tr('menuUsage'), run: usage },
+        { id: 1002, label: tr('menuNewSession'), run: (up?: Up) => { enterPage('newSession', up); return newSession(); } },
+        { id: 1003, label: tr('menuUsage'), run: (up?: Up) => { enterPage('usage', up); return usage(); } },
       ],
       items: actions.map(a => a.label),
       onPick: i => { actions[i]?.run(); } }, mounted);
@@ -1132,7 +1156,7 @@ function mailLeadRows(mailbox: string, filterColumn: string): SessionColumns[] {
 }
 function pickMailLead(i: number, mailbox: string): boolean {
   if (mailbox && i === 0) { void switchMailbox(); return true; }
-  if (i === (mailbox ? 1 : 0)) { void mailLabels(0, 0, true); return true; }
+  if (i === (mailbox ? 1 : 0)) { enterPage('mailLabels'); void mailLabels(0, 0, true); return true; }
   return false;
 }
 // The loading screen: the lead rows and a moving-dot row. No count, so it is never cached.
@@ -1263,7 +1287,7 @@ async function chatHome(page = positions.chat.page, selected = positions.chat.cu
   const filterRevision = chatFilterRevision;
   const active = () => current === owner && revision === moduleRevision && filterRevision === chatFilterRevision;
   const filter = { marker: '*', title: tr('mailFilter'), right: '' };
-  const pickFilter = () => { void chatNetworks(); };
+  const pickFilter = () => { enterPage('chatNetworks'); void chatNetworks(); };
   const menuActions = [{ id: 1001, label: tr('refresh'), run: () => chatHome() }];
   try {
     let result = await chat.list(page);
@@ -1303,7 +1327,9 @@ async function toggleChatNetwork(name: string | null, networks: string[], fromPh
 }
 
 async function chatNetworks(page = 0, selected = 0, catalog?: string[]) {
-  const back = () => chatHome(positions.chat.page, 1);
+  // Done shows the filtered list; going back returns to the menu that opened the picker, if any.
+  const done = () => { delete pageUp.chatNetworks; return chatHome(positions.chat.page, 1); };
+  const back = () => leavePage('chatNetworks', () => chatHome(positions.chat.page, 1));
   const owner = current;
   const revision = moduleRevision;
   try {
@@ -1320,7 +1346,7 @@ async function chatNetworks(page = 0, selected = 0, catalog?: string[]) {
       onPreviousPage: page ? () => chatNetworks(page - 1, -1, networks) : undefined,
       onNextPage: (page + 1) * size < networks.length ? () => chatNetworks(page + 1, 2, networks) : undefined,
       onBack: back, onPick: async i => {
-        if (i === 0) { await back(); return; }
+        if (i === 0) { await done(); return; }
         const picker = current;
         await toggleChatNetwork(i === 1 ? null : visible[i - 2], networks);
         if (current === picker) await chatNetworks(page, i, networks);
@@ -1384,7 +1410,9 @@ async function mailLabels(page: number, selected: number, refresh = false, searc
     const headings = rows.flatMap((row, i) => row.heading ? [i] : []);
     let cursor = selected < 0 ? rows.length - 1 : Math.min(selected, rows.length - 1);
     while (headings.includes(cursor)) cursor--;
-    const done = () => mailHome(positions.email.page, 1);
+    // Done shows the filtered list; going back returns to the menu that opened the picker, if any.
+    const done = () => { delete pageUp.mailLabels; return mailHome(positions.email.page, 1); };
+    const back = () => leavePage('mailLabels', () => mailHome(positions.email.page, 1));
     await show({ kind: 'list', workspacePicker: true, mailPicker: { page, search }, title: ' ', items: rows.map(row => row.text), headings, selected: cursor,
       onPreviousPage: page > 0 ? () => mailLabels(page - 1, -1, false, search) : undefined,
       onNextPage: page + 1 < pages.length ? () => {
@@ -1398,11 +1426,14 @@ async function mailLabels(page: number, selected: number, refresh = false, searc
         const picker = current;
         await toggleMailLabel(row.key);
         if (current === picker) await mailLabels(page, i, false, search);
-      }, onBack: search ? () => mailLabels(0, 0) : done,
+      }, onBack: search ? () => mailLabels(0, 0) : back,
       onHold: voiceAvailable ? () => { void record({ search: text => mailLabels(0, 0, false, text) }, true); } : undefined,
     });
   } catch {
-    if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('email'), text: tr('mailUnavailable'), onBack: mailHome, onClick: mailHome });
+    if (current === owner && revision === moduleRevision) {
+      const back = () => leavePage('mailLabels', mailHome);
+      await show({ kind: 'text', title: moduleLabel('email'), text: tr('mailUnavailable'), onBack: back, onClick: back });
+    }
   }
 }
 
@@ -1423,6 +1454,7 @@ function viewOptions(page?: number, selected?: number) {
     const threads = await api.threads();
     const orca = orcaAgents(threads, viewProvider);
     const choose = (id: string) => async () => {
+      delete pageUp.agents; // a choice shows the filtered list
       await bridge.setLocalStorage('view-provider', id);
       viewProvider = id;
       moduleCache.delete('coding');
@@ -1454,8 +1486,8 @@ function viewOptions(page?: number, selected?: number) {
     await show({ kind: 'list', agentPicker: true, title: tr('filterAgent'), items: rows.map(a => a.label), headings, selected: selection,
       onPreviousPage: at > 0 ? () => viewOptions(at - 1, -1) : undefined,
       onNextPage: at + 1 < pages.length ? () => viewOptions(at + 1, 1) : undefined,
-      onPick: i => { if (!headings.includes(i)) void rows[i]?.run(); }, onBack: home });
-  }, home);
+      onPick: i => { if (!headings.includes(i)) void rows[i]?.run(); }, onBack: () => leavePage('agents', home) });
+  }, () => { void leavePage('agents', home); });
 }
 
 // null means all workspaces; an explicit empty set means none. Keep each
@@ -1486,7 +1518,7 @@ function workspaceOptions(page = 0, selected = 0) {
     page = Math.max(0, Math.min(page, pages.length - 1));
     const save = async () => { positions.coding.page = 0; await saveActiveWorkspaces(); };
     const actions: { label: string; run: () => unknown }[] = [
-      { label: tr('done'), run: () => home() },
+      { label: tr('done'), run: () => { delete pageUp.workspaces; return home(); } },
       { label: `[${chosen === null ? 'x' : ' '}] ${tr('allWorkspaces')}`, run: async () => { const owner = current; setActiveWorkspaces(null); await save(); if (current === owner) await workspaceOptions(page, 1); } },
     ];
     const headings: number[] = [];
@@ -1504,8 +1536,8 @@ function workspaceOptions(page = 0, selected = 0) {
     await show({ kind: 'list', workspacePicker: true, title: tr('filterWorkspace'), items: actions.map(a => a.label), headings, selected: selection,
       onPreviousPage: page > 0 ? () => workspaceOptions(page - 1, -1) : undefined,
       onNextPage: page + 1 < pages.length ? () => workspaceOptions(page + 1) : undefined,
-      onPick: i => { if (!headings.includes(i)) void actions[i]?.run(); }, onBack: () => home() });
-  }, home);
+      onPick: i => { if (!headings.includes(i)) void actions[i]?.run(); }, onBack: () => leavePage('workspaces', home) });
+  }, () => { void leavePage('workspaces', home); });
 }
 
 function thread(t: Thread, note = '') {
@@ -1977,7 +2009,9 @@ function historyStep(step: number) {
 
 // A list on the glasses that narrows as you type (Ctrl+P, Ctrl+Shift+P): row 0 shows the query,
 // then up to nine matches (every typed word must appear). Enter opens, Esc returns.
-type FinderItem = { label: string; run: () => unknown };
+// run gets `up`, which reopens this list as it was (query kept): a page the item opens goes back
+// to it, one layer at a time. Places (a session, chat or thread) ignore it and keep their own back.
+type FinderItem = { label: string; run: (up: Up) => unknown };
 type Finder = { title: string; query: string; items: FinderItem[] | null; back: () => unknown; screen?: Screen; timer?: ReturnType<typeof setTimeout> };
 let finder: Finder | null = null;
 function finderMatches(f: Finder) {
@@ -1993,7 +2027,7 @@ function showFinder(f: Finder) {
       const hit = hits[i - 1];
       if (!hit || finder !== f) return;
       finder = null;
-      void Promise.resolve(hit.run()).catch(e => diag((e as Error).message));
+      void Promise.resolve(hit.run(() => reopenFinder(f))).catch(e => diag((e as Error).message));
     },
     onBack: () => { if (finder === f) finder = null; void Promise.resolve(f.back()).catch(e => diag((e as Error).message)); },
   };
@@ -2011,10 +2045,16 @@ function finderType(f: Finder, key: string): boolean {
 function backTo(origin: Screen) {
   return () => origin.kind === 'list' && origin.module ? showModule() : show(origin);
 }
-function openFinder(title: string, items: FinderItem[] | Promise<FinderItem[]>, origin: Screen) {
+function reopenFinder(f: Finder) {
+  finder = f;
+  return showFinder(f);
+}
+// back: where Esc goes; the origin screen unless another menu opened this one (Quick Open from the
+// command palette goes back to the palette).
+function openFinder(title: string, items: FinderItem[] | Promise<FinderItem[]>, origin: Screen, back?: Up) {
   if (composing) return;
   if (origin.kind === 'text') origin.reading = true;
-  const f: Finder = { title, query: '', items: Array.isArray(items) ? items : null, back: backTo(origin) };
+  const f: Finder = { title, query: '', items: Array.isArray(items) ? items : null, back: back ?? backTo(origin) };
   finder = f;
   void showFinder(f);
   if (!Array.isArray(items)) void items.then(list => { f.items = list; if (finder === f && current === f.screen) void showFinder(f); })
@@ -2039,41 +2079,46 @@ function commandItems(origin: Screen): FinderItem[] {
   const back = backTo(origin);
   const after = (run: () => unknown) => () => Promise.resolve(back()).then(run);
   const reader = origin.kind === 'text' && origin.reader && !origin.voice ? origin : null;
+  // Every page an item opens goes back to the palette (`up`), one layer at a time (Eugene,
+  // 2026-11-27). Going to a module, Find and Compose act on the screen itself and leave the palette.
   const items: FinderItem[] = modules.map(m => ({ label: tr('commandGoTo', moduleLabel(m)), run: () => choosePhoneModule(m) }));
-  items.push({ label: tr('commandQuickOpen'), run: () => openFinder(tr('commandQuickOpenTitle'), quickOpenItems(), origin) });
-  items.push({ label: tr('commandRecent'), run: () => { void Promise.resolve(back()).then(() => showRecent(1)); } });
+  items.push({ label: tr('commandQuickOpen'), run: up => openFinder(tr('commandQuickOpenTitle'), quickOpenItems(), origin, up) });
+  items.push({ label: tr('commandRecent'), run: up => showRecent(1, up) });
   // Menu actions open their own page directly (no flash of the screen behind the palette).
-  for (const action of origin.menuActions ?? []) items.push({ label: action.label, run: () => {
+  for (const action of origin.menuActions ?? []) items.push({ label: action.label, run: up => {
     const list = current;
-    return Promise.resolve(action.run()).then(() => { if (current === list) return back(); });
+    return Promise.resolve(action.run(up)).then(() => { if (current === list) return back(); });
   } });
   if (activeModule === 'coding') items.push(
-    { label: tr('menuNewSession'), run: () => newSession() },
-    { label: tr('menuUsage'), run: () => usage() },
-    { label: tr('filterAgent'), run: () => viewOptions() },
-    { label: tr('filterWorkspace'), run: () => workspaceOptions() });
+    { label: tr('menuNewSession'), run: up => { enterPage('newSession', up); return newSession(); } },
+    { label: tr('menuUsage'), run: up => { enterPage('usage', up); return usage(); } },
+    { label: tr('filterAgent'), run: up => { enterPage('agents', up); return viewOptions(); } },
+    { label: tr('filterWorkspace'), run: up => { enterPage('workspaces', up); return workspaceOptions(); } });
   if (activeModule === 'email') items.push(
     { label: tr('commandCompose'), run: after(() => startMailDraft('new')) },
-    { label: tr('mailFilter'), run: () => mailLabels(0, 0, true) });
-  if (activeModule === 'chat') items.push({ label: tr('mailFilter'), run: () => chatNetworks() });
+    { label: tr('mailFilter'), run: up => { enterPage('mailLabels', up); return mailLabels(0, 0, true); } });
+  if (activeModule === 'chat') items.push({ label: tr('mailFilter'), run: up => { enterPage('chatNetworks', up); return chatNetworks(); } });
   if (reader) items.push({ label: tr('commandFind'), run: after(() => startFind()) });
-  items.push({ label: tr('keysTitle'), run: after(() => showKeys()) });
+  items.push({ label: tr('keysTitle'), run: up => showKeys(up) });
   return items;
 }
 
 // Ctrl+Tab: recent conversations, newest first, the cursor on the one before this one.
 let switcher: Screen | null = null;
 let tabDown = false;
-function showRecent(start: number): Promise<void> | undefined {
+// up: Esc goes back to the menu that opened the list (the command palette) instead of the screen.
+// from: the screen under the list; a wrap redraws the list and keeps it (before 1.0.84 a wrap made
+// the list its own way back).
+function showRecent(start: number, up?: Up, from: Screen | null = current): Promise<void> | undefined {
   if (!recentPlaces.length || composing) return;
   const places = [...recentPlaces];
-  const origin = current;
+  const origin = from;
   const at = Math.min(start, places.length - 1);
   const screen: Screen = {
     kind: 'list', textPicker: true, title: ' ', items: places.map(p => `[${MODULE_TAG[p.module]}] ${p.label}`), selected: at, paintedSelection: at,
     // Past either end the cursor wraps, as VS Code's Ctrl+Tab does.
-    onNextPage: places.length > 1 ? () => showRecent(0) : undefined,
-    onPreviousPage: places.length > 1 ? () => showRecent(places.length - 1) : undefined,
+    onNextPage: places.length > 1 ? () => showRecent(0, up, origin) : undefined,
+    onPreviousPage: places.length > 1 ? () => showRecent(places.length - 1, up, origin) : undefined,
     // A Ctrl+Tab choice is a new visit (history and recent list), unlike Alt+Left/Right.
     onPick: i => {
       switcher = null;
@@ -2082,7 +2127,7 @@ function showRecent(start: number): Promise<void> | undefined {
       enterModule(place.module);
       void Promise.resolve(place.open()).catch(e => diag((e as Error).message));
     },
-    onBack: () => { switcher = null; if (origin) void Promise.resolve(backTo(origin)()).catch(e => diag((e as Error).message)); },
+    onBack: () => { switcher = null; const back = up ?? (origin ? backTo(origin) : undefined); if (back) void Promise.resolve(back()).catch(e => diag((e as Error).message)); },
   };
   switcher = screen;
   return show(screen);
@@ -2170,7 +2215,7 @@ function ideKey(ev: KeyboardEvent): boolean {
       else if (s.kind === 'list' && s.module) s.menuActions?.find(action => action.id === 1001)?.run();
       return true;
     case 'n':
-      if (activeModule === 'coding') void newSession();
+      if (activeModule === 'coding') { enterPage('newSession'); void newSession(); }
       else if (activeModule === 'email') void startMailDraft('new');
       return true;
   }
@@ -2181,37 +2226,44 @@ function ideKey(ev: KeyboardEvent): boolean {
 // glasses' long-press menu for this screen (reader: Font, Background, App Brightness; home lists:
 // Refresh, New Session, Usage) as a list on the glasses. The firmware popup itself cannot be opened
 // by an app (SDK 0.0.16), and its system rows (Display off, Brightness, Close) are not listed here.
-// A pick returns to the screen first, then runs the action there; Esc/double-click returns.
-function showActionMenu() {
-  const s = current;
+// Esc/double-click returns to the screen. A page an action opens (Font, Background, App Brightness,
+// New Session, Usage) goes back to this list, one layer at a time (Eugene, 2026-11-27), with the
+// cursor on that action.
+function showActionMenu(origin: Screen | null = current, selected = 0) {
+  const s = origin;
   if (!s || composing || (s.kind === 'list' && s.textPicker) || (s.kind === 'text' && s.voice)) return;
+  // A reader's labels name the current font and background: rebuild them, a page may have changed one.
+  if (s.kind === 'text' && s.reader) s.menuActions = readerMenu(s);
   const actions = s.menuActions ?? [];
   if (!actions.length) return;
   const back = () => s.kind === 'list' && s.module ? showModule() : show(s);
   if (s.kind === 'text') s.reading = true;
   let picked = false;
+  const at = Math.max(0, Math.min(selected, actions.length - 1));
   return show({
-    kind: 'list', textPicker: true, title: ' ', items: actions.map(action => action.label), selected: 0, paintedSelection: 0,
+    kind: 'list', textPicker: true, title: ' ', items: actions.map(action => action.label), selected: at, paintedSelection: at,
     // The action opens its own page straight from this list (G2 1.0.82: going back first flashed
-    // the screen behind it). An action that opens nothing (Translate) returns to the screen.
+    // the screen behind it). An action that opens nothing (Translate, Refresh) returns to the screen.
     onPick: i => {
       if (picked || !actions[i]) return;
       picked = true;
       if (s.kind === 'text') s.reading = false;
       const list = current;
-      void Promise.resolve(actions[i].run()).then(() => { if (current === list) return back(); }).catch(e => diag((e as Error).message));
+      void Promise.resolve(actions[i].run(() => showActionMenu(s, i))).then(() => { if (current === list) return back(); }).catch(e => diag((e as Error).message));
     },
     onBack: () => { if (s.kind === 'text') s.reading = false; void back(); },
   });
 }
 
 
-// ?: the keys on the glasses; any key or gesture back returns.
-function showKeys() {
+// ?: the keys on the glasses; any key or gesture back returns (to the command palette when it
+// opened the page: `up`).
+function showKeys(up?: Up) {
   const back = current;
   if (!back || composing || (back.kind === 'text' && back.voice)) return;
   if (back.kind === 'text') back.reading = true;
   const leave = () => {
+    if (up) { void Promise.resolve(up()).catch(e => diag((e as Error).message)); return; }
     if (back.kind === 'list' && back.module) { void showModule(); return; }
     if (back.kind === 'text') Object.assign(back, { reading: false });
     void show(back).catch(e => diag((e as Error).message));
@@ -2237,8 +2289,10 @@ function gmailKey(ev: KeyboardEvent, s: Screen, glassEvent: (type: OsEventTypeLi
   const key = keyName(ev);
   if (key === 'n' && s.kind === 'text' && s.imageView?.image && s.imageView.mode !== 'outline') {
     const view = s.imageView;
-    view.invert = !(view.invert ?? view.image!.mean > 0.6);
-    void repaintImage(s);
+    view.invert = !(view.invert ?? view.image!.negative ?? view.image!.mean > 0.6);
+    // The bridge redraws it (edges are found after the negative); an older bridge: the app inverts.
+    if (view.image!.negative === undefined) void repaintImage(s);
+    else { view.image = undefined; void loadImage(s); }
     return true;
   }
   const list = s.kind === 'list' ? s : null;
@@ -2637,12 +2691,14 @@ function usageText(u: Usage, mode: ResetMode) {
   return lines.join('\n');
 }
 
+// Back: home, or the menu that opened it (pageUp.usage; kept while a reset-mode change redraws it).
 function usage() {
+  const leave = () => { void leavePage('usage', home); };
   return guard(tr('usageTitle'), async () => {
     const u = await api.usage();
     let writing = false;
     const screen: Extract<Screen, { kind: 'text' }> = { kind: 'text', title: tr('usageTitle'),
-      usageMode: usageResetMode, text: usageText(u, usageResetMode), onBack: home,
+      usageMode: usageResetMode, text: usageText(u, usageResetMode), onBack: leave,
       onClick: () => { void update(true); } };
     const update = async (cycle = false) => {
       if (current !== screen || writing || (!cycle && screen.reading)) return;
@@ -2671,11 +2727,14 @@ function usage() {
     if (current === screen) poll = setInterval(() => {
       if (usageResetMode === 'absolute') void update();
     }, 60000);
-  }, home);
+  }, leave);
 }
 
 // 新規セッション: 作業場所 → エージェント → モデル → 最初の指示 → 確認
+// Each step goes back one step; the first goes home, or to the menu that opened it
+// (pageUp.newSession, kept while the later steps come back to this one).
 function newSession() {
+  const leave = () => { void leavePage('newSession', home); };
   return guard(tr('newTitle'), async () => {
     const ws = await api.workspaces();
     await show({
@@ -2683,9 +2742,9 @@ function newSession() {
       title: tr('step1'),
       items: ws.map((w) => w.name),
       onPick: (i) => ws[i] && pickAgent(ws[i]),
-      onBack: home,
+      onBack: leave,
     });
-  }, home);
+  }, leave);
 }
 
 function pickAgent(w: Workspace) {
@@ -2748,11 +2807,32 @@ function confirm(w: Workspace, p: Provider, model: string, prompt: number, label
 // Keys reach this page only while its WebView has keyboard focus. Eugene, 2026-11-27: the keyboard
 // "does not work right away", only after switching modules on the phone. The page takes the focus
 // itself at start, when it is shown again, and on every glasses gesture, unless a text box has it.
-// The phone page says when typed keys cannot reach it yet: Android gives the keyboard to the
-// Even app's page only after a tap on it, which the page cannot do for itself.
+// Android gives the keyboard to the Even app's page only after a tap on it, which the page cannot
+// do for itself. The phone page's top button (1.0.84; Eugene: "one press wakes the keyboard ...
+// better than toggling back and forth") is that tap. Its label follows what is seen, not
+// document.hasFocus() (1.0.83's banner hid on hasFocus() and did not help on G2):
+// off (amber) at start, armed after a press, working once a key event arrives; a blur or a hidden
+// page turns it off again.
+type KeyState = 'off' | 'armed' | 'working';
+let keyState: KeyState = 'off';
+function setKeyState(next: KeyState) {
+  if (next === keyState) return;
+  keyState = next;
+  showKeyFocus();
+}
 function showKeyFocus() {
-  const banner = document.getElementById('key-focus');
-  if (banner) banner.hidden = typeof document.hasFocus !== 'function' || document.hasFocus();
+  const button = document.getElementById('key-focus');
+  if (!button) return;
+  button.setAttribute?.('data-state', keyState); // the CSS colours follow it
+  button.textContent = tr(keyState === 'working' ? 'keyFocusWorking' : keyState === 'armed' ? 'keyFocusArmed' : 'keyFocusEnable');
+}
+function pressKeyButton() {
+  // The tap has already given this page the keyboard. Move the DOM focus off the button to the body
+  // (ensureKeyFocus), so Enter or Space reaches the glasses handlers instead of pressing it again.
+  (document.activeElement as HTMLElement | null)?.blur?.();
+  ensureKeyFocus();
+  diag('Keyboard: button pressed');
+  setKeyState('armed');
 }
 
 function ensureKeyFocus() {
@@ -2767,7 +2847,7 @@ function ensureKeyFocus() {
 }
 
 function onEvent(e: EvenHubEvent) {
-  if (!e.audioEvent) { ensureKeyFocus(); showKeyFocus(); }
+  if (!e.audioEvent) ensureKeyFocus();
   if (e.menuItemClickEvent) {
     const screen = current;
     if (screen?.kind === 'list' && screen.module && !modulePending) {
@@ -2946,6 +3026,7 @@ function useLang(pref: string) {
   setLang(l);
   setApiLang(l);
   applyPage();
+  showKeyFocus(); // its label is not a data-i18n text
 }
 
 // Phone Settings language change: redraw the glasses screen that shows
@@ -2984,7 +3065,7 @@ async function main() {
   const savedFont = await bridge.getLocalStorage('reader-font');
   smallFont = FINE_FONTS.includes(savedFont as FineFont) ? savedFont as FineFont : readerText === 'native' ? DEFAULT_SMALL_FONT : readerText;
   turnBackground = parseTurnBackground(await bridge.getLocalStorage('reader-turn-bg'));
-  turnHalo = await bridge.getLocalStorage('reader-turn-halo') === 'on';
+  turnHalo = await bridge.getLocalStorage(HALO_KEY) !== 'off'; // no saved choice = on
   inkLevel = parseInk(await bridge.getLocalStorage('reader-ink'));
   const resetMode = await bridge.getLocalStorage('usage-reset-mode');
   if (RESET_MODES.includes(resetMode as ResetMode)) usageResetMode = resetMode as ResetMode;
@@ -3090,6 +3171,7 @@ async function main() {
   // acts on its keyup instead; one that had a keydown does not act twice.
   const arrowsDown = new Set<string>();
   window.addEventListener('keyup', (ev: KeyboardEvent) => {
+    setKeyState('working'); // a key reached the page: the phone button turns green
     const key = keyName(ev);
     if ((key === 'Control' || key === 'Meta') && switcher && current === switcher) { glassEvent(OsEventTypeList.CLICK_EVENT); return; }
     if (key === 'Tab' && switcher && current === switcher) {
@@ -3107,6 +3189,7 @@ async function main() {
     if (s && !(ev.ctrlKey || ev.metaKey || ev.altKey) && gmailKey(ev, s, glassEvent)) ev.preventDefault();
   });
   window.addEventListener('keydown', (ev: KeyboardEvent) => {
+    setKeyState('working');
     const target = ev.target as HTMLElement | null;
     const arrow = keyName(ev);
     if (ARROWS.has(arrow)) { arrowsDown.add(arrow); diag(`Key: ${arrow} (${ev.key || '-'}/${ev.code || '-'}/${ev.keyCode ?? '-'})`); }
@@ -3176,10 +3259,15 @@ async function main() {
   bridge.onEvenHubEvent(onEvent);
   ensureKeyFocus();
   showKeyFocus();
+  document.getElementById('key-focus')?.addEventListener('click', pressKeyButton);
   window.addEventListener('pageshow', ensureKeyFocus);
-  window.addEventListener('focus', () => { ensureKeyFocus(); showKeyFocus(); });
-  window.addEventListener('blur', showKeyFocus);
-  document.addEventListener?.('visibilitychange', () => { if (document.visibilityState === 'visible') ensureKeyFocus(); });
+  // A focus event alone does not prove that keys arrive (1.0.83 on G2), so it leaves the label as is.
+  window.addEventListener('focus', ensureKeyFocus);
+  window.addEventListener('blur', () => setKeyState('off'));
+  document.addEventListener?.('visibilitychange', () => {
+    if (document.visibilityState === 'visible') ensureKeyFocus();
+    else setKeyState('off'); // screen off or the Even app in the background: keys stop until a tap
+  });
   // Screen off delivers pagehide while this installed page stays alive, the same
   // way Workout Glass's countdown keeps ticking. Clearing the polls here made
   // chats stop until the phone was opened again. A real exit still stops them.

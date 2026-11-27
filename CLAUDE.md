@@ -56,6 +56,19 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.84. (1) This session: Eugene on G2 1.0.83, 'AI read is good. The actual pictures
+are all bad', with the r/EvenRealities G2oom post (gamma 0.45, Sobel edges, non-edge 60 %, Bayer 4x4).
+Even FAQ/display docs: image containers 4-bit (16 levels), 288x144 max, ~800 ms full-screen refresh.
+bridge/image.mjs: pictureStyle (3 largest of 16 histogram bins > 70 % = graphic) -> flatLevels (stretch,
+4 flat levels, no dither) for charts/screenshots; g2Picture for photos (stretch, gamma 0.45, Sobel > 0.3
+-> 15, else Bayer 4x4 on/off of 60 % fill, black below 30 %); negative decided in the bridge before the
+edges (auto mean > 0.6, or negative=on/off); answers carry style and negative. Checked on 4 of his
+pictures (scratchpad only). (2) Session 6-property-valuations-98 (uncommitted in this tree, Eugene's
+requests 16:40-17:20 UTC, included here at its request): 'Enable BT keyboard' button #key-focus with
+states off/armed/working (replaces the hidden banner); one layer back from Ctrl+, / Ctrl+Shift+P pages
+(Up/enterPage/leavePage); Halo on by default, HALO_RADIUS 2, key reader-halo. 269 tests, build pass.
+Bridge part (picture styles, negative) needs an approved restart.
+
 2026-11-27 beta 1.0.83 (Eugene on G2: arrows work; keyboard still needs a tap in the Even app;
 Ctrl+Tab list opens but Tab does not move; Ctrl+F showed 'nd'; Ctrl+, flashed; pictures hard to
 read, 'emboss/outline? AI even?'). Looked at four of his own WhatsApp pictures (with permission;

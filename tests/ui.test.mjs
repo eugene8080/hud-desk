@@ -139,6 +139,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     back: async () => { event({ textEvent: { eventType: 3 } }); await flush(); },
     scroll: async direction => { event({ textEvent: { eventType: direction === 'up' ? 1 : 2 } }); await flush(); },
     pagehide: () => { windowListeners.get('pagehide')?.(); },
+    blur: () => { windowListeners.get('blur')?.(); },
     // Bluetooth keyboard on the phone: target defaults to the page body (no text box focused).
     key: async (key, extra = {}) => { windowListeners.get('keydown')?.({ key, target: { tagName: 'BODY' }, preventDefault() {}, ...extra }); await flush(); },
     keyup: async (key, extra = {}) => { windowListeners.get('keyup')?.({ key, target: { tagName: 'BODY' }, preventDefault() {}, ...extra }); await flush(); },
@@ -1230,6 +1231,119 @@ test('Ctrl+, lists the long-press menu actions on the glasses; a pick runs one, 
 
 const type = async (h, text) => { for (const ch of text) await h.key(ch); await h.debounce(); };
 const readerOpen = h => h.pages.at(-1).textObject.some(c => c.containerName === 'hint');
+
+// Eugene, 2026-11-27: "from the ctrl + , menu, after exiting out of the text or background menu, it
+// should go back to the menu, not back to the main screen ... you exit one layer at a time".
+test('one layer at a time: pages opened from Ctrl+, go back to the Ctrl+, list; the long-press menu\'s go to the reader', async () => {
+  const h = await moduleHarness({ storage: { 'reader-text': 'terminus' } });
+  h.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
+  await h.pick(2);
+  const inReader = () => h.pages.at(-1).textObject.some(c => c.containerName === 'fine-input');
+  const inMenu = () => /^Font: /.test(menuItems(h)[0]) && !inReader();
+  const backgrounds = () => JSON.stringify(sentFineTiles(h)) === JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, true,
+    fineExports.TURN_BACKGROUNDS.indexOf('lines3') + 1));
+  assert.ok(inReader());
+  // Font: Compare fonts; a double-click goes back to the list, not to the reader.
+  await h.key(',', { ctrlKey: true });
+  assert.ok(inMenu());
+  await h.key('Enter');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'fine-native'), 'Compare fonts');
+  await h.back();
+  assert.ok(inMenu(), 'double-click on Compare fonts returns to the Ctrl+, list');
+  // Background: Esc goes back to the list, and the cursor is still on Background.
+  await h.key('ArrowDown');
+  await h.key('Enter');
+  assert.ok(backgrounds(), 'Compare backgrounds');
+  await h.key('Escape');
+  assert.ok(inMenu(), 'Esc on Compare backgrounds returns to the Ctrl+, list');
+  await h.key('Enter');
+  assert.ok(backgrounds(), 'the cursor stayed on Background');
+  await h.back();
+  // App Brightness: its list goes back to the Ctrl+, list too.
+  await h.key('ArrowDown');
+  await h.key('Enter');
+  assert.equal(menuItems(h)[0], '15 ✓');
+  await h.back();
+  assert.ok(inMenu(), 'App Brightness returns to the Ctrl+, list');
+  await h.key('Escape');
+  assert.ok(inReader(), 'Esc on the Ctrl+, list returns to the reader');
+  // A choice still applies and shows the reader.
+  await h.key(',', { ctrlKey: true });
+  await h.key('ArrowDown');
+  await h.key('Enter');
+  await h.scroll('up');
+  await h.tap();
+  assert.equal(h.storage.get('reader-turn-bg'), 'ink14');
+  assert.ok(inReader(), 'a choice returns to the reader');
+  // The glasses' long-press menu is the firmware's and cannot be reopened: its pages go back to the reader.
+  await h.menu(1101);
+  await h.back();
+  assert.ok(inReader(), 'long-press Font goes back to the reader');
+  assert.equal(h.exited(), 0);
+});
+
+test('one layer at a time: Ctrl+, on the session list and Ctrl+Shift+P go back to their list', async () => {
+  const h = await harness(3);
+  h.api.usage = async () => ({ codex: { provider: 'codex', status: 'ok', weekly: { usedPercent: 25, resetDescription: 'tomorrow' } } });
+  h.api.workspaces = async () => [{ id: 'fixture', name: 'Fixture workspace' }];
+  const ctrlComma = () => JSON.stringify(menuItems(h)) === JSON.stringify(['Refresh sessions', 'New Session', 'Usage']);
+  // Usage from Ctrl+,: back returns to the list with the cursor on Usage.
+  await h.key(',', { ctrlKey: true });
+  await h.key('ArrowDown');
+  await h.key('ArrowDown');
+  await h.key('Enter');
+  assert.equal(h.pages.at(-1).textObject[0].content, 'Usage');
+  await h.back();
+  assert.ok(ctrlComma(), 'Usage returns to the Ctrl+, list');
+  // New Session: step 2 goes back to step 1, step 1 to the Ctrl+, list.
+  await h.key('ArrowUp');
+  await h.key('Enter');
+  assert.equal(h.pages.at(-1).textObject[0].content, 'New 1/4 Workspace');
+  await h.back();
+  assert.ok(ctrlComma(), 'New Session step 1 returns to the Ctrl+, list');
+  await h.key('Escape');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'), 'Esc returns to the home list');
+  // The same New Session from the long-press menu still goes home.
+  await h.menu(1002);
+  await h.back();
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'), 'long-press New Session goes home');
+  // Ctrl+Shift+P: Filter by Agent and the keys page go back to the palette with the typed query.
+  await h.key('P', { ctrlKey: true, shiftKey: true });
+  await type(h, 'agent');
+  await h.key('Enter');
+  assert.ok(menuItems(h).some(row => /Hermes Agent/.test(row)), 'Filter by Agent opened');
+  await h.back();
+  assert.match(menuItems(h)[0], /: agent\|$/, 'Filter by Agent returns to the palette, query kept');
+  await h.key('Backspace'); await h.key('Backspace'); await h.key('Backspace'); await h.key('Backspace'); await h.key('Backspace');
+  await type(h, 'keyboard');
+  await h.key('Enter');
+  await h.back();
+  assert.match(menuItems(h)[0], /: keyboard\|$/, 'the keys page returns to the palette');
+  // Typing still works in the reopened palette, and Esc there returns to the home list.
+  await type(h, ' x');
+  assert.match(menuItems(h)[0], /: keyboard x\|$/);
+  await h.key('Escape');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'), 'Esc on the palette returns home');
+  // A filter picker opened from the home row afterwards goes home again (no left-over way up).
+  await h.pick(0);
+  await h.back();
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'), 'home-row Filter by Agent goes home');
+});
+
+test('phone keyboard button: amber until pressed, then waits for a key, green once keys arrive, off again on blur', async () => {
+  const h = await harness(2);
+  const button = h.elements.get('key-focus');
+  assert.equal(button.textContent, 'Enable BT keyboard');
+  button.listeners.click();
+  assert.equal(button.textContent, 'BT keyboard on: press any key');
+  await h.key('j');
+  assert.equal(button.textContent, 'BT keyboard working ✓ (tap again if keys stop)');
+  h.blur();
+  assert.equal(button.textContent, 'Enable BT keyboard');
+  // A key that arrives without a press also shows it works.
+  await h.keyup('k');
+  assert.equal(button.textContent, 'BT keyboard working ✓ (tap again if keys stop)');
+});
 
 test('IDE keys: Ctrl+P quick-opens a session by typed words; Ctrl+Shift+P runs a command', async () => {
   const h = await harness(12);
@@ -2559,7 +2673,8 @@ test('saved removed reader modes and the saved comparison font fall back to Term
   await h.pick(2);
   const native = container(h, 'body').content;
   await h.menu(1109);
-  assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, false,
+  // Halo is on when nothing is saved (1.0.84).
+  assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, true,
     fineExports.TURN_BACKGROUNDS.indexOf('lines3') + 1)));
   await h.back();
   assert.equal(h.pages.at(-1).containerTotalNum, 7);
@@ -2567,7 +2682,8 @@ test('saved removed reader modes and the saved comparison font fall back to Term
 });
 
 test('user turn background follows wrapped and indented rows across pages without affecting other pixels', async () => {
-  const h = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-turn-bg': 'dots2' } });
+  // Halo off: this test checks every pixel of the band itself.
+  const h = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-turn-bg': 'dots2', 'reader-halo': 'off' } });
   const { rows, columns, line, textX, textWidth, statusY, dividerY } = fineExports.fineLayout('terminus');
   const text = [
     ...Array(rows - 1).fill('Earlier output'),
@@ -2703,7 +2819,7 @@ test('the comparison pages choose directly: swipe moves the mark, click uses it,
   const expected = options.indexOf('lines3') + 1 - 2;
   // Only changed tiles are sent again: the newest copy of each tile is what the glasses show.
   const shown = [0, 1, 2, 3].map(i => h.images.findLast(image => image.containerName === `fine-${i}`).imageData);
-  assert.equal(JSON.stringify(shown), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, false, expected)));
+  assert.equal(JSON.stringify(shown), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, true, expected)));
   await h.tap();
   assert.equal(h.storage.get('reader-turn-bg'), options[expected - 1]);
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'fine-input'), 'back in the reader');
@@ -2718,33 +2834,48 @@ test('the comparison pages choose directly: swipe moves the mark, click uses it,
   assert.equal(h.storage.get('reader-text'), fineExports.FONTS_BY_SIZE[fineExports.FONTS_BY_SIZE.indexOf('terminus') + 1]);
 });
 
-test('Halo keeps the background dark next to every letter, and is a saved toggle in the Background menu', async () => {
+test('Halo keeps the background dark within 2 px of every letter, is on by default, and is a saved toggle', async () => {
   const status = { left: '', right: '' };
   const { textX, line, textWidth } = fineExports.fineLayout('terminus');
   const page = { text: '/ MMMM HHHH', userTurns: [1] };
-  const touching = tiles => {
+  assert.equal(fineExports.HALO_RADIUS, 2); // Eugene, 1.0.84: "make it stronger still" (was 1 px)
+  // Lit background pixels with a letter pixel within `radius` (square neighbourhood).
+  const near = (tiles, radius) => {
     let count = 0;
     for (let y = 4; y < 4 + line; y++) for (let x = textX; x < textX + textWidth; x++) {
       if (tilePixel(tiles, x, y) !== 17) continue;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && tilePixel(tiles, x + dx, y + dy) === 255) count++;
+      for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) if ((dx || dy) && tilePixel(tiles, x + dx, y + dy) === 255) count++;
     }
     return count;
   };
-  assert.ok(touching(fineExports.renderFineScreen(page, 'terminus', status, 15, 'ink12')) > 0);
+  const plain = fineExports.renderFineScreen(page, 'terminus', status, 15, 'ink12');
+  assert.ok(near(plain, 1) > 0);
   const halo = fineExports.renderFineScreen(page, 'terminus', status, 15, 'ink12', true);
-  assert.equal(touching(halo), 0);
+  assert.equal(near(halo, 2), 0, 'nothing lit within 2 px of a letter');
+  assert.ok(near(plain, 2) > near(plain, 1), 'the 2 px halo clears more than the 1 px one did');
   assert.ok([0, 1, 2, 3].some(dx => tilePixel(halo, textX + textWidth - 2 - dx, 4) === 17), 'the band away from the letters stays');
-  const h = await moduleHarness({ storage: { 'reader-text': 'terminus' } });
+  // Nothing saved: the reader draws with Halo. A value saved by 1.0.79-1.0.83 under the old key is ignored.
+  const h = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-turn-halo': 'off' } });
   h.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
   await h.pick(2);
-  // Row 0 of Compare backgrounds: a click toggles Halo, saves it and redraws the page in place.
+  const reader = sentFineTiles(h);
+  assert.ok(near(reader, 1) === 0 && near(reader, 2) === 0, 'the reader opens with Halo on');
+  assert.ok(reader.flat().includes(17), 'the Lines 1/3 band is still drawn');
+  // Row 0 of Compare backgrounds: a click toggles Halo (here off), saves it and redraws the page in place.
   await h.menu(1109);
   for (let i = 0; i < fineExports.TURN_BACKGROUNDS.indexOf('lines3') + 1; i++) await h.scroll('up');
   await h.tap();
-  assert.equal(h.storage.get('reader-turn-halo'), 'on');
+  assert.equal(h.storage.get('reader-halo'), 'off');
   const shown = [0, 1, 2, 3].map(i => h.images.findLast(image => image.containerName === `fine-${i}`).imageData);
-  assert.equal(JSON.stringify(shown), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, true, 0)));
+  assert.equal(JSON.stringify(shown), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, false, 0)));
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'fine-input'), 'still on the page');
+  // Saved off: the next start keeps it off.
+  const off = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-halo': 'off' } });
+  off.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
+  await off.pick(2);
+  await off.menu(1109);
+  assert.equal(JSON.stringify(sentFineTiles(off)), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, false,
+    fineExports.TURN_BACKGROUNDS.indexOf('lines3') + 1)));
 });
 
 test('every Background label fits the glasses menu, and Tube dim scans only your turns', () => {
