@@ -58,6 +58,12 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 whitelist test PASSED (Eugene, G2/Android, beta 1.0.93): Bridge address
+https://pscap11.tailf91bf7.ts.net:8444 (not whitelisted) connected. Only the port differed; other
+apps cover different hosts. Self-hosters can type their own Tailscale address; the relay is optional.
+Eugene's phone is currently on :8444; keep `tailscale serve` :8444 until he clears the field. Droplet
+hud-relay (US$6/month) still idle; keep/destroy is his decision. docs/growth-options.md updated.
+
 2026-11-27 whitelist test (Eugene asked whether Claude Code G2 / upstream need a relay): upstream
 whitelists only ntfy.sh yet fetched trycloudflare tunnels; Claude Code G2 takes a user-typed URL.
 Beta 1.0.93 (295 tests, CLI verified 251,093 bytes, prototype build restored) adds Settings >

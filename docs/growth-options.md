@@ -24,7 +24,16 @@ small user count comes from Orca being niche. Listing stats that day: 51 install
 - **Chesly.** Says it hosts everything ("no computer needed"). Its architecture was not checked.
 - **Claude Remote** (Even Hub #18). Its own tagline says "Reverse-Engineered Claude /rc Controller".
 
-## Whitelist enforcement in practice (2026-11-27, test pending)
+## Whitelist enforcement in practice (2026-11-27)
+
+RESULT 2026-11-27: Eugene's phone (beta 1.0.93, Android) connected with Bridge address
+`https://pscap11.tailf91bf7.ts.net:8444`, which is not in app/app.json ("Connected · PC bridge ·
+1682ms", 43 Coding sessions). The app uses the typed address whenever it parses (no fallback to the
+built-in one), so the request went to :8444. Limit: only the PORT differed from the whitelisted
+origin; a different HOST is covered by the two apps below, not by this test. The first outside
+user's PC will be the full proof. Consequence: self-hosters can use their own Tailscale address
+(their phone must run Tailscale too); the relay is needed only for phones without Tailscale, the
+hosted tier, or if Even starts enforcing the whitelist.
 
 Evidence that the Even app may not enforce the network whitelist, despite its docs:
 - Upstream Orca Glass (2ero20ne, published 1.0.0/1.0.1) whitelists only `https://ntfy.sh`, yet its
