@@ -15,7 +15,7 @@
 // to on/off pixels. East Asian wide characters take two cells.
 import { getLang, t } from './i18n';
 import { readerPages, type ReaderPage } from './text';
-import { DEPARTURE_MONO, TERMINUS, GOHU, SCIENTIFICA, FIXED, SHINONOME_K12 } from './fonts/glyphs';
+import { DEPARTURE_MONO, TERMINUS, GOHU, SCIENTIFICA, FIXED, CJK_12 } from './fonts/glyphs';
 
 // Menu order: narrowest cell first, then by height. (2026-11-10: Spleen, Monogram,
 // Cozette, Pixeloid Mono and JetBrains Mono removed at the user's request.)
@@ -123,11 +123,10 @@ function glyph(font: FineFont, code: number): number[] | undefined {
   return table.get(code);
 }
 
-// Japanese (2026-11-10): one 12x12 wide table (Shinonome, JIS level 1 kanji, kana,
-// symbols) shared by every small font. Rows are 16-bit, bit 15 = leftmost pixel; the
-// glyphs use 11 columns. It fits the 6x12, 6x13 and 7x14 cells exactly; in 11-row
-// fonts it overflows one row upwards, in Scientifica (10px two-cell) one column right.
-const WIDE = SHINONOME_K12;
+// Every small font shares a 12x12 CJK table with Hong Kong glyph forms, Big5
+// level 1, common Cantonese and the existing JIS level 1 and kana coverage.
+// Most shapes use 11 ink columns. Rows are 16-bit, bit 15 = leftmost pixel.
+const WIDE = CJK_12;
 let wideParsed: Map<number, number[]> | null = null;
 function wideGlyph(code: number): number[] | undefined {
   if (!wideParsed) {

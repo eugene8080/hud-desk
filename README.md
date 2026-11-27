@@ -83,3 +83,5 @@ Pairing codes are credentials: keep them, authenticated QR files and local runti
 [MIT](LICENSE). Original copyright: **Copyright (c) 2026 2ero20ne**.
 Production builds include the full original notice in `LICENSE.txt` and project
 links in `ATTRIBUTION.txt`. This independent fork does not imply upstream endorsement.
+
+The small-text reader uses Fusion Pixel Font 12px monospaced zh_HK for the shared CJK glyph table, with public-domain Shinonome fallbacks. The build includes both fonts' notices in `FONT-LICENSES.txt`. The verified source BDF has SHA-256 `994fddade92110721113e56e23be2e01a356d8ed6f1b261f41ce3d8d7d2c255c`. To rebuild just the wide table, run `python scripts/build-fine-fonts.py --wide-only --fusion <zh_HK BDF> --shinonome <Shinonome BDF directory>`. [Fusion Pixel Font v2026.11.10](https://github.com/TakWolf/fusion-pixel-font/releases/tag/2026.11.10)
