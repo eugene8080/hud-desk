@@ -61,7 +61,10 @@ formatting'; wants the translation on the next row). Bridge /api/chat/translate:
 into lines; only lines with non-ASCII characters go to the model, without their bullet/number (one
 batched request); answer textLines (English or null per line), cached per message text. App
 withEnglishLines: each line, then '(English)' on the next row indented under the line's text; voice
-transcripts keep the whole-text '(English)'. 279 tests, build pass. Bridge part needs an approved restart.
+transcripts keep the whole-text '(English)'. 279 tests, build pass. Bridge restarted with Eugene's
+approval (old supervisor 70992/server 44288/whisper 72152; new supervisor 71096, server 71952, whisper
+65728 --vad); healthz ok; his WINDOW MECHANISM REPAIR message: 47 lines, 18 translated in 4.2 s, each
+under its line (layout checked in the scratchpad only).
 
 2026-11-27 beta 1.0.88 (Eugene: '<ul><li> and others' in a WhatsApp group via Beeper). Beeper's
 message text carries the chat app's formatting as HTML. bridge/chat-text.mjs chatHtmlToText: ul/ol/li
