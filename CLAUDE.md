@@ -58,6 +58,16 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.92: the three growth workers (run run_b1377f132b90) reported succeeded and were
+merged by the coordinator: relay cba0b4b (merge d6610f1; docs/relay.md, eho2 pairing, relay off by
+default), local-agents 63eed2a (merge 156bec1; docs/local-agents.md, plain Claude Code/Codex sessions,
+ON by default, replies only via `claude -p --resume` / `codex exec resume` with read-only guards),
+mail-imap fc5b322 (merge 5d1f1b4; docs/email-providers.md, imapflow/nodemailer/mailparser, Outlook.com
+needs Microsoft OAuth, not done). Conflicts resolved in bridge/server.mjs (routes passed to relay
+handlers), app/src/i18n.ts, TODOS.md, package.json/lock. 294 tests, build pass. Beta 1.0.92 uploaded,
+CLI verified 250,725 bytes; prototype build restored. NOT done: bridge restart (new bridge code incl.
+local agents not live; ask Eugene), relay hosting/domain (Eugene), live IMAP/consent checks.
+
 2026-11-27 growth steps dispatched (Eugene: "start step 1", then one worker per step in its own
 worktree; see docs/growth-options.md). Run run_b1377f132b90, Codex workers in child worktrees under
 C:/Users/eugen/orca/workspaces/orca-glass/: relay (step 1: relay at one fixed origin + end-to-end

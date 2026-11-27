@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.91**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.92**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -172,5 +172,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.91: Usage on the glasses is now drawn as bars: one bar per window (5h, week, month) with the percent and reset time; click still switches Computer, Phone and Absolute time. The project is now on GitHub as eugene8080/hud-desk (old links redirect).
+1.0.92: Groundwork for self-hosting. Coding lists plain Claude Code and Codex CLI sessions (Orca optional) and replies through each CLI's own resume mode. New eho2 pairing codes connect through an encrypted relay. Email can use any IMAP/SMTP account or your own Google project. Relay and new accounts need bridge setup.
 <!-- whatsnew:end -->
