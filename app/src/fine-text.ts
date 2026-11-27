@@ -55,7 +55,8 @@ export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].widt
 // Terminal-style highlights (Eugene, 2026-11-27: "what did early terminals use? ... see the
 // background highlight but aren't too bright and you can still see the text"). Nothing lights
 // the band behind the letters:
-// - Left bar: a 2px bar in the first text column of your turns, in place of the '/' marker, down
+// - Left bar: a bar (cell width - 2 px: 4px in a 6px font; "thicker", Eugene) in the first text
+//   column of your turns, in place of the '/' marker, down
 //   every row of the turn (the quote bar of mail clients). In the text column because Departure 7x14
 //   fills the full width and the other fonts leave only 2px beside the frame.
 // - Underline: a 1px line under the letters of each row of yours (the VT100 underline attribute).
@@ -65,13 +66,14 @@ export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].widt
 //   letter (8 neighbours) stay dark, so each letter stands on black.
 // Default Lines 1/3 (Eugene, 2026-11-27). Ink 2/3 were dropped; a saved one falls back to the default.
 export const TURN_BACKGROUNDS = ['none', 'ink58', 'ink12', 'ink14', 'lines3', 'lines4', 'dots3', 'dots14',
-  'dots18', 'tubedim', 'tubexdim', 'tubexxdim', 'tube', 'frame', 'bar', 'underline', 'dimreplies'] as const;
+  'dots18', 'tubedim', 'tubexdim', 'tube', 'frame', 'bar', 'underline', 'dimreplies'] as const;
 // Options drawn as marks or text levels rather than a lit band (no TURN_PATTERNS entry).
 type MarkBackground = 'none' | 'frame' | 'bar' | 'underline' | 'dimreplies';
 const MARKS: readonly string[] = ['none', 'frame', 'bar', 'underline', 'dimreplies'];
 const BAR_INK = 5, UNDERLINE_INK = 4, DIM_REPLIES = 0.55;
 // Saved values from earlier betas that map onto an option that still exists.
-const RENAMED: Record<string, TurnBackground> = { dots2: 'ink12', dots4: 'ink14' };
+// Tube 1/8 (tubexxdim) was removed on 2026-11-27; a saved one shows as Tube 1/4.
+const RENAMED: Record<string, TurnBackground> = { dots2: 'ink12', dots4: 'ink14', tubexxdim: 'tubexdim' };
 export type TurnBackground = typeof TURN_BACKGROUNDS[number];
 export const DEFAULT_TURN_BACKGROUND: TurnBackground = 'lines3';
 export const SCAN_PITCH = 3;
@@ -82,7 +84,7 @@ const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 const dither = (k: number) => (x: number, y: number) => BAYER4[y & 3][x & 3] < k;
 // Tube variants: scanline pitch and the lit fraction of the band's other rows (16 = solid).
 const TUBES: Partial<Record<TurnBackground, { pitch: number; fill: number }>> = {
-  tubedim: { pitch: 3, fill: 8 }, tubexdim: { pitch: 3, fill: 4 }, tubexxdim: { pitch: 3, fill: 2 },
+  tubedim: { pitch: 3, fill: 8 }, tubexdim: { pitch: 3, fill: 4 },
   tube: { pitch: 3, fill: 16 },
 };
 export function parseTurnBackground(value: string | null | undefined): TurnBackground {
@@ -100,7 +102,6 @@ export function turnBackgroundLabel(option: TurnBackground): string {
   if (option === 'dots18') return t('backgroundDots', '1/8');
   if (option === 'tubedim') return t('backgroundTubeBand', '1/2');
   if (option === 'tubexdim') return t('backgroundTubeBand', '1/4');
-  if (option === 'tubexxdim') return t('backgroundTubeBand', '1/8');
   if (option === 'tube') return t('backgroundTube');
   if (option === 'frame') return t('backgroundFrame');
   if (option === 'bar') return t('backgroundBar');
@@ -123,7 +124,6 @@ const TURN_PATTERNS: Record<Exclude<TurnBackground, MarkBackground>, (x: number,
   dots18: dither(2),
   tubedim: tubeLit(TUBES.tubedim!),
   tubexdim: tubeLit(TUBES.tubexdim!),
-  tubexxdim: tubeLit(TUBES.tubexxdim!),
   tube: tubeLit(TUBES.tube!),
 };
 // The panel is 4-bit: 16 steps, numbered 0 through 15. Full white is 15, which is
@@ -390,8 +390,8 @@ function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: Tur
       if (r === lines.length - 1 || !framed[r + 1]) s.rect(textX, y + line - 1, textWidth, 1, ink);
     });
   } else if (background === 'bar' && ink > 0) {
-    const x = textX + Math.max(0, (cell >> 1) - 1);
-    lines.forEach((_, r) => { if (page.userTurns[r]) s.rect(x, top + r * line, 2, line, ink); });
+    const width = Math.max(2, cell - 2), x = textX + ((cell - width) >> 1);
+    lines.forEach((_, r) => { if (page.userTurns[r]) s.rect(x, top + r * line, width, line, ink); });
   } else if (!MARKS.includes(background) && ink > 0) {
     lines.forEach((_, r) => {
       if (page.userTurns[r]) s.pattern(textX, top + r * line, textWidth, line, ink, TURN_PATTERNS[background as Exclude<TurnBackground, MarkBackground>]);
@@ -464,11 +464,16 @@ export const FONT_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvw
 // Japanese mode shows kana, kanji and full-width punctuation on the second line instead.
 export const FONT_SAMPLE_JA = 'あいうえお アイウエオ 日本語の表示、漢字。「東雲」 ABC abc 0123';
 // selected: the row marked '>' (Eugene, 2026-11-27: choose directly on the comparison pages).
-export function renderFontComparison(level = INK_MAX, selected = -1): number[][] {
+// nativeRow: leave the top NATIVE_COMPARE_ROW px free for Native text, which the glasses draw in
+// their own font in a text container above these tiles (the tiles cannot draw that font).
+export const NATIVE_COMPARE_ROW = 30;
+// The sample sentence every row of Compare fonts shows.
+export const fontSample = () => getLang() === 'ja' ? FONT_SAMPLE_JA : FONT_SAMPLE;
+export function renderFontComparison(level = INK_MAX, selected = -1, nativeRow = false): number[][] {
   const s = new Surface(FINE_FONTS[0], inkByte(level));
   s.frame();
   const nameCells = Math.max(...FINE_FONTS.map(font => fineLabel(font).length)) + 2;
-  let y = TOP;
+  let y = TOP + (nativeRow ? NATIVE_COMPARE_ROW : 0);
   for (const [i, font] of FINE_FONTS.entries()) {
     s.font = font;
     const layout = fineLayout(font);

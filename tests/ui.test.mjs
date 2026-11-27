@@ -117,7 +117,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
   const source = ts.transpileModule(readFileSync(new URL('../app/src/main.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInNewContext(source, {
     exports: {}, require: name => imports[name], document: { getElementById: element },
-    location: { search: '' }, window: { addEventListener(name, fn) { windowListeners.set(name, fn); } }, URLSearchParams, Uint8Array, TextEncoder,
+    location: { search: '' }, window: { addEventListener(name, fn) { windowListeners.set(name, fn); } }, URLSearchParams, Uint8Array, TextEncoder, atob,
     setInterval: (fn, delay) => { (delay === 200 ? animations : timers).set(++timerId, fn); return timerId; },
     clearInterval: id => { timers.delete(id); animations.delete(id); },
     setTimeout: (fn, delay) => { timeouts.set(++timerId, { fn, delay }); return timerId; },
@@ -141,7 +141,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     pagehide: () => { windowListeners.get('pagehide')?.(); },
     // Bluetooth keyboard on the phone: target defaults to the page body (no text box focused).
     key: async (key, extra = {}) => { windowListeners.get('keydown')?.({ key, target: { tagName: 'BODY' }, preventDefault() {}, ...extra }); await flush(); },
-    keyup: async key => { windowListeners.get('keyup')?.({ key, target: { tagName: 'BODY' }, preventDefault() {} }); await flush(); },
+    keyup: async (key, extra = {}) => { windowListeners.get('keyup')?.({ key, target: { tagName: 'BODY' }, preventDefault() {}, ...extra }); await flush(); },
   };
 }
 
@@ -1023,6 +1023,34 @@ test('Gmail keys: j/k move, o opens, r opens a reply on the glasses, Enter revie
   assert.equal(h.exited(), 0);
 });
 
+test('arrow keys work by any name the WebView reports, on keyup if the keydown never arrives, and page the reader', async () => {
+  const h = await harness(3, true, 'hold');
+  const start = cursorRow(h);
+  await h.key('Down');
+  await h.keyup('Down');
+  assert.equal(cursorRow(h), start + 1, 'old name Down');
+  await h.key('Unidentified', { keyCode: 38 });
+  await h.keyup('Unidentified', { keyCode: 38 });
+  assert.equal(cursorRow(h), start, 'keyCode 38');
+  await h.keyup('ArrowDown');
+  assert.equal(cursorRow(h), start + 1, 'keyup only');
+  await h.key('ArrowDown');
+  await h.keyup('ArrowDown');
+  assert.equal(cursorRow(h), start + 2, 'keydown then keyup moves once');
+  // A tapped checkbox on the phone page does not swallow the arrows.
+  await h.key('ArrowUp', { target: { tagName: 'INPUT', type: 'checkbox' } });
+  assert.equal(cursorRow(h), start + 1);
+  // In a reader, Up/Down turn pages.
+  h.api.thread = async () => ({ text: Array.from({ length: 40 }, (_, i) => `> Line ${i + 1}`).join('\n') });
+  while (cursorRow(h) < 3) await h.key('ArrowDown');
+  await h.key('Enter');
+  const last = container(h, 'body').content;
+  await h.key('ArrowUp');
+  assert.notEqual(container(h, 'body').content, last);
+  await h.key('ArrowDown');
+  assert.equal(container(h, 'body').content, last);
+});
+
 test('Gmail keys: Space and Shift+Space page the reader; voice stays on the glasses hold', async () => {
   const h = await harness(2, true, 'hold');
   h.api.thread = async () => ({ text: Array.from({ length: 40 }, (_, i) => `> Line ${i + 1}`).join('\n') });
@@ -1187,7 +1215,11 @@ test('Gmail j in a mail reader opens the next thread of the list', async () => {
 test('? shows the keyboard page and any back returns', async () => {
   const h = await harness(2);
   await h.key('?');
-  assert.match(container(h, 'body').content, /r reply · a reply all/);
+  // Action on the left, keys at the right end of the same row.
+  assert.match(container(h, 'body').content, /^Reply, reply all, forward {2,}r, a, f$/m);
+  assert.match(container(h, 'body').content, /^Next, previous row {2,}j, k · Down, Up$/m);
+  assert.equal(container(h, 'body').content.split('\n').length, 9, 'all nine rows on one page');
+  assert.ok(new TextEncoder().encode(container(h, 'body').content).length <= 900);
   await h.key('Escape');
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'));
 });
@@ -2370,10 +2402,10 @@ test('small text draws the whole screen, status row included, as four tiles and 
   await h.menu(1101); await h.pick(6); await h.flush();
   // The comparison opens with '>' on the font in use; a swipe moves it; a double-click returns.
   const terminus = fineExports.FINE_FONTS.indexOf('terminus');
-  assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison(15, terminus)));
+  assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison(15, terminus, true)));
   await h.scroll('down'); await h.flush();
   const moved = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
-  const next = fineExports.renderFontComparison(15, terminus + 1);
+  const next = fineExports.renderFontComparison(15, terminus + 1, true);
   for (const [name, data] of moved) assert.equal(JSON.stringify(data), JSON.stringify(next[Number(name.slice(5))]));
   await h.back(); await h.flush();
   const restored = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
@@ -2500,9 +2532,11 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
   // Dots 1/4: a quarter lit like Ink 1/4, but every other dotted row shifted by one pixel.
   const staggered = (x, y) => y % 2 === 0 && x % 2 === (y >> 1) % 2;
   const expected = [() => false, ditherLit(10), ditherLit(8), ditherLit(4), (_x, y) => y % 3 === 0, (_x, y) => y % 4 === 0,
-    ditherLit(5), staggered, ditherLit(2), scan(3, 8), scan(3, 4), scan(3, 2), scan(3, 16)];
+    ditherLit(5), staggered, ditherLit(2), scan(3, 8), scan(3, 4), scan(3, 16)];
   const names = ['None', 'Ink 5/8', 'Ink 1/2', 'Ink 1/4', 'Lines 1/3', 'Lines 1/4', 'Dots 1/3', 'Dots 1/4', 'Dots 1/8',
-    'Tube 1/2', 'Tube 1/4', 'Tube 1/8', 'Tube'];
+    'Tube 1/2', 'Tube 1/4', 'Tube'];
+  // Tube 1/8 was removed: a saved one shows as Tube 1/4.
+  assert.equal(fineExports.parseTurnBackground('tubexxdim'), 'tubexdim');
   expected.forEach((test, i) => assert.ok(lit(i, test), names[i]));
   // Dots 1/4 is not a copy of Ink 1/4.
   assert.ok([0, 1, 2, 3].some(y => [0, 1, 2, 3].some(x => staggered(x, y) !== ditherLit(4)(x, y))));
@@ -2519,8 +2553,8 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
   // Page two: Dots 1/8, the Tube options, 1px frame and the terminal-style options; pick Tube.
   await h.menu(1109);
   for (let i = 0; i < 5; i++) await h.scroll('down');
-  assert.deepEqual(menuItems(h), ['Dots 1/8', 'Tube 1/2', 'Tube 1/4', 'Tube 1/8', 'Tube', '1px frame', 'Left bar', 'Underline', 'Dim replies']);
-  await h.pick(4);
+  assert.deepEqual(menuItems(h), ['Dots 1/8', 'Tube 1/2', 'Tube 1/4', 'Tube', '1px frame', 'Left bar', 'Underline', 'Dim replies']);
+  await h.pick(3);
   assert.equal(h.storage.get('reader-turn-bg'), 'tube');
   const tube = sentFineTiles(h);
   assert.equal(tilePixel(tube, right, 4), 17);
@@ -2538,13 +2572,11 @@ test('terminal-style backgrounds: left bar, underline and dim replies light noth
   const status = { left: '', right: '' };
   const { textX, line, cell } = fineExports.fineLayout('terminus');
   const at = (tiles, x, y) => tilePixel(tiles, x, y);
-  // Left bar: 2px at Ink 5 in the first column of your rows, where the '/' was.
+  // Left bar: cell width - 2 (4px in Terminus) at Ink 5 in the first column of your rows, where the '/' was.
   const bar = fineExports.renderFineScreen({ text: '/ MMMM\n  more', userTurns: [1, 1] }, 'terminus', status, 15, 'bar');
-  const barX = textX + (cell >> 1) - 1;
   for (let y = 4; y < 4 + 2 * line; y++) {
-    assert.equal(at(bar, barX, y), 85, `bar ${y}`);
-    assert.equal(at(bar, barX + 1, y), 85, `bar ${y}`);
-    for (const x of [textX, textX + cell - 1]) if (x !== barX && x !== barX + 1) assert.equal(at(bar, x, y), 0, `no slash at ${x},${y}`);
+    for (let x = textX + 1; x <= textX + 4; x++) assert.equal(at(bar, x, y), 85, `bar ${x},${y}`);
+    for (const x of [textX, textX + cell - 1]) assert.equal(at(bar, x, y), 0, `no slash at ${x},${y}`);
   }
   // Underline: 1px at Ink 4 under the letters of your row, nothing past them.
   const under = fineExports.renderFineScreen({ text: '/ MMMM', userTurns: [1] }, 'terminus', status, 15, 'underline');
@@ -2841,4 +2873,75 @@ test('Japanese wraps between characters but never starts a row with closing punc
   assert.equal(rows.join('').replace(/\s/g, ''), '>明細の日付をUTCの実行日と比べているため、翌日扱いになりました。');
   // Latin words are still never split.
   assert.deepEqual([...readerPageText('alpha beta gamma', t => t.length * 6, 6 * 11, 20)[0].split(nl)], ['alpha beta', 'gamma']);
+});
+
+// ---- Images on the glasses (2026-11-27). Synthetic pictures only. ----
+const glassImage = (level, mean = 0.2) => {
+  const packed = Buffer.alloc(576 * 288 / 2, (level << 4) | level);
+  return { width: 576, height: 288, data: packed.toString('base64'), mean };
+};
+const shownTiles = h => [0, 1, 2, 3].map(i => h.images.findLast(image => image.containerName === `fine-${i}`)?.imageData);
+
+test('images: a click on a mail page with an image opens it; swipe moves, click inverts, double-click returns', async () => {
+  const { fixture, messages } = mailFixture();
+  messages[1].images = [{ part: '2', name: 'plan.png' }, { part: '3', name: '' }];
+  const asked = [];
+  fixture.image = async (account, message, part) => { asked.push({ account, message, part }); return glassImage(part === '2' ? 15 : 5, part === '2' ? 0.9 : 0.1); };
+  const h = await emailHarness(fixture);
+  await h.pickRow(2);
+  // The reader opens at the newest message; its image rows follow the text.
+  const text = h.pages.at(-1).textObject.find(c => c.containerName === 'body')?.content ?? '';
+  for (let i = 0; i < 5 && !/\[Image 1: plan\.png\]/.test(container(h, 'body').content); i++) await h.scroll('down');
+  assert.match(container(h, 'body').content, /\[Image 1: plan\.png\]\n\[Image 2\]/, text);
+  await h.tap();
+  assert.deepEqual(asked, [{ account: 'work', message: 'new', part: '2' }]);
+  // A mostly white picture (mean 0.9) shows in negative: level 15 becomes 0.
+  assert.ok(shownTiles(h).every(tile => tile.every(v => v === 0)));
+  await h.tap();
+  assert.ok(shownTiles(h).every(tile => tile.every(v => v === 255)), 'click shows it as it is');
+  await h.scroll('down');
+  assert.deepEqual(asked.at(-1), { account: 'work', message: 'new', part: '3' });
+  assert.ok(shownTiles(h).every(tile => tile.every(v => v === 85)), 'image 2 at level 5');
+  await h.back();
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'body'), 'back in the mail reader');
+});
+
+test('images: Chat photos are numbered rows and open from the page; Coding screenshots open by number', async () => {
+  const { chat } = chatFixture();
+  const wanted = [];
+  chat.messages = async () => ({ messages: [
+    { id: 'm2', own: true, from: '', date: 1, text: 'Nice' },
+    { id: 'm1', own: false, from: 'Fixture sender', date: 2, text: 'Look', media: 'Photo', image: true },
+  ] });
+  chat.image = async (chatId, messageId) => { wanted.push({ chatId, messageId }); return glassImage(10); };
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat });
+  await h.pickRow(2);
+  assert.match(container(h, 'body').content, /\[Photo 1\] Look/);
+  await h.tap();
+  assert.deepEqual(wanted, [{ chatId: 'fixture-0', messageId: 'm1' }]);
+  assert.ok(shownTiles(h).every(tile => tile.every(v => v === 170)));
+  // Coding: an [Image N] row in the saved history.
+  const c = await harness(2);
+  const asked = [];
+  c.api.history = async () => ({ text: '/ See this\n[Image 1]\n> Done.', source: 'claude-transcript' });
+  c.api.historyImage = async (handle, n) => { asked.push({ handle, n }); return glassImage(3); };
+  await c.pick(2);
+  await c.tap();
+  assert.deepEqual(asked, [{ handle: 'terminal-0', n: 1 }]);
+});
+
+test('Compare fonts has Native text as its first row, drawn by the glasses above the tiles', async () => {
+  const h = await moduleHarness({ storage: { 'reader-text': 'native' } });
+  h.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
+  await h.pick(2);
+  await h.menu(1101);
+  await h.pick(6);
+  const capture = h.pages.at(-1).textObject.find(c => c.containerName === 'fine-input');
+  assert.match(capture.content, /^>Native text {2}/);
+  assert.equal(capture.zOrderIndex, 5);
+  await h.scroll('down');
+  assert.match(h.upgrades.findLast(u => u.containerName === 'fine-input').content, /^ Native text/);
+  await h.scroll('up');
+  await h.tap();
+  assert.equal(h.storage.get('reader-text'), 'native');
 });

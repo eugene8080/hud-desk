@@ -19,6 +19,21 @@ const ACTIONS = {
   trash: 'trash', untrash: 'untrash',
 };
 const SEND_MEMORY_MS = 10 * 60_000;
+// Image parts of a message the glasses can open (2026-11-27). Parts under 2 KB are left out:
+// those are tracking pixels and small logos, not pictures anyone wants to look at.
+const PART_ID = /^\d+(?:\.\d+)*$/;
+function imageParts(payload) {
+  const found = [];
+  (function walk(part) {
+    if (!part || found.length >= 20) return;
+    if (/^image\//i.test(part.mimeType ?? '') && typeof part.partId === 'string' && PART_ID.test(part.partId) &&
+        (part.body?.attachmentId || part.body?.data) && (part.body?.size ?? 0) >= 2048) {
+      found.push({ part: part.partId, name: String(part.filename ?? '').replace(/[\r\n]+/g, ' ').slice(0, 80) });
+    }
+    for (const child of part.parts ?? []) walk(child);
+  })(payload);
+  return found;
+}
 
 export function readMailConfig(config) {
   if (!string(config?.oauthClientFile) || !Array.isArray(config.accounts) || !config.accounts.length ||
@@ -132,7 +147,7 @@ function publicError(error) {
   return error instanceof MailError ? error.code : 'internal';
 }
 
-export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
+export function createMail(config, { gmailOptions, coldWaitMs = 3000, imaging } = {}) {
   const refreshMs = config.refreshSeconds * 1000;
   const search = `newer_than:${config.windowDays}d`;
   const accounts = new Map(config.accounts.map(account => {
@@ -254,10 +269,13 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
       rememberUnreadLabels(threadId, messages, started);
       return {
         subject: header(messages[0] ?? {}, 'subject'),
-        messages: messages.map(m => ({
-          id: m.id, from: parseFrom(header(m, 'from')), to: header(m, 'to'), cc: header(m, 'cc'),
-          date: dateOf(m), text: bodyText(m.payload, { subject: header(m, 'subject') }),
-        })),
+        messages: messages.map(m => {
+          const images = imageParts(m.payload);
+          return {
+            id: m.id, from: parseFrom(header(m, 'from')), to: header(m, 'to'), cc: header(m, 'cc'),
+            date: dateOf(m), text: bodyText(m.payload, { subject: header(m, 'subject') }), ...(images.length && { images }),
+          };
+        }),
       };
     }
 
@@ -282,6 +300,27 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
         }).finally(() => reads.delete(threadId)));
       }
       return reads.get(threadId);
+    }
+
+    // One image part, read only: inline data, or the attachment fetched by its id.
+    async function image(messageId, partId) {
+      if (!imaging) throw new MailError('images-unavailable', 503);
+      return imaging.render(`mail:${account.id}:${messageId}:${partId}`, async () => {
+        const message = await gmail('GET', `/messages/${messageId}`, { query: { format: 'full', fields: 'id,payload' } });
+        let part;
+        (function find(node) {
+          if (!node || part) return;
+          if (node.partId === partId) part = node;
+          for (const child of node.parts ?? []) find(child);
+        })(message.payload);
+        if (!part || !/^image\//i.test(part.mimeType ?? '')) throw new MailError('not found', 404);
+        if (part.body?.data) return Buffer.from(part.body.data, 'base64url');
+        const attachment = part.body?.attachmentId;
+        if (!id(attachment)) throw new MailError('not found', 404);
+        const body = await gmail('GET', `/messages/${messageId}/attachments/${attachment}`, { query: { fields: 'data' } });
+        if (typeof body?.data !== 'string') throw new MailError('not found', 404);
+        return Buffer.from(body.data, 'base64url');
+      });
     }
 
     // Lists drop a thread at once after an archive or trash, then reload in the background; an
@@ -370,7 +409,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
 
     return [account.id, {
       id: account.id, short: account.short, address: account.address, health, labels, labelIndex, order, unread, recentlyRead,
-      summary, open, mark, sortDate, selections, act, compose, send,
+      summary, open, mark, sortDate, selections, act, compose, send, image,
     }];
   }));
 
@@ -507,6 +546,11 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
       : accountOf(body?.account).act(threadId(body?.threadId), body?.action),
     'GET /api/mail/compose': query => accountOf(query.get('account')).compose(threadId(query.get('id')), query.get('mode')),
     'POST /api/mail/send': (_query, body) => accountOf(body?.account).send(body),
+    'GET /api/mail/image': query => {
+      const part = query.get('part') ?? '';
+      if (!PART_ID.test(part)) throw badRequest();
+      return accountOf(query.get('account')).image(threadId(query.get('message')), part);
+    },
   };
   return { routes, close: () => clearInterval(timer) };
 }

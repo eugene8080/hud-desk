@@ -13,6 +13,7 @@ import { transcribe, voiceAvailable, warmWhisper } from './whisper.mjs';
 import { MailError } from './gmail.mjs';
 import { allowPrivateHost, createMail, readMailConfig } from './mail.mjs';
 import { BeeperError, createBeeper, readBeeperConfig } from './beeper.mjs';
+import { createImaging, ImageError } from './image.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const DIST = join(here, '../app/dist');
@@ -22,6 +23,8 @@ const HOST = process.env.HOST || '127.0.0.1';
 const config = JSON.parse(readFileSync(join(here, 'config.json'), 'utf8'));
 const localFile = join(here, 'config.local.json');
 const local = existsSync(localFile) ? JSON.parse(readFileSync(localFile, 'utf8')) : {};
+// Images on the glasses (2026-11-27): ffmpeg from PATH, `ffmpegPath`, or the Chat voice set-up's path.
+const imaging = createImaging({ ffmpeg: local.ffmpegPath ?? local.beeper?.ffmpegPath });
 Object.assign(config, local);
 
 function authorized(req, token) {
@@ -94,6 +97,13 @@ const routes = {
   'GET /api/activity': (q) => o.activity(q.get('handle')),
   'GET /api/thread': (q) => o.readThread(q.get('handle')),
   'GET /api/history': (q) => o.readHistory(q.get('handle')),
+  // An image pasted into a Claude or Codex session, by its [Image N] number in the history.
+  // Not cached: a /clear restarts the numbering on the same terminal.
+  'GET /api/history/image': (q) => {
+    const index = Number(q.get('index'));
+    if (!Number.isSafeInteger(index) || index < 1) throw new ImageError('bad request', 400);
+    return imaging.render(null, () => o.readHistoryImage(q.get('handle'), index));
+  },
   'POST /api/choice': (_q, b) => o.choose(b.handle, b.menuId, b.value),
   'GET /api/replies': (q) => config.replies.filter(r => r.enter).map((r) => pick(r.label, langOf(q))),
   'POST /api/reply': async (q, b) => {
@@ -142,11 +152,11 @@ export function createBridge({
   mailConfig = local.mail, beeperConfig = local.beeper, privateHosts = local.privateHosts, mailOptions, beeperOptions,
 } = {}) {
   const settings = readMailConfig(mailConfig);
-  const mail = settings && createMail(settings, mailOptions);
+  const mail = settings && createMail(settings, { imaging, ...mailOptions });
   const beeperSettings = readBeeperConfig(beeperConfig);
-  const chat = beeperSettings && createBeeper(beeperSettings, beeperOptions);
+  const chat = beeperSettings && createBeeper(beeperSettings, { imaging, ...beeperOptions });
   const privateHostAllowed = allowPrivateHost(privateHosts);
-  const capabilities = async () => ({ voice: voiceAvailable(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])],
+  const capabilities = async () => ({ voice: voiceAvailable(), images: imaging.available(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])],
     ...(chat?.features && { chatFeatures: await chat.features() }) });
   const server = createServer((req, res) => handle(req, res, token, capabilities, mail, chat, privateHostAllowed));
   if (mail) server.once('close', mail.close);
@@ -202,6 +212,7 @@ async function handle(req, res, token, capabilities, mail, chat, privateHostAllo
     res.writeHead(200, { 'content-type': MIME[extname(file)] || 'application/octet-stream' });
     res.end(data);
   } catch (e) {
+    if (e instanceof ImageError) return send(res, e.status, { error: e.code });
     console.error(e);
     send(res, 500, { error: String(e.message || e) });
   }
@@ -237,7 +248,7 @@ async function handlePrivate(req, res, url, module, route, token, privateHostAll
     count = Array.isArray(result) ? result.length : result.items?.length ?? result.messages?.length ?? Number(transcribed);
     return send(res, 200, result);
   } catch (error) {
-    return error instanceof MailError || error instanceof BeeperError
+    return error instanceof MailError || error instanceof BeeperError || error instanceof ImageError
       ? send(res, error.status, { error: error.code })
       : send(res, 500, { error: 'internal' });
   } finally {

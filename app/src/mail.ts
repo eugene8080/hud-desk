@@ -1,4 +1,4 @@
-import { api, type MailAccount, type MailConversation, type MailLabel, type MailThread } from './api';
+import { api, type GlassImage, type MailAccount, type MailConversation, type MailLabel, type MailThread } from './api';
 import { getLang, t } from './i18n';
 import { glassWidth, MENU_RIGHT, menuTitle, type SessionColumns } from './session-list';
 
@@ -12,7 +12,15 @@ export type ReaderSource<Content extends ReaderContent = ReaderContent> = {
   afterDisplay?: () => Promise<void>;
   // The Email thread a mail reader shows: keyboard actions (archive, reply, ...) apply to it.
   mail?: MailThread;
+  // Image N of the text's [Image N] / [Photo N] / [Sticker N] rows (2026-11-27).
+  image?: (n: number) => Promise<GlassImage>;
 };
+
+// The numbers of the image rows in a reader text, in order (each once).
+const IMAGE_TAG = /\[(?:Image|Photo|Sticker) (\d+)[\]: ·]/g;
+export function imageNumbers(text: string): number[] {
+  return [...new Set([...text.matchAll(IMAGE_TAG)].map(match => Number(match[1])))];
+}
 
 export function mailDate(timestamp: number, now = new Date()): string {
   const date = new Date(timestamp);
@@ -29,17 +37,23 @@ export function mailFilterSummary(selected: Set<string>, names: Map<string, stri
   return `${names.get(first) ?? (first.endsWith(':INBOX') ? 'Inbox' : t('unavailableSection'))}${extra ? ` +${extra}` : ''}`;
 }
 
-export function mailReaderText(conversation: MailConversation): ReaderContent {
+export function mailReaderText(conversation: MailConversation): ReaderContent & { images: { message: string; part: string }[] } {
   const subject = singleLine(conversation.subject);
+  const images: { message: string; part: string }[] = [];
   const messages = [...conversation.messages].sort((a, b) => a.date - b.date).map(message => [
     t('mailFrom', singleLine(message.from)),
     t('mailDate', new Date(message.date).toLocaleString(getLang())),
     t('mailSubject', subject),
     '',
     message.text,
+    // Image parts below the message text: [Image N: name], opened with a click on its page.
+    ...(message.images ?? []).map(image => {
+      images.push({ message: message.id, part: image.part });
+      return `[Image ${images.length}${image.name ? `: ${singleLine(image.name)}` : ''}]`;
+    }),
   ].join('\n'));
   const before = messages.slice(0, -1).join('\n\n');
-  return { text: messages.join('\n\n'), openingOffset: before ? before.length + 2 : 0 };
+  return { text: messages.join('\n\n'), openingOffset: before ? before.length + 2 : 0, images };
 }
 
 function singleLine(text: string): string { return text.replace(/\s+/g, ' ').trim(); }
@@ -272,10 +286,20 @@ export class Mail {
   reader(thread: MailThread): ReaderSource {
     let failed = false;
     let displayed = false;
+    let images: { message: string; part: string }[] = [];
     return {
       title: singleLine(thread.subject),
       mail: thread,
-      load: async () => mailReaderText(await api.mail.thread(thread.account, thread.id)),
+      load: async () => {
+        const content = mailReaderText(await api.mail.thread(thread.account, thread.id));
+        images = content.images;
+        return content;
+      },
+      image: async n => {
+        const ref = images[n - 1];
+        if (!ref) throw new Error('not found');
+        return api.mail.image(thread.account, ref.message, ref.part);
+      },
       statusText: () => failed ? t('mailNotMarkedRead') : ' ',
       afterDisplay: async () => {
         if (displayed || !thread.unread) return;

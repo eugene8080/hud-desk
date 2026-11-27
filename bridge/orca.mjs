@@ -219,6 +219,14 @@ export async function readHistory(handle) {
   return { text: terminalConversation(terminal.tail || [], fallback.agentIdentity) || (['codex', 'claude', 'cursor', 'openclaude'].includes(fallback.agentIdentity) ? '' : '> Conversation-only text is unavailable for this terminal format.'), limited: true, source: 'terminal-buffer', reason };
 }
 
+// The bytes of image N of a session's saved transcript (Claude or Codex), for the glasses.
+export async function readHistoryImage(handle, index) {
+  if (isHermes(handle) || isChat(handle)) throw new Error('Images are read from Claude and Codex transcripts only.');
+  const live = await requireLiveTerminal(handle);
+  const { readTranscriptImage } = await import('./conversation.mjs');
+  return readTranscriptImage(live, index);
+}
+
 export async function requireLiveTerminal(handle) {
   if (typeof handle !== 'string' || !handle) throw new Error('Missing terminal handle');
   const { terminal } = await orca(['terminal', 'show', '--terminal', handle]);

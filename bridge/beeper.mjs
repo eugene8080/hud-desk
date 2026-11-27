@@ -136,6 +136,8 @@ const media = { VOICE: 'Voice', AUDIO: 'Audio', IMAGE: 'Photo', VIDEO: 'Video', 
 const visible = item => item && !item.isHidden && !item.isDeleted && item.type !== 'REACTION';
 const isAudio = attachment => attachment?.type === 'audio' || attachment?.isVoiceNote === true ||
   /^audio\//i.test(text(attachment?.mimeType));
+// A photo or sticker attachment the glasses can show (Beeper attachment type 'img' or an image MIME).
+const isImage = attachment => attachment?.type === 'img' || /^image\//i.test(text(attachment?.mimeType));
 const english = lang => /^(en(?:[-_].+)?|english)$/i.test(lang ?? '');
 
 function chatMessage(item, transcript) {
@@ -148,15 +150,18 @@ function chatMessage(item, transcript) {
   const caption = text(text(item.text).replace(/<br\s*\/?>/gi, '\n'));
   if (!tag && !caption) return null;
   const url = assetURL(attachment?.srcURL) || assetURL(attachment?.id);
+  const picture = audio ? undefined : attachments.find(isImage);
+  const imageUrl = assetURL(picture?.srcURL) || assetURL(picture?.id);
   const stored = text(attachment?.transcription?.transcription);
   const spoken = stored ? { text: stored, language: text(attachment.transcription.language) }
     : transcript?.url === url ? transcript : undefined;
   const id = validId(item.id) ? item.id : undefined;
   return {
-    url,
+    url, imageUrl,
     message: {
       id, from: text(item.senderName), own: item.isSender === true, date: date(item.timestamp), text: caption,
       ...(tag && { media: tag }),
+      ...(imageUrl && id && { image: true }),
       ...(audio && { voice: {
         id, ...(Number.isFinite(attachment?.duration) && attachment.duration >= 0 && { duration: attachment.duration }),
         ...(spoken && { transcript: spoken.text, language: spoken.language }),
@@ -192,7 +197,7 @@ function snapshot(load, refreshMs) {
   };
 }
 
-export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech = createChatSpeech(config.speech), ollamaTransport } = {}) {
+export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech = createChatSpeech(config.speech), ollamaTransport, imaging } = {}) {
   const request = createBeeperClient(config.tokenFile, clientOptions);
   const transcripts = new Map(), transcribing = new Map(), translations = new Map(), translating = new Map();
   const messageKey = (chatId, id) => JSON.stringify([chatId, id]);
@@ -292,6 +297,15 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech 
       })();
       transcribing.set(key, pending);
       return pending;
+    },
+    // A photo or sticker for the glasses (2026-11-27): the asset from Beeper, dithered by imaging.
+    'POST /api/chat/image': async (_params, input) => {
+      if (!input || Object.keys(input).length !== 2 || !validId(input.chatId) || !validId(input.messageId)) throw badRequest();
+      if (!imaging) throw new BeeperError('images-unavailable', 503);
+      const { chatId, messageId } = input;
+      const row = (await messages(chatId)).find(row => row.message.id === messageId);
+      if (!row?.imageUrl) throw new BeeperError('image-unavailable', 404);
+      return imaging.render(`chat:${messageKey(chatId, messageId)}`, () => request('GET', assetPath, { query: { url: row.imageUrl } }));
     },
     'POST /api/chat/translate': async (_params, input) => {
       if (!input || Object.keys(input).length !== 2 || !validId(input.chatId) || !Array.isArray(input.messageIds) ||

@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.80**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.81**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.80,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.81,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.80)
+## Feature list (beta 1.0.81)
 
 ### All modules
 
@@ -32,11 +32,16 @@ Rule for every agent: each beta release updates this file in the release commit:
   Brightness 15 down to 1. Both lists wrap at the ends.
 - With a pixel font, the user's turns sit on a dim background so they stand out. The reader's
   long-press menu has a Background menu: Compare backgrounds, Halo On/Off, None, Ink 5/8, 1/2 and
-  1/4, Lines 1/3 (default) and 1/4, Dots 1/3, 1/4 and 1/8, Tube 1/2, 1/4 and 1/8, Tube, 1px frame,
+  1/4, Lines 1/3 (default) and 1/4, Dots 1/3, 1/4 and 1/8, Tube 1/2 and 1/4, Tube, 1px frame,
   and three terminal-style marks that light nothing behind the letters: Left bar (a quote bar in
   place of the '/'), Underline, and Dim replies (the other side's text dimmer; Email shows None).
   Halo keeps the background dark next to every letter. Compare fonts and Compare backgrounds choose
-  directly: swipe moves the '>' mark, click uses it, double-click goes back unchanged.
+  directly: swipe moves the '>' mark, click uses it, double-click goes back unchanged. Compare
+  fonts starts with Native text, drawn by the glasses in their own font.
+- Images: [Photo N] in Chat, [Image N] under a mail's text and [Image N] where a picture was pasted
+  into a Claude or Codex session. A click on the page opens its first picture full screen (fitted
+  to 576x288, dithered to the 16 panel levels on the PC with ffmpeg); swipe for the next or previous
+  picture, click for negative (a mostly white picture opens in negative), double-click to go back.
   Tube draws CRT scanlines on every third pixel row across the whole screen; Tube 1/2, 1/4 and
   1/8 scan your turns over a half-, quarter- and eighth-lit band.
   The 1px frame puts consecutive messages of yours in one frame.
@@ -97,9 +102,10 @@ Rule for every agent: each beta release updates this file in the release commit:
 
 ### Bluetooth keyboard (paired with the phone, while Orca Glass is open in the Even app)
 
-- Gmail's PC shortcuts in every module: j/k or Up/Down move (in a reader: next or previous row of
-  its list), o or Enter opens, u or Esc goes back (never closes the app), Space and Shift+Space turn
-  pages, Tab switches module, ? shows the keys on the glasses.
+- Gmail's PC shortcuts in every module: j/k or Up/Down move (in a reader j/k open the next or
+  previous row of its list and Up/Down turn pages), o or Enter opens, u or Esc goes back (never closes
+  the app), Space and Shift+Space (or Left/Right, PageUp/PageDown) turn pages, Tab switches module,
+  ? shows the keys on the glasses, one row per action with its keys on the right.
 - Email: c compose, r reply, a reply all, f forward, e archive, # delete, Shift+U unread, Shift+I
   read, s star, z undo. Coding and Chat: r types a reply.
 - Drafts open on the glasses and are typed in the phone page's boxes (Tab moves between To, Cc,
@@ -143,5 +149,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.80: Choose on the comparison pages. Compare fonts and Compare backgrounds open with a > on the current choice; swipe to move it, click to use the marked font or background, double-click to go back without a change.
+1.0.81: Images on the glasses: click a page with [Photo N] in Chat, [Image N] in a mail or a screenshot pasted into a Claude or Codex session; swipe between pictures, click for negative. Compare fonts now includes Native text. Thicker Left bar; Tube 1/8 removed. Up/Down arrows fixed and turn reader pages; the ? keys page lists actions with their keys on the right.
 <!-- whatsnew:end -->

@@ -56,6 +56,23 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.81. Images (Eugene chose Chat photos, Email images, Coding screenshots):
+bridge/image.mjs decodes with ffmpeg (stdin only, image demuxers, one frame, 25 MB, 20 s), fits
+576x288, Floyd-Steinberg to 16 levels, packs 2 px/byte; routes POST /api/chat/image (Beeper asset
+of an img attachment), GET /api/mail/image (Gmail part >= 2 KB, inline or attachments.get, newly
+allowlisted GET), GET /api/history/image (Claude image blocks / Codex input_image, re-read from the
+record's byte offset; [Image N] rows in the history); capabilities.images. App: click on a page
+opens its first picture (Chat: before voice transcription), swipe moves, click negative (mean >
+0.6 opens negative), double-click back. Also: Native text row in Compare fonts (FINE_CAPTURE text
+at zOrder 5 above the tiles; G2 check pending), Tube 1/8 removed (saved -> Tube 1/4), Left bar
+cell-2 px, arrow keys by key/old name/code/keyCode with keyup fallback and a diag log line (Eugene:
+Up/Down dead on the home list while j/k worked; cause unverified, Even's Flutter host suspected),
+Up/Down/Left/Right/PageUp/PageDown page the reader, keys page nine rows action | keys.
+262 tests, build pass; real ffmpeg pipeline checked on a generated picture (71 ms).
+Bridge restarted with Eugene's approval (old supervisor 65368/server 64840/whisper 64288; new
+supervisor 63052, server 62336, whisper 65408 --vad); local and tailnet healthz ok; capabilities
+images true; image routes refuse bad input with 400 (no content opened).
+
 2026-11-27 beta 1.0.80 (Eugene: choose directly in the font and background preview pages).
 Comparison screens keep compareSelected; swipe moves the '>' (wraps), click uses it (fonts via
 setReaderText, backgrounds via chooseBackground) and returns to the reader, double-click returns

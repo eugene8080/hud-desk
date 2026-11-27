@@ -12,7 +12,8 @@ const line = (value: string) => htmlBreaks(value).replace(/\s+/g, ' ').trim();
 const chatTitle = (chat: ChatItem) => line(chat.title) || t('chatUntitled');
 const withEnglish = (original: string, english?: string | null) => english ? `${original} (${line(english)})` : original;
 type VoiceStatus = 'chatTranscribing' | 'chatNotTranscribed';
-type ChatContent = ReaderContent & { voiceLines: { id: string; line: number }[] };
+// images: message ids of the [Photo N] / [Sticker N] rows, N from 1 (2026-11-27).
+type ChatContent = ReaderContent & { voiceLines: { id: string; line: number }[]; images: string[] };
 
 function durationTag(duration?: number) {
   if (duration === undefined || !Number.isFinite(duration) || duration < 0) return '';
@@ -29,6 +30,7 @@ export function chatReaderText(conversation: ChatConversation, statuses = new Ma
   translations = new Map<string, ChatTranslation>()): ChatContent {
   let lineIndex = 0;
   const voiceLines: ChatContent['voiceLines'] = [];
+  const images: string[] = [];
   const messages = [...conversation.messages].sort((a, b) => a.date - b.date).map(message => {
     const who = message.own ? '/' : `> ${line(message.from) || t('chatSender')}:`;
     const voice = message.voice;
@@ -36,7 +38,9 @@ export function chatReaderText(conversation: ChatConversation, statuses = new Ma
     if (id && !voice.transcript) voiceLines.push({ id, line: lineIndex });
     const status = id && statuses.get(id);
     const duration = durationTag(voice?.duration);
-    const tag = message.media ? `[${message.media}${duration}${status && !voice?.transcript ? ` · ${t(status)}` : ''}]` : '';
+    const picture = message.image && message.id ? ` ${images.push(message.id)}` : '';
+    const media = message.media ?? (picture ? 'Photo' : '');
+    const tag = media ? `[${media}${picture}${duration}${status && !voice?.transcript ? ` · ${t(status)}` : ''}]` : '';
     const translated = translations.get(message.id ?? id ?? '');
     const caption = withEnglish(htmlBreaks(message.text), translated?.text);
     const transcript = voice?.transcript ? withEnglish(voice.transcript, translated?.voice) : '';
@@ -47,7 +51,7 @@ export function chatReaderText(conversation: ChatConversation, statuses = new Ma
   // No blank row between messages (Eugene, 2026-11-27): the '/ ' and '> Sender:' prefixes
   // already mark where each one starts.
   const earlier = messages.slice(0, -1).join('\n');
-  return { text: messages.join('\n') || t('chatEmpty'), openingOffset: earlier ? earlier.length + 1 : 0, voiceLines };
+  return { text: messages.join('\n') || t('chatEmpty'), openingOffset: earlier ? earlier.length + 1 : 0, voiceLines, images };
 }
 
 export class ChatReader implements ReaderSource<ChatContent> {
@@ -65,6 +69,13 @@ export class ChatReader implements ReaderSource<ChatContent> {
   content() {
     return chatReaderText(this.conversation, this.statuses, this.translateEnabled() ? this.translations : undefined);
   }
+
+  // Photo or sticker N of the chat, from Beeper through the bridge.
+  readonly image = async (n: number) => {
+    const id = this.content().images[n - 1];
+    if (!id) throw new Error('not found');
+    return api.chat.image(this.chat.id, id);
+  };
 
   async load() {
     const incoming = await api.chat.messages(this.chat.id);

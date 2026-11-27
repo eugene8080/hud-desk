@@ -16,7 +16,7 @@ import {
   type EvenAppBridge,
   type EvenHubEvent,
 } from '@evenrealities/even_hub_sdk';
-import { api, currentBase, setApiLang, setConnection, setDemo, type ChatFeatures, type ChatItem, type ChoiceMenu, type MailAction, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
+import { api, currentBase, setApiLang, setConnection, setDemo, type ChatFeatures, type ChatItem, type GlassImage, type ChoiceMenu, type MailAction, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
 import { parseCode, resolveBase } from './pairing';
 import { applyPage, detectLang, getLang, setLang, t as tr } from './i18n';
 import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth, type ReaderPage } from './text';
@@ -25,9 +25,9 @@ import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
+import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
-import { Mail, mailColumns, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
+import { Mail, mailColumns, imageNumbers, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, ChatReader, chatColumns, CHAT_NETWORKS_KEY, CHAT_TRANSLATE_KEY } from './chat';
 import { composeText, CURSOR, CURSOR_MARK, emptyFields, hasRecipient, MAIL_FIELDS, newSendId, sendError, type ComposeField, type ComposeFields, type MailMode } from './compose';
 
@@ -65,7 +65,7 @@ const POLL_MS = 1000;
 
 type Screen =
   | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; firstItem?: number; mailItems?: MailThread[]; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
-  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; compareSelected?: number; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
+  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; compareSelected?: number; imageView?: ImageView; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
 let current: Screen | null = null;
@@ -101,6 +101,9 @@ let releaseCapture: (() => void) | null = null;
 let viewProvider = 'all';
 // Reader text: the firmware's native font, or small text drawn as image tiles.
 type ReaderText = 'native' | FineFont;
+// The full-screen picture viewer (2026-11-27): image n of count from the reader's source.
+type ImageView = { n: number; count: number; numbers: number[]; load: (n: number) => Promise<GlassImage>;
+  image?: GlassImage; invert: boolean; note: string };
 type Comparison = 'fonts' | 'backgrounds';
 const DEFAULT_SMALL_FONT: FineFont = 'terminus';
 const REMOVED_FONTS = ['fixed9', 'gohu14', 'shinonome'];
@@ -399,7 +402,7 @@ async function show(s: Screen, reloadText = false) {
   const previous = current;
   current = s;
   const content = s.kind === 'text' ? (s.voice ? voiceBodyText(s) : bodyText(s)) : '';
-  const fine = s.kind === 'text' && !!s.fine && (!!s.reader || !!s.comparison);
+  const fine = s.kind === 'text' && !!s.fine && (!!s.reader || !!s.comparison || !!s.imageView);
   const uploadText = !fine && (reloadText || (s.kind === 'text' && !!s.reader && s.text.length > 900) || new TextEncoder().encode(content).length > 999);
   const head = new TextContainerProperty({ ...HEAD, ...(s.kind === 'text' && s.usageMode ? { height: 28 } : {}), ...(s.kind === 'text' && s.reader ? { xPosition: 16, yPosition: 2, width: 544, height: 28, zOrderIndex: 1 } : {}), content: clipBytes(screenTitle(s), TEXT_BYTES), isEventCapture: 0 });
   // Firmware retains Display off, Brightness and Close alongside these actions.
@@ -444,7 +447,9 @@ async function show(s: Screen, reloadText = false) {
           ...(s.reader ? { imageObject: [new ImageContainerProperty({ ...STATUS_ICON, xPosition: statusIconX(s.model), zOrderIndex: 4 })] } : {}),
         };
   if (fine) page = { containerTotalNum: 5, ...menu,
-    textObject: [new TextContainerProperty({ ...FINE_CAPTURE, content: ' ', isEventCapture: 1, paddingLength: 0, zOrderIndex: 0 })],
+    // Compare fonts: the Native text row is this container's text, above the tiles (zOrder 5).
+    textObject: [new TextContainerProperty({ ...FINE_CAPTURE, content: s.kind === 'text' && s.comparison === 'fonts' ? nativeCompareRow(s) : ' ',
+      textColor: textBrightness(), isEventCapture: 1, paddingLength: 0, zOrderIndex: s.kind === 'text' && s.comparison === 'fonts' ? 5 : 0 })],
     imageObject: FINE_TILE_IDS.map((tile, i) => new ImageContainerProperty({ ...tile, zOrderIndex: i + 1 })),
   } as unknown as typeof page;
   if (s.kind === 'text' && s.voice) page = voicePage(s, content) as typeof page;
@@ -497,7 +502,8 @@ async function show(s: Screen, reloadText = false) {
 // when the screen changed meanwhile; throws if the glasses reject a tile.
 async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boolean> {
   const t0 = Date.now();
-  const tiles = s.comparison === 'fonts' ? renderFontComparison(inkLevel, s.compareSelected)
+  const tiles = s.imageView ? imageViewTiles(s.imageView)
+    : s.comparison === 'fonts' ? renderFontComparison(inkLevel, (s.compareSelected ?? 0) - 1, true)
     : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel, turnHalo, s.compareSelected)
     : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel, backgroundFor(snapshot), turnHalo);
   let sent = 0;
@@ -661,7 +667,8 @@ function showBrightness() {
 function openComparison(reader: TextScreen, comparison: Comparison) {
   const back = () => { void show(reader).catch(e => diag((e as Error).message)); };
   const fonts = comparison === 'fonts';
-  const compareSelected = fonts ? Math.max(0, FINE_FONTS.indexOf(readerText === 'native' ? smallFont : readerText))
+  // Compare fonts: row 0 is Native text, then the pixel fonts.
+  const compareSelected = fonts ? (readerText === 'native' ? 0 : FINE_FONTS.indexOf(readerText) + 1)
     : Math.max(0, TURN_BACKGROUNDS.indexOf(turnBackground));
   const screen: TextScreen = { kind: 'text', title: ' ', text: '', fine: reader.fine ?? smallFont, comparison, compareSelected, onBack: back };
   let choosing = false;
@@ -669,17 +676,104 @@ function openComparison(reader: TextScreen, comparison: Comparison) {
     if (choosing || current !== screen) return;
     choosing = true;
     const i = screen.compareSelected ?? 0;
-    const pick = fonts ? setReaderText(FINE_FONTS[i], reader) : chooseBackground(TURN_BACKGROUNDS[i], reader);
+    const pick = fonts ? setReaderText(i === 0 ? 'native' : FINE_FONTS[i - 1], reader) : chooseBackground(TURN_BACKGROUNDS[i], reader);
     void pick.catch(e => diag((e as Error).message)).finally(() => { choosing = false; });
   };
   return show(screen);
 }
 
 function moveComparison(s: TextScreen, step: number) {
-  const count = s.comparison === 'fonts' ? FINE_FONTS.length : TURN_BACKGROUNDS.length;
-  s.compareSelected = ((s.compareSelected ?? 0) + step + count) % count;
-  // Only the tiles whose rows changed are sent again.
+  const count = s.comparison === 'fonts' ? FINE_FONTS.length + 1 : TURN_BACKGROUNDS.length;
+  const before = s.compareSelected ?? 0;
+  s.compareSelected = (before + step + count) % count;
+  // Only the tiles whose rows changed are sent again; the Native row's '>' is in its text container.
+  readerWrites = readerWrites.then(async () => {
+    if (current !== s) return;
+    if (s.comparison === 'fonts' && (before === 0) !== (s.compareSelected === 0)) {
+      await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: FINE_CAPTURE.containerID, containerName: FINE_CAPTURE.containerName, content: nativeCompareRow(s) }));
+    }
+    await paintFine(s, 0);
+  }).catch(e => diag((e as Error).message));
+}
+
+// The Native text row of Compare fonts, in the glasses' own font: its label and the sample.
+function nativeCompareRow(s: TextScreen) {
+  return `${s.compareSelected === 0 ? '>' : ' '}${tr('nativeText')}  ${fontSample()}`;
+}
+
+// ---- Images (2026-11-27): [Image N], [Photo N], [Sticker N] rows open full screen ----
+// A click on a reader page opens the first picture on that page; a swipe goes to the next or
+// previous picture of the conversation, a click shows it in negative, a double-click returns.
+function imageViewTiles(view: ImageView): number[][] {
+  if (!view.image) return renderFineScreen({ text: view.note || tr('imageLoading', view.n, view.count), userTurns: [], firstLine: 0, lastLine: 0 },
+    smallFont, { left: '', right: '' }, inkLevel, 'none');
+  const bytes = Uint8Array.from(atob(view.image.data), ch => ch.charCodeAt(0));
+  const top = inkByte(inkLevel);
+  return FINE_TILES.map(tile => {
+    const out = new Array<number>(tile.width * tile.height);
+    for (let y = 0; y < tile.height; y++) for (let x = 0; x < tile.width; x++) {
+      const i = (tile.yPosition + y) * 576 + tile.xPosition + x;
+      const packed = bytes[i >> 1] ?? 0;
+      let level = i & 1 ? packed & 15 : packed >> 4;
+      if (view.invert) level = 15 - level;
+      out[y * tile.width + x] = Math.round(level * top / 15);
+    }
+    return out;
+  });
+}
+
+function pageImage(s: TextScreen): number | undefined {
+  if (!s.reader?.image) return undefined;
+  const page = readerLayout(s)[s.offset ?? 0];
+  return page ? imageNumbers(page.text)[0] : undefined;
+}
+
+function openPageImage(s: Screen | null): boolean {
+  if (s?.kind !== 'text' || !s.reader?.image || s.voice) return false;
+  const n = pageImage(s);
+  if (n === undefined) return false;
+  const numbers = imageNumbers(s.text);
+  const load = s.reader.image;
+  const reader = s;
+  reader.reading = true;
+  const view: ImageView = { n, count: numbers.length, numbers, load, invert: false, note: '' };
+  const screen: TextScreen = { kind: 'text', title: ' ', text: '', fine: reader.fine ?? smallFont, imageView: view,
+    onBack: () => { Object.assign(reader, { reading: false }); void show(reader).catch(e => diag((e as Error).message)); },
+    onClick: () => { if (view.image) { view.invert = !view.invert; void repaintImage(screen); } } };
+  void show(screen).then(() => loadImage(screen)).catch(e => diag((e as Error).message));
+  return true;
+}
+
+function repaintImage(s: TextScreen) {
   readerWrites = readerWrites.then(async () => { if (current === s) await paintFine(s, 0); }).catch(e => diag((e as Error).message));
+  return readerWrites;
+}
+
+async function loadImage(s: TextScreen) {
+  const view = s.imageView!;
+  const n = view.n;
+  try {
+    const image = await view.load(n);
+    if (current !== s || view.n !== n) return;
+    view.image = image;
+    // A mostly white picture (a light-mode screenshot) lights the whole lens: negative by default.
+    view.invert = image.mean > 0.6;
+  } catch (e) {
+    if (current !== s || view.n !== n) return;
+    const code = (e as Error).message;
+    view.note = code === 'images-unavailable' ? tr('imageNeedsFfmpeg') : tr('imageFailed', view.numbers.indexOf(n) + 1, view.count, code);
+  }
+  await repaintImage(s);
+}
+
+function moveImage(s: TextScreen, step: number) {
+  const view = s.imageView!;
+  if (view.count < 2) return;
+  const at = view.numbers.indexOf(view.n);
+  view.n = view.numbers[(at + step + view.count) % view.count];
+  view.image = undefined;
+  view.note = tr('imageLoading', view.numbers.indexOf(view.n) + 1, view.count);
+  void repaintImage(s).then(() => { view.note = ''; return loadImage(s); });
 }
 
 async function chooseBackground(option: TurnBackground, reader: TextScreen) {
@@ -1421,9 +1515,13 @@ function thread(t: Thread, note = '') {
   };
   // An Orca chat is read-only (Orca has no send-to-chat command): no hold-to-reply.
   const source = { title: `${t.title}${note ? `  ${note}` : ''}`, load, coding: t,
-    hold: t.readOnly ? undefined : () => { void record({ thread: t }, true); } };
+    hold: t.readOnly ? undefined : () => { void record({ thread: t }, true); },
+    image: (n: number) => api.historyImage(t.handle, n) };
   return guard(t.title, async () => {
-    await openReader(source, home, () => { if (current?.kind === 'text' && current.choiceMenu) void replies(t); });
+    await openReader(source, home, () => {
+      if (current?.kind === 'text' && current.choiceMenu) void replies(t);
+      else openPageImage(current);
+    });
   }, home);
 }
 
@@ -1453,7 +1551,7 @@ async function openMail(thread: MailThread) {
   const back = () => mailHome();
   const unread = thread.unread;
   try {
-    await openReader(mail.reader(thread), back);
+    await openReader(mail.reader(thread), back, () => { openPageImage(current); });
     if (unread && !thread.unread) void phone?.refreshLabels();
   }
   catch {
@@ -1480,6 +1578,8 @@ async function openChat(item: ChatItem) {
     const screen = await openReader(source, back, () => {
       if (current?.kind !== 'text' || current.reader !== source || current.pageWriting) return;
       const screen = current;
+      // A photo on this page opens first; otherwise the click transcribes the page's voice notes.
+      if (openPageImage(screen)) return;
       const page = readerLayout(screen)[screen.offset ?? 0];
       const ids = (screen.voiceLines ?? []).filter(({ line }) => line >= page.firstLine && line <= page.lastLine).map(({ id }) => id);
       if (!chatFeatures.transcribe) return;
@@ -1816,6 +1916,17 @@ function openNeighbor(delta: number) {
   cached.content.onPick(i);
 }
 
+// The keys page rows (Eugene, 2026-11-27): the action on the left, its keys right-aligned, padded
+// with spaces measured in the glasses' native font.
+const KEYS_WIDTH = 540;
+function keysPage() {
+  return tr('keysHelp').split('\n').map(row => {
+    const [action, keys = ''] = row.split('\t');
+    const gap = Math.max(1, Math.floor((KEYS_WIDTH - glassWidth(action) - glassWidth(keys)) / glassWidth(' ')));
+    return `${action}${' '.repeat(gap)}${keys}`;
+  }).join('\n');
+}
+
 // ?: the keys on the glasses; any key or gesture back returns.
 function showKeys() {
   const back = current;
@@ -1826,18 +1937,35 @@ function showKeys() {
     if (back.kind === 'text') Object.assign(back, { reading: false });
     void show(back).catch(e => diag((e as Error).message));
   };
-  void show({ kind: 'text', title: tr('keysTitle'), text: tr('keysHelp'), onBack: leave, onClick: leave });
+  void show({ kind: 'text', title: tr('keysTitle'), text: keysPage(), onBack: leave, onClick: leave });
 }
 
 // The Gmail key map outside text boxes. Returns true when the key was used.
-function gmailKey(ev: KeyboardEvent, s: Screen, glassEvent: (type: OsEventTypeList) => void): boolean {
+// Arrow and paging keys by every name a WebView may report (Eugene on G2, 2026-11-27: Up/Down did
+// nothing on the home list while j/k worked): the standard key, the old 'Up'/'Down' names, the
+// physical code, or only the legacy keyCode.
+const KEY_CODES: Record<number, string> = { 33: 'PageUp', 34: 'PageDown', 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown' };
+const OLD_NAMES: Record<string, string> = { Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight' };
+function keyName(ev: KeyboardEvent): string {
   const key = ev.key;
+  if (key && key !== 'Unidentified') return OLD_NAMES[key] ?? key;
+  if (/^(?:Arrow(?:Up|Down|Left|Right)|Page(?:Up|Down))$/.test(ev.code ?? '')) return ev.code;
+  return KEY_CODES[ev.keyCode] ?? key ?? '';
+}
+const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown']);
+
+function gmailKey(ev: KeyboardEvent, s: Screen, glassEvent: (type: OsEventTypeList) => void): boolean {
+  const key = keyName(ev);
   const list = s.kind === 'list' ? s : null;
   const moduleList = list?.module ? list : null;
   const reader = s.kind === 'text' && s.reader && !s.voice && !s.comparison ? s : null;
   switch (key) {
+    // Up/Down move one row on a list and one page in a reader (like Shift+Space / Space);
+    // Left/Right and PageUp/PageDown turn reader pages too.
     case 'ArrowUp': glassEvent(OsEventTypeList.SCROLL_TOP_EVENT); return true;
     case 'ArrowDown': glassEvent(OsEventTypeList.SCROLL_BOTTOM_EVENT); return true;
+    case 'ArrowLeft': case 'PageUp': if (reader) flipReader(reader, -1); else glassEvent(OsEventTypeList.SCROLL_TOP_EVENT); return true;
+    case 'ArrowRight': case 'PageDown': if (reader) flipReader(reader, 1); else glassEvent(OsEventTypeList.SCROLL_BOTTOM_EVENT); return true;
     case 'j': case 'k':
       if (reader) openNeighbor(key === 'j' ? 1 : -1);
       else glassEvent(key === 'j' ? OsEventTypeList.SCROLL_BOTTOM_EVENT : OsEventTypeList.SCROLL_TOP_EVENT);
@@ -2390,7 +2518,8 @@ function onEvent(e: EvenHubEvent) {
     return;
   }
   if (s.kind === 'text' && (type === OsEventTypeList.SCROLL_TOP_EVENT || type === OsEventTypeList.SCROLL_BOTTOM_EVENT)) {
-    if (s.comparison) moveComparison(s, type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
+    if (s.imageView) moveImage(s, type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
+    else if (s.comparison) moveComparison(s, type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
     else if (s.reader) flipReader(s, type === OsEventTypeList.SCROLL_TOP_EVENT ? -1 : 1);
     else s.reading = true;
     return;
@@ -2651,9 +2780,28 @@ async function main() {
     }
   }
   document.addEventListener?.('selectionchange', () => { if (composing && !composing.review) void renderCompose(); });
+  // An arrow whose keydown never reached the page (the host app may take it for its own focus)
+  // acts on its keyup instead; one that had a keydown does not act twice.
+  const arrowsDown = new Set<string>();
+  window.addEventListener('keyup', (ev: KeyboardEvent) => {
+    const key = keyName(ev);
+    if (!ARROWS.has(key)) return;
+    if (arrowsDown.delete(key)) return;
+    diag(`Key up only: ${key} (${ev.code || '-'}/${ev.keyCode ?? '-'})`);
+    const target = ev.target as HTMLElement | null;
+    if (composing || (target && (['TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable === true ||
+      (target.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes((target as HTMLInputElement).type))))) return;
+    const s = current;
+    if (s && !(ev.ctrlKey || ev.metaKey || ev.altKey) && gmailKey(ev, s, glassEvent)) ev.preventDefault();
+  });
   window.addEventListener('keydown', (ev: KeyboardEvent) => {
     const target = ev.target as HTMLElement | null;
-    const editing = !!target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable === true);
+    const arrow = keyName(ev);
+    if (ARROWS.has(arrow)) { arrowsDown.add(arrow); diag(`Key: ${arrow} (${ev.key || '-'}/${ev.code || '-'}/${ev.keyCode ?? '-'})`); }
+    // Text boxes keep their keys; a checkbox, radio or button with the focus does not (a tapped
+    // filter checkbox on the phone page must not swallow the arrows).
+    const editing = !!target && (['TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable === true ||
+      (target.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes((target as HTMLInputElement).type)));
     const c = composing;
     if (c) {
       const inDraft = editing && composeFieldsOf(c.draft).some(field => fieldId(c.draft, field) === target!.id);

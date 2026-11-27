@@ -6,7 +6,8 @@ export const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_URL = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const RATE_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded']);
 const ID = '[a-zA-Z0-9_-]+';
-const GET_PATH = new RegExp(`^/(?:profile|labels(?:/${ID})?|threads(?:/${ID})?|messages/${ID})$`);
+// messages/{id}/attachments/{id}: image parts for the glasses (2026-11-27), read only.
+const GET_PATH = new RegExp(`^/(?:profile|labels(?:/${ID})?|threads(?:/${ID})?|messages/${ID}(?:/attachments/${ID})?)$`);
 const MODIFY_PATH = new RegExp(`^/threads/${ID}/modify$`);
 
 export class MailError extends Error {

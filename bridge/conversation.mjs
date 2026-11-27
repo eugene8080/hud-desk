@@ -202,13 +202,27 @@ async function readCursorStore(binding) {
   } finally { db.close(); }
 }
 
+const codexImage = c => c?.type === 'input_image' && typeof c.image_url === 'string' && /^data:image\/[\w.+-]+;base64,/.test(c.image_url);
+const claudeImage = b => b?.type === 'image' && b.source?.type === 'base64' && typeof b.source.data === 'string';
+// The image bytes of block `block` of a transcript record.
+function recordImage(record, claude, block) {
+  if (claude) {
+    const item = (Array.isArray(record.message?.content) ? record.message.content : []).filter(claudeImage)[block];
+    return item ? Buffer.from(item.source.data, 'base64') : null;
+  }
+  const item = (record.payload?.content || []).filter(codexImage)[block];
+  return item ? Buffer.from(item.image_url.slice(item.image_url.indexOf(',') + 1), 'base64') : null;
+}
+
 export function visibleMessage(record) {
   const p = record.payload;
   if (record.type !== 'response_item' || p?.type !== 'message' || !['user', 'assistant'].includes(p.role)) return null;
   if (p.role === 'assistant' && p.phase && !['final_answer', 'commentary'].includes(p.phase)) return null;
   const text = (p.content || []).filter(c => ['input_text', 'output_text', 'text'].includes(c.type) && typeof c.text === 'string').map(c => c.text).join('\n').trim();
-  if (!text || (p.role === 'user' && /^(?:# AGENTS\.md instructions|<environment_context>|<permissions instructions>|<turn_aborted>)/.test(text))) return null;
-  return { role: p.role, text, id: p.id || null };
+  // Images pasted into the session (2026-11-27): shown as [Image N] rows the glasses can open.
+  const images = (p.content || []).filter(codexImage).length;
+  if ((!text && !images) || (text && p.role === 'user' && /^(?:# AGENTS\.md instructions|<environment_context>|<permissions instructions>|<turn_aborted>)/.test(text))) return null;
+  return { role: p.role, text, id: p.id || null, images };
 }
 
 // Claude JSONL contains tools and reasoning alongside visible chat. Only text
@@ -220,8 +234,10 @@ export function visibleClaudeMessage(record) {
   const content = message.content;
   const text = (typeof content === 'string' ? content : Array.isArray(content)
     ? content.filter(b => b.type === 'text' && typeof b.text === 'string').map(b => b.text).join('\n') : '').trim();
-  if (!text || (record.type === 'user' && /^(?:<local-command|<command-name>|<system-reminder>|<task-notification>|This session is being continued from a previous conversation)/.test(text))) return null;
-  return { role: record.type, text, id: record.uuid || null };
+  // Top-level image blocks only (pasted by the user); images inside tool results stay hidden.
+  const images = Array.isArray(content) ? content.filter(claudeImage).length : 0;
+  if ((!text && !images) || (text && record.type === 'user' && /^(?:<local-command|<command-name>|<system-reminder>|<task-notification>|This session is being continued from a previous conversation)/.test(text))) return null;
+  return { role: record.type, text, id: record.uuid || null, images };
 }
 
 export function readTranscript(file, binding) {
@@ -238,7 +254,7 @@ async function parseTranscript(file, binding) {
   const key = `${file}:${binding.id}:${binding.provider || 'codex'}`;
   let state = cache.get(key);
   if (!state || info.size < state.offset || (info.size === state.size && info.mtimeMs !== state.mtime)) {
-    state = { offset: 0, size: 0, mtime: 0, messages: [], chars: 0, limited: false, meta: null, ids: new Set(), model: '' };
+    state = { offset: 0, size: 0, mtime: 0, messages: [], chars: 0, limited: false, meta: null, ids: new Set(), model: '', images: [] };
     cache.set(key, state);
     if (cache.size > 32) cache.delete(cache.keys().next().value);
   }
@@ -259,7 +275,12 @@ async function parseTranscript(file, binding) {
     } finally { await fd.close(); }
     // Leave an incomplete final record for the next read; do not lose live text.
     const end = data.lastIndexOf(10) + 1;
-    for (const line of data.subarray(0, end).toString('utf8').split('\n')) {
+    // Walk lines by byte offset: an [Image N] row keeps where its record starts in the file.
+    for (let start = 0; start < end;) {
+      const stop = data.indexOf(10, start);
+      const lineStart = state.offset + start, lineLength = stop - start;
+      const line = data.subarray(start, stop).toString('utf8');
+      start = stop + 1;
       if (!line.trim()) continue;
       let record;
       try { record = JSON.parse(line); } catch { continue; }
@@ -276,6 +297,10 @@ async function parseTranscript(file, binding) {
       const message = CLAUDE_LIKE.has(binding.provider) ? visibleClaudeMessage(record) : visibleMessage(record);
       if (!message || (message.id && state.ids.has(message.id))) continue;
       if (message.id) state.ids.add(message.id);
+      for (let block = 0; block < (message.images || 0); block++) {
+        state.images.push({ offset: lineStart, length: lineLength, block });
+        message.text = `${message.text}${message.text ? '\n' : ''}[Image ${state.images.length}]`;
+      }
       state.messages.push(message);
       state.chars += message.text.length;
       while (state.chars > MAX_TEXT && state.messages.length > 1) {
@@ -290,6 +315,46 @@ async function parseTranscript(file, binding) {
   if ((state.meta?.id || state.meta?.session_id) !== binding.id || normalize(state.meta?.cwd) !== normalize(binding.cwd)) throw new Error('Transcript identity does not match the selected terminal');
   return { text: formatMessages(state.messages), model: state.model || undefined,
     source: CLAUDE_LIKE.has(binding.provider) ? 'claude-transcript' : 'codex-transcript', limited: state.limited, messageCount: state.messages.length };
+}
+
+// Image N (from 1) of the session's Claude or Codex transcript: the record is read again from its
+// byte offset, so no image is kept in memory. Same identity checks as the history.
+export async function readTranscriptImage(terminal, index) {
+  const found = await transcriptFile(terminal);
+  if (!found || ['cursor', 'opencode', 'pi'].includes(found.binding.provider)) throw new Error('No saved transcript with images for this terminal');
+  const { file, binding } = found;
+  await readTranscript(file, binding);
+  const ref = cache.get(`${file}:${binding.id}:${binding.provider || 'codex'}`)?.images?.[index - 1];
+  if (!ref) throw new Error('Image not found');
+  const fd = await open(file, 'r');
+  try {
+    const data = Buffer.alloc(ref.length);
+    const { bytesRead } = await fd.read(data, 0, ref.length, ref.offset);
+    const bytes = recordImage(JSON.parse(data.subarray(0, bytesRead).toString('utf8')), CLAUDE_LIKE.has(binding.provider), ref.block);
+    if (!bytes?.length) throw new Error('Image not found');
+    return bytes;
+  } finally { await fd.close(); }
+}
+
+async function transcriptFile(terminal) {
+  const db = new DatabaseSync(join(profile, 'profile-state.db'), { readOnly: true });
+  let binding;
+  try {
+    const row = db.prepare("SELECT payload FROM profile_state_documents WHERE domain = 'workspaceSession'").get();
+    const session = row && JSON.parse(row.payload);
+    binding = session && (ID_ONLY[terminal.agentIdentity] ? cursorBinding(session, terminal) : transcriptBinding(session, terminal));
+  } finally { db.close(); }
+  if (!binding || ['cursor', 'opencode', 'pi'].includes(binding.provider)) return binding ? { binding } : null;
+  const file = await realpath(binding.path);
+  const roots = transcriptRoots(binding.provider);
+  const allowed = await Promise.all(roots.map(async root => {
+    const actual = await realpath(root).catch(() => null);
+    if (!actual) return false;
+    const rel = relative(resolve(actual), resolve(file));
+    return rel && !rel.startsWith('..') && !/^[A-Za-z]:/.test(rel);
+  }));
+  if (!allowed.some(Boolean) || !basename(file).endsWith(`${binding.id}.jsonl`)) throw new Error('Transcript path is outside the configured provider storage');
+  return { file, binding };
 }
 
 export async function readConversation(terminal) {

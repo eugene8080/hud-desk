@@ -80,10 +80,10 @@ function fixture() {
   return { credentials, transport, calls, now, newestSubject };
 }
 
-async function serve(t, mailConfig, { transport, credentials }, coldWaitMs) {
+async function serve(t, mailConfig, { transport, credentials }, coldWaitMs, extra = {}) {
   const server = createBridge({
     token: 'fixture-bearer', mailConfig, beeperConfig: null, privateHosts: [privateHost],
-    mailOptions: { gmailOptions: { transport, credentials }, coldWaitMs },
+    mailOptions: { gmailOptions: { transport, credentials }, coldWaitMs, ...extra },
   }).listen(0, '127.0.0.1');
   t.after(() => new Promise(resolve => server.close(resolve)));
   await once(server, 'listening');
@@ -361,4 +361,37 @@ test('Mail send builds the message itself, threads replies, sends once per id an
     assert.equal(result.status, 400, `${field}=${String(value).slice(0, 20)}`);
   }
   assert.equal(example.sent.length, before);
+});
+
+// ---- Images (2026-11-27): Email image parts through the allowlist; synthetic only. ----
+test('Mail lists image parts of 2 KB or more and serves one through imaging, read only', async t => {
+  const base = fixture();
+  const big = Buffer.alloc(4096, 7).toString('base64url');
+  const transport = (url, options) => {
+    const { pathname, searchParams } = new URL(url);
+    const route = pathname.replace('/gmail/v1/users/me', '');
+    const payload = { mimeType: 'multipart/mixed', partId: '', parts: [
+      { partId: '0', mimeType: 'text/plain', body: { data: Buffer.from('Body').toString('base64url'), size: 4 } },
+      { partId: '1', mimeType: 'image/png', filename: 'plan.png', body: { attachmentId: 'att1', size: 50000 } },
+      { partId: '2', mimeType: 'image/gif', filename: 'pixel.gif', body: { data: 'R0lG', size: 43 } },
+      { partId: '3', mimeType: 'image/jpeg', filename: '', body: { data: big, size: 4096 } },
+    ] };
+    if (route === '/threads/newest' && searchParams.get('format') === 'full') {
+      return Response.json({ messages: [{ id: 'msg1', internalDate: String(base.now), labelIds: [], payload: { ...payload, headers: [{ name: 'Subject', value: 'S' }] } }] });
+    }
+    if (route === '/messages/msg1') return Response.json({ id: 'msg1', payload });
+    if (route === '/messages/msg1/attachments/att1') return Response.json({ data: Buffer.from('PNGDATA').toString('base64url') });
+    return base.transport(url, options);
+  };
+  const rendered = [];
+  const imaging = { render: async (key, load) => { const bytes = await load(); rendered.push({ key, bytes: bytes.toString() }); return { width: 576, height: 288, data: '', mean: 0 }; } };
+  const get = await serve(t, config, { ...base, transport }, undefined, { imaging });
+  const open = (await get('/api/mail/thread?account=work&id=newest')).data;
+  assert.deepEqual(open.messages[0].images, [{ part: '1', name: 'plan.png' }, { part: '3', name: '' }]);
+  assert.equal((await get('/api/mail/image?account=work&message=msg1&part=1')).status, 200);
+  assert.deepEqual(rendered[0], { key: 'mail:work:msg1:1', bytes: 'PNGDATA' });
+  assert.equal((await get('/api/mail/image?account=work&message=msg1&part=3')).status, 200);
+  assert.equal(rendered[1].bytes.length, 4096);
+  assert.equal((await get('/api/mail/image?account=work&message=msg1&part=0')).status, 404, 'a text part is not an image');
+  assert.equal((await get('/api/mail/image?account=work&message=msg1&part=../x')).status, 400);
 });
