@@ -56,6 +56,18 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.68 (user: chat spacing good; put the Background menu back to try the lined
+options; lines should look like the tube TV of his Garmin terminal watch face,
+claude-usage-widget garmin/faces/terminal: SCAN_PITCH 3, dark rows y % 3 == 2, text on a scanline
+38 % dimmer). Background picker and Compare backgrounds restored: None, Ink 1, Lines 1/2, Lines
+1/3, Dots 1/2 (default), Tube turns (scanlines over user turns, letters included), Tube (whole
+screen scanned: frame, text, status). Ink 2/3, Dots 1/4, 1px frame not restored; a saved one
+falls back to Dots 1/2. 221 tests, build pass; render previews checked. Also 2026-11-27: Eugene
+said his Cantonese transcription is tuned in posangwiki (FunASR SenseVoice-Small yue + OpenCC
+s2hk, _meta/asr-benchmark-2026-09-17.md); sent to the voice worker (msg_cf53edc5118c) with
+posangwiki/venv-funasr and the winget ffmpeg path; worker told not to open posangwiki raw/ or
+wiki/. Chinese pixel-font research (Traditional + HK Cantonese coverage) running.
+
 2026-11-27 beta 1.0.67 (user on G2 after the reboot: chat works, Email loading screen works; wants
 to toggle between the work and personal mailbox instead of filtering both). Email shows one
 mailbox at a time: with two or more, the row under row 0 shows the address and a click switches

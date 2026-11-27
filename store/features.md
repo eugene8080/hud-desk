@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.67**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.68**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.67,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.68,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.67)
+## Feature list (beta 1.0.68)
 
 ### All modules
 
@@ -30,8 +30,10 @@ Rule for every agent: each beta release updates this file in the release commit:
   hanging indents on wrapped lines, one Font list (Native text and pixel fonts: Departure 7x14,
   Misc Fixed 6x13, Terminus 6x12, GohuFont 6x11, Scientifica 5x11; Compare fonts screen), App
   Brightness 15 down to 1. Both lists wrap at the ends.
-- With a pixel font, the user's turns sit on a dim dotted background (a 1px checker at the
-  lowest brightness step) so they stand out.
+- With a pixel font, the user's turns sit on a dim background so they stand out (Background:
+  None, Ink 1, Lines 1/2, Lines 1/3, Dots 1/2 (default), Tube turns, Tube). Tube draws CRT
+  scanlines on every third pixel row, across your turns only or the whole screen. A Compare
+  backgrounds screen shows every option.
   Native text has no background option in the SDK.
 - Keeps loading with the phone screen off.
 - English and Japanese (switch in the phone app); Japanese in small text uses Shinonome 12x12
@@ -113,5 +115,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.67: Email shows one mailbox at a time. With two Gmail accounts, the row under [Email] shows the address; click it to switch mailbox (the phone page has the same choice). Chat messages no longer have a blank row between them.
+1.0.68: The reader's Background menu is back, with two tube-TV options: Tube turns draws CRT scanlines over your turns, Tube over the whole screen. Also Lines 1/2, Lines 1/3, Ink 1, Dots 1/2 (default) and None; Compare backgrounds shows them all.
 <!-- whatsnew:end -->

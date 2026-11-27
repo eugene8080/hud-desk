@@ -1914,14 +1914,14 @@ test('small text draws the whole screen, status row included, as four tiles and 
   const saved = [];
   h.bridge.setLocalStorage = async (key, value) => { saved.push([key, value]); };
   await h.pick(2);
-  // Fonts and the comparison fit in one list. Terminus 6x12 is the third small face.
+  // Fonts, the background and both comparisons fit in one list. Terminus 6x12 is the third small face.
   await h.menu(1101);
   assert.deepEqual(menuItems(h), ['Native text ✓', 'Departure 7x14', 'Misc Fixed 6x13', 'Terminus 6x12',
-    'GohuFont 6x11', 'Scientifica 5x11', 'Compare fonts']);
+    'GohuFont 6x11', 'Scientifica 5x11', 'Background: Dots 1/2', 'Compare fonts', 'Compare backgrounds']);
   assert.deepEqual(Object.keys(glyphExports), ['DEPARTURE_MONO', 'TERMINUS', 'GOHU', 'SCIENTIFICA', 'FIXED', 'SHINONOME_K12']);
   const fontCursor = () => h.pages.at(-1).textObject.find(c => c.containerName === 'body').content.split('\n').findIndex(row => row.startsWith('>'));
   await h.scroll('up');
-  assert.equal(fontCursor(), 6); // wraps to the last row, Compare fonts
+  assert.equal(fontCursor(), 8); // wraps to the last row, Compare backgrounds
   await h.scroll('down');
   assert.equal(fontCursor(), 0);
   await h.pick(3);
@@ -1995,7 +1995,7 @@ test('small text draws the whole screen, status row included, as four tiles and 
   for (const tile of turned) assert.equal(JSON.stringify(tile.imageData), JSON.stringify(want[Number(tile.containerName.slice(5))]));
   assert.ok(!h.upgrades.some(u => ['body', 'voice', 'hint'].includes(u.containerName)));
   // The display test replaces the tiles; the next swipe restores the page.
-  await h.menu(1101); await h.pick(6); await h.flush();
+  await h.menu(1101); await h.pick(7); await h.flush();
   assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison()));
   await h.scroll('down'); await h.flush();
   const restored = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
@@ -2050,8 +2050,8 @@ test('saved removed reader modes and the saved comparison font fall back to Term
   await h.pick(2);
   const native = container(h, 'body').content;
   await h.menu(1101);
-  await h.pick(6);
-  assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderFontComparison()));
+  await h.pick(8);
+  assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus')));
   await h.scroll('up');
   assert.equal(h.pages.at(-1).containerTotalNum, 7);
   assert.equal(container(h, 'body').content, native);
@@ -2074,7 +2074,7 @@ test('user turn background follows wrapped and indented rows across pages withou
   for (let y = 4; y < 4 + line * 2; y++) assert.equal(tilePixel(tiles, right, y), dot(right, y));
   const secondPage = textExports.readerPages(text, fineExports.fineMeasure('terminus'), textWidth, rows, Infinity)[1];
   const plain = fineExports.renderFineScreen(secondPage, 'terminus',
-    { left: '/Status unknown', right: '[Tap&Hold for Input] Pg2/2' }, 15, false);
+    { left: '/Status unknown', right: '[Tap&Hold for Input] Pg2/2' }, 15, 'none');
   for (let y = 0; y < 288; y++) {
     for (let x = 0; x < 576; x++) {
       const old = tilePixel(plain, x, y);
@@ -2094,23 +2094,84 @@ test('user turn background follows wrapped and indented rows across pages withou
   assert.equal(tilePixel(earlier, right, 4 + (rows - 2) * line), 0);
 });
 
-test('user turns always use the Dots 1/2 checker at Ink 1, and none is drawn at App Brightness 1', async () => {
-  const { textX, textWidth } = fineExports.fineLayout('terminus');
+test('background picker: Dots 1/2 by default, lines and tube options save, comparison shows all', async () => {
+  const { line, textX, textWidth } = fineExports.fineLayout('terminus');
   const right = textX + textWidth - 1;
   const text = '/ Check this.\n> Checked.';
-  // A value saved by the removed Background picker no longer changes anything.
-  const h = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-turn-bg': '3' } });
+  const dot = (x, y) => (x + y) % 2 === 0 ? 17 : 0;
+  const scan = y => y % 3 === 2;
+  // A value saved by a removed option (Ink 3) falls back to Dots 1/2.
+  const storage = { 'reader-text': 'terminus', 'reader-turn-bg': '3' };
+  const h = await moduleHarness({ storage });
   h.api.thread = async () => ({ text });
   await h.pick(2);
-  const tiles = sentFineTiles(h);
-  const dot = (x, y) => (x + y) % 2 === 0 ? 17 : 0;
-  for (const [x, y] of [[right, 4], [right, 5], [right - 1, 4], [right - 1, 5]]) assert.equal(tilePixel(tiles, x, y), dot(x, y));
+  for (const [x, y] of [[right, 4], [right, 5], [right - 1, 4]]) assert.equal(tilePixel(sentFineTiles(h), x, y), dot(x, y));
+  // Comparison: one block per option, label left, sample turn and reply right.
   await h.menu(1101);
-  assert.equal(menuItems(h).some(item => /Background/.test(item)), false);
-  const dim = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-ink': '1' } });
+  await h.pick(8);
+  const comparison = sentFineTiles(h);
+  const block = i => 4 + i * (2 * line + fineExports.BACKGROUND_GAP);
+  const lit = (i, test) => Array.from({ length: line }, (_, r) => block(i) + r)
+    .every(y => [right - 1, right].every(x => tilePixel(comparison, x, y) === (test(x, y) ? 17 : 0)));
+  assert.ok(lit(0, () => false), 'None');
+  assert.ok(lit(1, () => true), 'Ink 1');
+  assert.ok(lit(2, (_x, y) => y % 2 === 0), 'Lines 1/2');
+  assert.ok(lit(3, (_x, y) => y % 3 === 0), 'Lines 1/3');
+  assert.ok(lit(4, (x, y) => (x + y) % 2 === 0), 'Dots 1/2');
+  assert.ok(lit(5, (_x, y) => !scan(y)), 'Tube turns');
+  assert.ok(lit(6, (_x, y) => !scan(y)), 'Tube');
+  for (let i = 0; i < 7; i++) assert.equal(tilePixel(comparison, right, block(i) + line + 1), 0, `reply row ${i}`);
+  for (const font of fineExports.FINE_FONTS) {
+    const { line: fontLine } = fineExports.fineLayout(font);
+    assert.ok(4 + 7 * (2 * fontLine + fineExports.BACKGROUND_GAP) + 8 + fontLine <= 287, font);
+  }
+  await h.scroll('down');
+  // Picker: pick Tube.
+  await h.menu(1101);
+  await h.pick(6);
+  assert.deepEqual(menuItems(h), ['None', 'Ink 1', 'Lines 1/2', 'Lines 1/3', 'Dots 1/2 ✓', 'Tube turns', 'Tube']);
+  await h.pick(6);
+  assert.equal(h.storage.get('reader-turn-bg'), 'tube');
+  const tube = sentFineTiles(h);
+  // Band lit on two rows of three, dark on the scanline row (y = 5).
+  assert.equal(tilePixel(tube, right, 4), 17);
+  assert.equal(tilePixel(tube, right, 5), 0);
+  // Tube scans the whole screen: the frame dims to 62 % (step 9) on scanline rows only.
+  assert.equal(tilePixel(tube, 0, 5), 153);
+  assert.equal(tilePixel(tube, 0, 4), 255);
+  // Tube turns: the frame is not scanned.
+  await h.menu(1101);
+  await h.pick(6);
+  await h.pick(5);
+  assert.equal(h.storage.get('reader-turn-bg'), 'tubeturns');
+  assert.equal(tilePixel(sentFineTiles(h), 0, 5), 255);
+  // At App Brightness 1 no background is drawn: no step below Ink 1 text.
+  const dim = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-ink': '1', 'reader-turn-bg': 'lines2' } });
   dim.api.thread = async () => ({ text });
   await dim.pick(2);
-  for (const y of [4, 5]) assert.equal(tilePixel(sentFineTiles(dim), right, y), 0); // no step left below Ink 1 text
+  for (const y of [4, 5]) assert.equal(tilePixel(sentFineTiles(dim), right, y), 0);
+});
+
+test('scanlines dim lit text pixels on every third row and never drop them below Ink 1', () => {
+  const page = { text: '/ MMMM', userTurns: [1] };
+  const status = { left: '', right: '' };
+  const plain = fineExports.renderFineScreen(page, 'terminus', status, 15, 'none');
+  const turns = fineExports.renderFineScreen(page, 'terminus', status, 15, 'tubeturns');
+  const { textX, line } = fineExports.fineLayout('terminus');
+  let dimmed = 0;
+  for (let y = 4; y < 4 + line; y++) {
+    for (let x = textX; x < textX + 6 * 6; x++) {
+      if (tilePixel(plain, x, y) !== 255) continue;
+      const expected = y % 3 === 2 ? 153 : 255;
+      assert.equal(tilePixel(turns, x, y), expected, `pixel ${x},${y}`);
+      if (expected === 153) dimmed++;
+    }
+  }
+  assert.ok(dimmed > 0);
+  const faint = fineExports.renderFineScreen(page, 'terminus', status, 2, 'tube');
+  for (let y = 4; y < 4 + line; y++) for (let x = textX; x < textX + 36; x++) {
+    if (tilePixel(plain, x, y) === 255) assert.ok(tilePixel(faint, x, y) >= 17, `pixel ${x},${y}`);
+  }
 });
 
 test('reader ink follows the panel steps 1 through 15', () => {

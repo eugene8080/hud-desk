@@ -25,7 +25,7 @@ import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, inkByte, nativeTextColor, parseInk, type FineFont, type FineStatus } from './fine-text';
+import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, chatColumns, CHAT_NETWORKS_KEY } from './chat';
@@ -100,12 +100,13 @@ let releaseCapture: (() => void) | null = null;
 let viewProvider = 'all';
 // Reader text: the firmware's native font, or small text drawn as image tiles.
 type ReaderText = 'native' | FineFont;
-type Comparison = 'fonts';
+type Comparison = 'fonts' | 'backgrounds';
 const DEFAULT_SMALL_FONT: FineFont = 'terminus';
 const REMOVED_FONTS = ['fixed9', 'gohu14', 'shinonome'];
 let readerText: ReaderText = 'native';
 // The small font the menu offers when native text is on (last one used).
 let smallFont: FineFont = DEFAULT_SMALL_FONT;
+let turnBackground: TurnBackground = DEFAULT_TURN_BACKGROUND;
 // Reader ink, panel steps 1..15. 15 is full white. 0 is not offered: it would blank the font and frame. This is not the system brightness.
 let inkLevel = 15;
 const textBrightness = () => nativeTextColor(inkLevel);
@@ -463,7 +464,8 @@ async function show(s: Screen, reloadText = false) {
 async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boolean> {
   const t0 = Date.now();
   const tiles = s.comparison === 'fonts' ? renderFontComparison(inkLevel)
-    : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel);
+    : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel)
+    : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel, turnBackground);
   let sent = 0;
   for (let i = 0; i < tiles.length; i++) {
     if (current !== s) return false;
@@ -518,7 +520,7 @@ function requestFineStatus(s: TextScreen) {
   readerWrites = run.catch(e => diag((e as Error).message));
 }
 
-// Reader long-press menu. The Font list includes the font comparison.
+// Reader long-press menu. The Font list includes background settings and comparisons.
 function readerMenu() {
   const name = readerText === 'native' ? tr('nativeText') : fineLabel(readerText);
   return [
@@ -549,7 +551,7 @@ function showTextPicker(reader: TextScreen, labels: string[], selected: number, 
   return open(Math.floor(at / TEXT_PICKER_ROWS), at % TEXT_PICKER_ROWS);
 }
 
-// Native, every small font largest first, then the font comparison.
+// Native, every small font largest first, then backgrounds and comparisons.
 function showFonts() {
   const reader = current;
   if (reader?.kind !== 'text' || !reader.reader) return;
@@ -557,11 +559,32 @@ function showFonts() {
   const rows = [
     { label: tr('nativeText'), run: () => setReaderText('native', reader) },
     ...fonts.map(font => ({ label: fineLabel(font), run: () => setReaderText(font, reader) })),
+    { label: tr('background', turnBackgroundLabel(turnBackground)), run: () => showBackgrounds(reader) },
     { label: tr('compareFonts'), run: () => openComparison(reader, 'fonts') },
+    { label: tr('compareBackgrounds'), run: () => openComparison(reader, 'backgrounds') },
   ];
   const currentIndex = readerText === 'native' ? 0 : fonts.indexOf(readerText) + 1;
   return showTextPicker(reader, rows.map((row, i) => i === currentIndex ? `${row.label} ✓` : row.label), currentIndex, i => {
     void rows[i]?.run().catch(e => diag((e as Error).message));
+  }, true);
+}
+
+// Background for your turns (restored 2026-11-27 so Eugene can try the lined and tube options).
+function showBackgrounds(reader: TextScreen) {
+  const selected = TURN_BACKGROUNDS.indexOf(turnBackground);
+  const labels = TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : ''));
+  let saving = false;
+  return showTextPicker(reader, labels, selected, async i => {
+    const option = TURN_BACKGROUNDS[i];
+    if (saving || !option) return;
+    const picker = current;
+    saving = true;
+    try {
+      if (!await bridge.setLocalStorage('reader-turn-bg', option)) throw new Error(tr('backgroundSaveFailed'));
+      turnBackground = option;
+      if (current === picker) await show(reader);
+    } catch (e) { diag((e as Error).message); }
+    finally { saving = false; }
   }, true);
 }
 
@@ -1930,6 +1953,7 @@ async function main() {
   else if (REMOVED_FONTS.includes(savedText)) readerText = DEFAULT_SMALL_FONT;
   const savedFont = await bridge.getLocalStorage('reader-font');
   smallFont = FINE_FONTS.includes(savedFont as FineFont) ? savedFont as FineFont : readerText === 'native' ? DEFAULT_SMALL_FONT : readerText;
+  turnBackground = parseTurnBackground(await bridge.getLocalStorage('reader-turn-bg'));
   inkLevel = parseInk(await bridge.getLocalStorage('reader-ink'));
   const resetMode = await bridge.getLocalStorage('usage-reset-mode');
   if (RESET_MODES.includes(resetMode as ResetMode)) usageResetMode = resetMode as ResetMode;

@@ -30,10 +30,42 @@ const NAMES: Record<FineFont, string> = {
 // 'Cozette 6x13': short name and native cell. The glasses menu truncates labels
 // beyond about 210px, so names are short (Pixeloid Mono -> Pixeloid).
 export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].width}x${TABLES[font].height}`;
-// User turns sit on a 1px checker at Ink 1 (Eugene, 2026-11-27: chose "Dots 1/2" on G2 from None,
-// Ink 1-3, Lines 1/2 and 1/3, Dots 1/2 and 1/4 and a 1px frame; the picker and Compare backgrounds
-// were then removed). Absolute screen coordinates keep the checker continuous across rows.
-const turnDot = (x: number, y: number) => (x + y) % 2 === 0;
+// User-turn backgrounds. Ink 1 is the panel's lowest step, so the dimmer options light only part
+// of the band at Ink 1: every 2nd or 3rd pixel row or a 1px checker (Eugene, 2026-11-27; he picked
+// Dots 1/2, the default). G2 note (2026-11-09): 1px line gratings looked even, a 1px checker blotchy.
+// Tube (2026-11-27, "a tube TV look like my terminal watch face", claude-usage-widget
+// garmin/faces/terminal): a CRT scanline on every third pixel row (rows y % 3 == 2, the face's
+// SCAN_PITCH and phase), dark in the lit band and dimming any text it crosses by 38 % (the face's
+// "on text" 38 %). Tube turns scans your turns only; Tube scans the whole screen, as the face does.
+// Ink 2/3, Dots 1/4 and the 1px frame were dropped; a saved one falls back to Dots 1/2.
+export const TURN_BACKGROUNDS = ['none', '1', 'lines2', 'lines3', 'dots2', 'tubeturns', 'tube'] as const;
+export type TurnBackground = typeof TURN_BACKGROUNDS[number];
+export const DEFAULT_TURN_BACKGROUND: TurnBackground = 'dots2';
+export const SCAN_PITCH = 3;
+const SCAN_TEXT = 0.62;
+const scanRow = (y: number) => y % SCAN_PITCH === SCAN_PITCH - 1;
+export function parseTurnBackground(value: string | null | undefined): TurnBackground {
+  return TURN_BACKGROUNDS.find(option => option === value) ?? DEFAULT_TURN_BACKGROUND;
+}
+export function turnBackgroundLabel(option: TurnBackground): string {
+  if (option === 'none') return t('backgroundNone');
+  if (option === 'lines2') return t('backgroundLines', '1/2');
+  if (option === 'lines3') return t('backgroundLines', '1/3');
+  if (option === 'dots2') return t('backgroundDots', '1/2');
+  if (option === 'tubeturns') return t('backgroundTubeTurns');
+  if (option === 'tube') return t('backgroundTube');
+  return t('backgroundInk', option);
+}
+// Which pixels of a band a background lights, in absolute screen coordinates so the pattern
+// stays continuous across rows and fonts with odd line heights.
+const TURN_PATTERNS: Record<Exclude<TurnBackground, 'none'>, (x: number, y: number) => boolean> = {
+  '1': () => true,
+  lines2: (_x, y) => y % 2 === 0,
+  lines3: (_x, y) => y % 3 === 0,
+  dots2: (x, y) => (x + y) % 2 === 0,
+  tubeturns: (_x, y) => !scanRow(y),
+  tube: (_x, y) => !scanRow(y),
+};
 // The panel is 4-bit: 16 steps, numbered 0 through 15. Full white is 15, which is
 // what the app drew before this control. An 8-bit image byte of n*17 lands on step n
 // whether the glasses keep the high nibble or scale 0..255 onto 0..15.
@@ -146,6 +178,18 @@ class Surface {
       this.pixels.fill(level, start + left, start + right);
     }
   }
+  // CRT scanlines: in every scanline row of the rectangle, lit pixels drop to 62 % of their level,
+  // rounded to a panel step and never below Ink 1, so letters stay readable.
+  scanlines(x: number, y: number, w: number, h: number) {
+    const right = Math.min(SCREEN.width, x + w), bottom = Math.min(SCREEN.height, y + h);
+    for (let row = Math.max(0, y); row < bottom; row++) {
+      if (!scanRow(row)) continue;
+      for (let col = Math.max(0, x); col < right; col++) {
+        const i = row * SCREEN.width + col, v = this.pixels[i];
+        if (v > 0) this.pixels[i] = Math.max(inkByte(1), Math.round(v * SCAN_TEXT / 17) * 17);
+      }
+    }
+  }
   // A rectangle that lights only the pixels the pattern selects (absolute coordinates).
   pattern(x: number, y: number, w: number, h: number, level: number, lit: (x: number, y: number) => boolean) {
     const right = Math.min(SCREEN.width, x + w), bottom = Math.min(SCREEN.height, y + h);
@@ -251,23 +295,32 @@ export function scannerLevels(frame: number): number[] {
 }
 
 export type FineStatus = { left: string; right: string; model?: string; scanner?: number };
-// highlight false draws the same page without the user-turn dots (tests compare against it).
-function drawTurnRows(s: Surface, page: ReaderPage, top: number, highlight: boolean) {
-  const { line, rows, columns, textX, textWidth } = fineLayout(s.font);
+// region: the text block the rows sit in (the comparison screen indents it past the labels).
+function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: TurnBackground,
+  region: { textX: number; textWidth: number; columns: number } = fineLayout(s.font)) {
+  const { line, rows } = fineLayout(s.font);
+  const { textX, textWidth, columns } = region;
   const lines = page.text.split('\n').slice(0, rows);
-  // Keep at least one ink step between the letters and the dots at App Brightness 1.
+  // Keep at least one ink step between the letters and the background at low brightness.
   const ink = Math.max(0, Math.min(inkByte(1), s.ink - inkByte(1)));
-  if (highlight && ink > 0) {
-    lines.forEach((_, r) => { if (page.userTurns[r]) s.pattern(textX, top + r * line, textWidth, line, ink, turnDot); });
+  if (background !== 'none' && ink > 0) {
+    lines.forEach((_, r) => {
+      if (page.userTurns[r]) s.pattern(textX, top + r * line, textWidth, line, ink, TURN_PATTERNS[background]);
+    });
   }
   lines.forEach((row, r) => s.text(row, textX, top + r * line, columns));
+  // Tube turns: the scanlines cross the letters of your turns too. (Tube scans the whole screen
+  // afterwards, in renderFineScreen and the comparison.)
+  if (background === 'tubeturns') {
+    lines.forEach((_, r) => { if (page.userTurns[r]) s.scanlines(textX, top + r * line, textWidth, line); });
+  }
 }
 
-export function renderFineScreen(page: ReaderPage, font: FineFont, status: FineStatus, level = INK_MAX, highlight = true): number[][] {
+export function renderFineScreen(page: ReaderPage, font: FineFont, status: FineStatus, level = INK_MAX, background = DEFAULT_TURN_BACKGROUND): number[][] {
   const s = new Surface(font, inkByte(level));
   const { line, columns, textX, textWidth, statusY, dividerY } = fineLayout(font);
   s.frame();
-  drawTurnRows(s, page, TOP, highlight);
+  drawTurnRows(s, page, TOP, background);
   s.rect(textX, dividerY, textWidth, 1);
   const rightCells = Math.min(fineCells(status.right), columns);
   s.text(status.right, textX + (columns - rightCells) * TABLES[font].width, statusY, rightCells);
@@ -282,6 +335,7 @@ export function renderFineScreen(page: ReaderPage, font: FineFont, status: FineS
     scannerLevels(status.scanner).forEach((step, i) => { if (step) s.rect(x0 + i * (SCANNER_SEGMENT + SCANNER_GAP), y0, SCANNER_SEGMENT, h, Math.round(step * s.ink / 255)); });
     s.text(status.left, x0 + barCells * cw, statusY, Math.max(0, leftCells - modelCells - barCells));
   }
+  if (background === 'tube') s.scanlines(0, 0, SCREEN.width, SCREEN.height);
   return s.tiles();
 }
 
@@ -308,6 +362,33 @@ export function renderFontComparison(level = INK_MAX): number[][] {
   const back = fineLayout(s.font);
   s.rect(back.textX, y + 2, back.textWidth, 1);
   s.text(t('compareBack'), back.textX, y + 8, back.columns);
+  return s.tiles();
+}
+
+// One block per option: its label on the left, the sample turn and reply to the right, so all
+// seven options fit the screen in every font (Departure 7x14 included).
+export const BACKGROUND_GAP = 4;
+export function backgroundComparisonLayout(font: FineFont) {
+  const { width: cell } = TABLES[font];
+  const { columns, textX, textWidth } = fineLayout(font);
+  const labelCells = Math.max(...TURN_BACKGROUNDS.map(option => fineCells(turnBackgroundLabel(option)))) + 1;
+  return { labelCells, sample: { textX: textX + labelCells * cell, textWidth: textWidth - labelCells * cell, columns: columns - labelCells } };
+}
+export function renderBackgroundComparison(font: FineFont, level = INK_MAX): number[][] {
+  const s = new Surface(font, inkByte(level));
+  const { line, columns, textX, textWidth, rows } = fineLayout(font);
+  const { labelCells, sample: region } = backgroundComparisonLayout(font);
+  const [sample] = readerPages(t('backgroundSample'), fineMeasure(font), region.textWidth, rows, Infinity);
+  s.frame();
+  let y = TOP;
+  for (const option of TURN_BACKGROUNDS) {
+    s.text(turnBackgroundLabel(option), textX, y, labelCells);
+    drawTurnRows(s, sample, y, option, region);
+    if (option === 'tube') s.scanlines(region.textX, y, region.textWidth, sample.userTurns.length * line);
+    y += sample.userTurns.length * line + BACKGROUND_GAP;
+  }
+  s.rect(textX, y + 2, textWidth, 1);
+  s.text(t('compareBack'), textX, y + 8, columns);
   return s.tiles();
 }
 
