@@ -253,6 +253,16 @@ test('a cached module paints before its delayed refresh and applies new rows wit
   assert.match(container(h, 'body').content, /All workspaces/);
 });
 
+test('Email rows mark unread with / and read with --, and both fit the cursor gutter', () => {
+  const { mailColumns } = mailModule({});
+  const base = { account: 'work', id: 't', from: 'Desk', subject: 'Notes', date: Date.now(), count: 1 };
+  assert.equal(mailColumns({ ...base, unread: true }).marker, '/');
+  assert.equal(mailColumns({ ...base, unread: false }).marker, '--');
+  const gutter = listExports.menuCursorText([{ marker: '--', title: '', right: '' }], 1).split('\n')[1];
+  assert.equal(gutter, '>--');
+  assert.ok(listExports.glassWidth(gutter) <= listExports.MENU_CURSOR.width);
+});
+
 test('row zero brackets the module name so it reads as a button', () => {
   const { moduleHeading, moduleButton } = listExports;
   assert.equal(moduleButton('Email'), '[Email]');

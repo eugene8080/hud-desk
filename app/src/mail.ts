@@ -156,7 +156,9 @@ export function labelPickerPages(accounts: AccountLabels[], selected: Set<string
 // With two or more mailboxes on, the right column starts with the account letter: '[W] 14:05'.
 export function mailColumns(thread: MailThread, accountLetter = ''): SessionColumns {
   const date = mailDate(thread.date);
-  return { marker: thread.unread ? '*' : '', title: `${singleLine(thread.from)} - ${singleLine(thread.subject)}`,
+  // Gutter marks (Eugene, 2026-11-26): '/' unread, as Coding's '/' marks a session waiting for
+  // you; '--' read. '*' stays for action rows such as Filter.
+  return { marker: thread.unread ? '/' : '--', title: `${singleLine(thread.from)} - ${singleLine(thread.subject)}`,
     right: accountLetter ? `[${accountLetter}] ${date}` : date, preserveSuffix: false };
 }
 
