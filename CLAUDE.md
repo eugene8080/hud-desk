@@ -56,6 +56,19 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.78 (Eugene: 'standard Gmail keyboard shortcuts as much as possible. Pc
+shortcuts', delete, compose, archive (e), reply, reply all; Ctrl+Enter like Gmail, then review
+and Enter sends; Gmail keys everywhere). App: gmailKey() in app/src/main.ts (j/k, o, u, Space,
+Tab, ?, c r a f e # Shift+U Shift+I s z; r = reply in Coding/Chat); drafts on the glasses (voice
+page layout) typed in phone boxes compose-to/cc/subject/body or reply-text (app/src/compose.ts);
+Esc keeps the draft; Esc/u on a module list never exits. 1.0.76's Space-hold and letter-starts-reply
+are gone (voice: glasses hold). Bridge: bridge/mail-compose.mjs (addresses, reply fields, quote,
+RFC 5322 raw built by the bridge, header injection refused), gmail.mjs allowlist + one-label
+modify UNREAD/INBOX/STARRED, threads trash/untrash, messages.send; mail.mjs routes POST
+/api/mail/modify, GET /api/mail/compose, POST /api/mail/send (sendId: one send per id, 10 min).
+Same gmail.modify scope, no new consent. 252 tests, build pass, synthetic only (no real mail
+sent or changed). Bridge part needs an approved restart; until then actions/sends answer 404.
+
 2026-11-27 beta 1.0.77 (Eugene: remove Lines 1/8; add Dots 1/4, Dots 1/8, Tube x dim, Tube xx dim).
 14 options: None, Ink 5/8, 1/2, 1/4, Lines 1/3 (default), 1/4, Dots 1/3, 1/4, 1/8, Tube 1/2, 1/4,
 1/8, Tube, 1px frame. Dots 1/4 (id dots14) staggers the quarter (Ink 1/4 is the square 2x2 grid of

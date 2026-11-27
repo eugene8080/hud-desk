@@ -2,6 +2,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createGmail, MailError } from './gmail.mjs';
 import { bodyText, header, parseFrom } from './mail-text.mjs';
+import { buildRaw, quotedOriginal, readDraft, replyFields } from './mail-compose.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const ID = /^[a-zA-Z0-9_-]+$/;
@@ -9,6 +10,15 @@ const string = value => typeof value === 'string' && value.trim().length > 0;
 const id = value => string(value) && ID.test(value);
 const dayMs = 86_400_000;
 const badRequest = () => new MailError('bad request', 400);
+// Keyboard actions on a thread (Eugene, 2026-11-27). Each maps to one allowlisted Gmail call;
+// 'unarchive' and 'untrash' are the undo (z) of 'archive' and 'trash'.
+const ACTIONS = {
+  archive: { removeLabelIds: ['INBOX'] }, unarchive: { addLabelIds: ['INBOX'] },
+  unread: { addLabelIds: ['UNREAD'] },
+  star: { addLabelIds: ['STARRED'] }, unstar: { removeLabelIds: ['STARRED'] },
+  trash: 'trash', untrash: 'untrash',
+};
+const SEND_MEMORY_MS = 10 * 60_000;
 
 export function readMailConfig(config) {
   if (!string(config?.oauthClientFile) || !Array.isArray(config.accounts) || !config.accounts.length ||
@@ -108,6 +118,11 @@ export async function before(promise, deadline) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function threadId(value) {
+  if (!id(value)) throw badRequest();
+  return value;
 }
 
 const dateOf = message => Number(message.internalDate) || Date.parse(header(message, 'date')) || 0;
@@ -217,6 +232,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
             account: account.id, id: threadId, from: parseFrom(header(newest, 'from')),
             subject: header(messages[0], 'subject'), date: dateOf(newest), count: messages.length,
             unread: messages.some(m => m.labelIds?.includes('UNREAD')),
+            starred: messages.some(m => m.labelIds?.includes('STARRED')),
           };
         }).catch(error => {
           if (metadata.get(threadId) === cached) metadata.delete(threadId);
@@ -268,9 +284,93 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
       return reads.get(threadId);
     }
 
+    // Lists drop a thread at once after an archive or trash, then reload in the background; an
+    // undo waits (up to 8 s) for the reload so the thread is back when the list is drawn again.
+    const indexes = () => [order, ...selections.values()];
+    const forget = (threadId, from) => {
+      for (const entry of from) {
+        try { entry.read()?.delete(threadId); } catch { /* The reload reconciles. */ }
+        entry.invalidate();
+      }
+    };
+    const reload = entries => before(Promise.all(entries.map(entry => { entry.invalidate(); return entry.refresh(); })),
+      Date.now() + 8000);
+    async function act(threadId, action) {
+      if (!Object.hasOwn(ACTIONS, action)) throw badRequest();
+      const change = ACTIONS[action];
+      if (typeof change === 'string') await gmail('POST', `/threads/${threadId}/${change}`, { query: { fields: 'id' } });
+      else await gmail('POST', `/threads/${threadId}/modify`, { query: { fields: 'id' }, body: change });
+      revision++;
+      const cached = metadata.get(threadId)?.value;
+      if (action === 'archive') forget(threadId, selections.has('INBOX') ? [selections.get('INBOX')] : []);
+      else if (action === 'trash') { forget(threadId, indexes()); try { unread.read()?.delete(threadId); } catch { /* reload */ } }
+      else if (action === 'unarchive') await reload(selections.has('INBOX') ? [selections.get('INBOX')] : []);
+      else if (action === 'untrash') await reload(indexes());
+      else if (action === 'unread') {
+        recentlyRead.delete(threadId);
+        try { unread.read()?.add(threadId); } catch { /* reload */ }
+        if (cached) cached.unread = true;
+      } else if (cached) cached.starred = action === 'star';
+      labels.invalidate();
+      return { ok: true };
+    }
+
+    // The latest message of a thread, with the headers a reply and a forward need.
+    async function latest(threadId) {
+      const messages = messagesOf(await gmail('GET', `/threads/${threadId}`, { query: {
+        format: 'full', fields: 'messages(id,internalDate,labelIds,payload)',
+      } }));
+      const message = messages.at(-1);
+      if (!message) throw new MailError('not found', 404);
+      const attachments = (function count(part) {
+        return (part?.filename ? 1 : 0) + (part?.parts ?? []).reduce((n, child) => n + count(child), 0);
+      })(message.payload);
+      return {
+        from: header(message, 'from'), replyTo: header(message, 'reply-to'), to: header(message, 'to'),
+        cc: header(message, 'cc'), subject: header(messages[0], 'subject') || header(message, 'subject'),
+        date: header(message, 'date'), messageId: header(message, 'message-id'), references: header(message, 'references'),
+        timestamp: dateOf(message), text: bodyText(message.payload, { subject: header(message, 'subject') }), attachments,
+      };
+    }
+
+    async function compose(threadId, mode) {
+      if (!['reply', 'replyAll', 'forward'].includes(mode)) throw badRequest();
+      return replyFields(await latest(threadId), mode, account.address);
+    }
+
+    // One send per sendId: a repeated request (a double key press, a retry after a dropped
+    // answer) returns the first result and never sends twice.
+    const sends = new Map();
+    function send(input) {
+      const draft = readDraft(input);
+      const remembered = sends.get(draft.sendId);
+      if (remembered) return remembered.result;
+      const result = (async () => {
+        let thread, body = draft.body, inReplyTo = '', references = '';
+        if (draft.mode !== 'new') {
+          thread = threadId(input.threadId);
+          const original = await latest(thread);
+          body += quotedOriginal(original, draft.mode);
+          if (draft.mode !== 'forward') ({ messageId: inReplyTo, references } = original);
+          else thread = undefined; // A forward starts its own conversation, as in Gmail.
+        }
+        const raw = buildRaw({ to: draft.to, cc: draft.cc, subject: draft.subject, body, inReplyTo, references });
+        const sent = await gmail('POST', '/messages/send', { query: { fields: 'id,threadId' }, body: thread ? { raw, threadId: thread } : { raw } });
+        revision++;
+        for (const entry of indexes()) entry.invalidate();
+        labels.invalidate();
+        return { ok: true, id: typeof sent?.id === 'string' ? sent.id : undefined };
+      })();
+      sends.set(draft.sendId, { result, at: Date.now() });
+      // A failed send may be tried again with the same id.
+      result.catch(() => sends.delete(draft.sendId));
+      for (const [key, entry] of sends) if (Date.now() - entry.at > SEND_MEMORY_MS) sends.delete(key);
+      return result;
+    }
+
     return [account.id, {
       id: account.id, short: account.short, address: account.address, health, labels, labelIndex, order, unread, recentlyRead,
-      summary, open, mark, sortDate, selections,
+      summary, open, mark, sortDate, selections, act, compose, send,
     }];
   }));
 
@@ -305,11 +405,6 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
     const account = accounts.get(key);
     if (!account) throw badRequest();
     return account;
-  }
-
-  function threadId(value) {
-    if (!id(value)) throw badRequest();
-    return value;
   }
 
   async function listThreads(query) {
@@ -405,6 +500,13 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
     'GET /api/mail/threads': listThreads,
     'GET /api/mail/thread': query => accountOf(query.get('account')).open(threadId(query.get('id'))),
     'POST /api/mail/read': (_query, body) => accountOf(body?.account).mark(threadId(body?.threadId)),
+    // Keyboard actions, compose prefill and send (2026-11-27). All behind the bearer token and
+    // the private-host gate like every mail route; nothing here logs mail content.
+    'POST /api/mail/modify': (_query, body) => body?.action === 'read'
+      ? accountOf(body?.account).mark(threadId(body?.threadId))
+      : accountOf(body?.account).act(threadId(body?.threadId), body?.action),
+    'GET /api/mail/compose': query => accountOf(query.get('account')).compose(threadId(query.get('id')), query.get('mode')),
+    'POST /api/mail/send': (_query, body) => accountOf(body?.account).send(body),
   };
   return { routes, close: () => clearInterval(timer) };
 }

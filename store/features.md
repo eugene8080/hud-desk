@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.77**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.78**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.77,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.78,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.77)
+## Feature list (beta 1.0.78)
 
 ### All modules
 
@@ -58,7 +58,9 @@ Rule for every agent: each beta release updates this file in the release commit:
 
 ### Email (Gmail; only when the bridge has a mail set-up)
 
-- Read-only: no sending, drafts, archive or label changes. Opening a thread marks it read in Gmail.
+- Opening a thread marks it read in Gmail. With a Bluetooth keyboard: compose, reply, reply all and
+  forward (plain text; a forward leaves out attachments), archive, delete (to Trash), mark unread or
+  read, star, and undo (z) for a minute. Drafts show on the glasses; the bridge sends each draft once.
 - Threads newest first, eight a page (seven with two mailboxes), sender and subject, time today or date, `/` for unread
   and `-` for read in the gutter, unread count on row 0. While a page loads, a moving dot shows
   Email is working (Loading email…, then Loading more… until the page is complete).
@@ -91,11 +93,16 @@ Rule for every agent: each beta release updates this file in the release commit:
 
 ### Bluetooth keyboard (paired with the phone, while Orca Glass is open in the Even app)
 
-- Up/Down swipe, Enter clicks, Esc or Backspace goes back, Tab switches module on the home list,
-  Space held is tap-and-hold (voice).
-- A letter in an open Coding session or chat starts a typed reply in the phone's reply box; Enter
-  reviews, Enter again sends once, Shift+Enter adds a line.
-- Typing in the Email label picker searches labels.
+- Gmail's PC shortcuts in every module: j/k or Up/Down move (in a reader: next or previous row of
+  its list), o or Enter opens, u or Esc goes back (never closes the app), Space and Shift+Space turn
+  pages, Tab switches module, ? shows the keys on the glasses.
+- Email: c compose, r reply, a reply all, f forward, e archive, # delete, Shift+U unread, Shift+I
+  read, s star, z undo. Coding and Chat: r types a reply.
+- Drafts open on the glasses and are typed in the phone page's boxes (Tab moves between To, Cc,
+  Subject and message). Mail: Enter is a new line, Ctrl+Enter reviews; a reply: Enter reviews,
+  Shift+Enter is a new line. Enter on the review sends once; Esc edits; Esc while typing closes and
+  keeps the draft.
+- Typing in the Email label picker searches labels. Voice stays on the glasses' tap-and-hold.
 
 ### Not yet built
 
@@ -115,8 +122,8 @@ Coding:
 - Voice: hold for a full-screen voice page with local Whisper on your PC. Release to review, click to send, double-click to cancel. Answer numbered choices and Hermes clarify questions.
 
 Email (Gmail, when your bridge is set up for it):
-- Read only: no sending, drafts or archive. Opening a thread marks it read.
-- One or more Gmail accounts, one at a time (click the address to switch). Filter by Label on the glasses or the phone, with voice search on the glasses. Seven or eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
+- Bluetooth keyboard with Gmail shortcuts: compose, reply, forward, archive, delete, undo; drafts show on the glasses.
+- One or more Gmail accounts, one at a time (click the address to switch). Filter by Label on the glasses or the phone, with voice search on the glasses. Threads open at the newest message with quoted history removed and plain text reflowed.
 
 Chat (Beeper Desktop, when set up): Filter by Network, voice replies, voice notes transcribed on click (Cantonese tuned), English translation.
 
@@ -132,5 +139,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.77: More reader backgrounds for your turns: Dots 1/4 (staggered rows of dots) and Dots 1/8, and the scanline band in three strengths, Tube 1/2 (was Tube dim), Tube 1/4 and Tube 1/8. Lines 1/8 is removed; if you had it, the reader goes back to Lines 1/3.
+1.0.78: Gmail keyboard shortcuts with a Bluetooth keyboard: j/k, o, u, Space, ? for the keys. Email: c compose, r reply, a reply all, f forward, e archive, # delete, Shift+U unread, s star, z undo. Drafts show on the glasses; Ctrl+Enter reviews, Enter sends once. In Coding and Chat, r types a reply. Needs the updated bridge on your PC.
 <!-- whatsnew:end -->

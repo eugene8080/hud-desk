@@ -110,6 +110,20 @@
         </form>
         <p id="reply-status" role="status"></p>
       </section>
+      <!-- Email compose (2026-11-27): shown while a draft is open on the glasses. Type with a
+           Bluetooth keyboard; Tab moves between the boxes, Ctrl+Enter reviews on the glasses. -->
+      <section class="card" id="mail-compose" hidden>
+        <h4 id="mail-compose-title"></h4>
+        <p class="muted" data-i18n="mailComposeNote">The glasses show this draft. Ctrl+Enter reviews it there; Enter then sends it, Esc goes back to editing.</p>
+        <label for="compose-to" data-i18n="composeTo">To</label>
+        <input id="compose-to" type="text" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <label for="compose-cc" data-i18n="composeCc">Cc</label>
+        <input id="compose-cc" type="text" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <label for="compose-subject" data-i18n="composeSubject">Subject</label>
+        <input id="compose-subject" type="text" autocomplete="off">
+        <label for="compose-body" data-i18n="messageLabel">Message</label>
+        <textarea id="compose-body" rows="8" maxlength="50000"></textarea>
+      </section>
     </main>
     <main id="page-settings" hidden>
       <section class="card">

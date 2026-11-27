@@ -30,6 +30,8 @@ const renderFineText = (text, ...args) => fineExports.renderFineScreen({ text, u
 const filterExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/filters.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: filterExports, require: () => i18nExports });
 
+const composeExports = {};
+vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/compose.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: composeExports, require: () => i18nExports });
 const listExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/session-list.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: listExports, __APP_VERSION__: '1.0.12', require: name => name === './i18n' ? i18nExports : textExports, TextEncoder, document: { createElement: () => ({ getContext: () => ({ font: '', measureText: t => ({ width: t.length * 10 }) }) }) } });
 const mailSource = ts.transpileModule(readFileSync(new URL('../app/src/mail.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -107,6 +109,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     './mail': mailModule(api),
     './chat': chatModule(api),
     './filters': filterExports,
+    './compose': composeExports,
     './fine-text': fineExports,
     // The phone page is DOM-only and checked in a browser preview; the glasses tests see a no-op.
     './phone': { createPhone: deps => { phoneDeps = deps; return { connection: c => phoneCalls.push(['connection', c.state]), load() {}, render: () => phoneCalls.push(['render']), retranslate: () => phoneCalls.push(['retranslate']), refreshLabels() {} }; } },
@@ -142,7 +145,17 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
   };
 }
 
-const voiceBody = h => h.upgrades.findLast(u => u.containerName === 'voice-body')?.content;
+const voiceBody = h => {
+  // The newest voice-body text: a later in-place update, else the voice page's own container.
+  const page = h.pages.findLast(p => p.textObject.some(c => c.containerName === 'voice-body'));
+  const update = h.upgrades.slice(page ? pageMarks.get(page) ?? 0 : 0).findLast(u => u.containerName === 'voice-body');
+  return update?.content ?? page?.textObject.find(c => c.containerName === 'voice-body')?.content;
+};
+const voiceHint = h => {
+  const page = h.pages.findLast(p => p.textObject.some(c => c.containerName === 'voice-hint'));
+  const update = h.upgrades.slice(page ? pageMarks.get(page) ?? 0 : 0).findLast(u => u.containerName === 'voice-hint');
+  return update?.content ?? page?.textObject.find(c => c.containerName === 'voice-hint')?.content;
+};
 
 const moduleHarness = options => harness(15, false, 'tap', '', 0, false, '', '', '', options);
 // What the glasses show in a container: the latest page's text, or a newer in-place update of it
@@ -171,8 +184,12 @@ const mailFixture = () => {
     },
     thread: async () => ({ subject: item.subject, messages }),
     read: async () => { item.unread = false; return { ok: true }; },
+    modify: async (account, threadId, action) => { actions.push({ account, threadId, action }); return { ok: true }; },
+    compose: async (account, id, mode) => ({ to: '"Test Desk" <desk@example.test>', cc: mode === 'replyAll' ? 'team@example.test' : '', subject: mode === 'forward' ? `Fwd: ${item.subject}` : `Re: ${item.subject}` }),
+    send: async draft => { sent.push(draft); return { ok: true, id: 'fixture-sent' }; },
   };
-  return { fixture, messages, requests };
+  const actions = [], sent = [];
+  return { fixture, messages, requests, actions, sent };
 };
 
 function chatFixture() {
@@ -965,51 +982,60 @@ test('working words last five seconds and Braille patterns are distinct', () => 
   assert.equal(new Set(statusExports.SPINNER.map(s => JSON.stringify(statusExports.statusPixels(s)))).size, 10);
 });
 
-test('Bluetooth keyboard: arrows and Enter drive the glasses, letters type a reply that Enter reviews and sends', async () => {
+const cursorRow = h => (h.upgrades.findLast(u => u.containerName === 'menu-cursor') ?? container(h, 'menu-cursor')).content.split('\n').findIndex(row => row.startsWith('>'));
+const typeInto = (h, id, value) => { const el = h.elements.get(id); el.value = value; el.listeners.input?.(); return h.flush(); };
+const inField = id => ({ target: { tagName: id === 'compose-body' || id === 'reply-text' ? 'TEXTAREA' : 'INPUT', id, blur() {} } });
+
+test('Gmail keys: j/k move, o opens, r opens a reply on the glasses, Enter reviews and Enter sends once', async () => {
   const h = await harness(3, true, 'hold');
-  const cursorRow = () => container(h, 'menu-cursor').content.split('\n').findIndex(row => row.startsWith('>'));
-  const start = cursorRow();
-  await h.key('ArrowDown');
-  assert.equal(h.upgrades.findLast(u => u.containerName === 'menu-cursor').content.split('\n').findIndex(row => row.startsWith('>')), start + 1);
-  // Move to the first session and open it with Enter.
-  while (h.upgrades.findLast(u => u.containerName === 'menu-cursor').content.split('\n').findIndex(row => row.startsWith('>')) < 3) await h.key('ArrowDown');
+  const start = cursorRow(h);
+  await h.key('j');
+  assert.equal(cursorRow(h), start + 1);
+  await h.key('k');
+  assert.equal(cursorRow(h), start);
+  while (cursorRow(h) < 3) await h.key('ArrowDown');
   const pages = h.pages.length;
-  await h.key('Enter');
+  await h.key('o');
   assert.ok(h.pages.length > pages);
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'hint'), 'a session reader is open');
-  // The first letter starts a reply in the phone's box (and focuses it, so on a phone the rest,
-  // spaces included, types there natively); Enter in the box reviews, Enter again sends once.
-  await h.key('H');
-  const draft = h.elements.get('reply-text');
-  assert.equal(draft.value, 'H');
-  draft.value = 'Hi there';
-  assert.equal(h.elements.get('composer').hidden, false);
-  const inBox = { target: { tagName: 'TEXTAREA', id: 'reply-text', blur() {} } };
-  await h.key('Enter', inBox);
-  assert.equal(h.elements.get('send-reply').hidden, false);
+  // A letter alone does nothing now; r opens the reply on the glasses.
+  await h.key('x');
+  assert.equal(h.elements.get('reply-text').value, '');
+  await h.key('r');
+  assert.match(voiceBody(h), /^Reply to: Session 0/);
+  assert.equal(voiceHint(h), 'Enter review · Esc close');
+  await typeInto(h, 'reply-text', 'Hi there');
+  assert.match(voiceBody(h), /Hi there\|$/);
+  // Shift+Enter is a new line in the box; Enter reviews; Enter again sends once.
+  await h.key('Enter', { ...inField('reply-text'), shiftKey: true });
+  assert.equal(voiceHint(h), 'Enter review · Esc close');
+  await h.key('Enter', inField('reply-text'));
+  assert.equal(voiceHint(h), 'Enter send · Esc edit');
   assert.equal(h.sends.length, 0);
-  await h.key('Enter', inBox);
+  await h.key('Enter');
+  await h.key('Enter');
   assert.deepEqual(h.sends.map(s => s.text), ['Hi there']);
-  // Shift+Enter in the box is a new line, not a send.
-  await h.key('Enter', { ...inBox, shiftKey: true });
-  assert.equal(h.sends.length, 1);
-  // Esc goes back to the list.
-  await h.key('Escape');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'hint'), 'back in the reader after sending');
+  // u goes back to the list; Esc on a module list never closes the app.
+  await h.key('u');
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'));
+  await h.key('Escape');
+  assert.equal(h.exited(), 0);
 });
 
-test('Bluetooth keyboard: Space held is tap-and-hold, its release ends the recording', async () => {
+test('Gmail keys: Space and Shift+Space page the reader; voice stays on the glasses hold', async () => {
   const h = await harness(2, true, 'hold');
+  h.api.thread = async () => ({ text: Array.from({ length: 40 }, (_, i) => `> Line ${i + 1}`).join('\n') });
   await h.pick(2);
   const pages = h.pages.length;
+  const before = container(h, 'body').content;
+  await h.key(' ', { shiftKey: true });
+  const earlier = container(h, 'body').content;
+  assert.notEqual(earlier, before);
   await h.key(' ');
-  assert.equal(h.pages.length, pages + 1);
-  assert.equal(h.pages.at(-1).textObject.find(c => c.containerName === 'voice-hint').content, 'Listening… release to review');
-  await h.key(' ', { repeat: true });
-  h.audio();
-  await h.keyup(' ');
-  assert.deepEqual(h.mic, [true, false]);
-  assert.equal(h.transcriptions.length, 1);
+  assert.equal(container(h, 'body').content, before);
+  assert.equal(h.pages.length, pages, 'paging rewrites the page in place');
+  assert.deepEqual(h.mic, []);
 });
 
 test('a read-only Orca chat shows [Read-only] and takes no typed or held reply', async () => {
@@ -1021,24 +1047,20 @@ test('a read-only Orca chat shows [Read-only] and takes no typed or held reply',
   assert.match(container(h, 'hint').content, /\[Read-only\]/);
   assert.doesNotMatch(container(h, 'hint').content, /Tap&Hold/);
   assert.equal(h.elements.get('composer').hidden, true);
-  await h.key('x');
-  assert.equal(h.elements.get('reply-text').value, '');
   const pages = h.pages.length;
-  await h.key(' ');
-  await h.keyup(' ');
-  assert.equal(h.pages.length, pages);
+  await h.key('r');
+  assert.equal(h.pages.length, pages, 'no reply page');
   assert.deepEqual(h.mic, []);
 });
 
-test('Bluetooth keyboard: typing in a Chat reader replies to that chat through the phone box', async () => {
+test('Gmail keys: r in a Chat reader replies to that chat from the glasses', async () => {
   const { chat, sends } = chatFixture();
   const h = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat });
   await h.pickRow(2);
-  for (const letter of 'ok') await h.key(letter);
-  assert.equal(h.elements.get('reply-text').value, 'ok');
-  const inBox = { target: { tagName: 'TEXTAREA', id: 'reply-text', blur() {} } };
-  await h.key('Enter', inBox);
-  await h.key('Enter', inBox);
+  await h.key('r');
+  await typeInto(h, 'reply-text', 'ok');
+  await h.key('Enter', inField('reply-text'));
+  await h.key('Enter');
   assert.deepEqual(sends, [{ id: 'fixture-0', text: 'ok' }]);
 });
 
@@ -1054,6 +1076,120 @@ test('Bluetooth keyboard: typing in the Email label picker searches labels', asy
   assert.match(picker, /bull/);
   assert.match(picker, /Bulletins/);
   assert.doesNotMatch(picker, /\] Inbox/);
+});
+
+const emailHarness = fixture => moduleHarness({ capabilities: { modules: ['coding', 'email'] }, storage: { module: 'email' }, mail: fixture });
+
+test('Gmail c: a new mail is typed on the glasses, Ctrl+Enter reviews, Enter sends once, Esc keeps the draft', async () => {
+  const { fixture, sent } = mailFixture();
+  const h = await emailHarness(fixture);
+  await h.key('c');
+  assert.equal(h.elements.get('mail-compose').hidden, false);
+  assert.match(voiceBody(h), /^New message\nTo: \|\nCc: \nSubject: \n/);
+  assert.equal(voiceHint(h), 'Ctrl+Enter review · Esc close');
+  // Ctrl+Enter with no address: a note, still editing.
+  await h.key('Enter', { ...inField('compose-to'), ctrlKey: true });
+  assert.equal(voiceHint(h), 'Add a recipient first');
+  await typeInto(h, 'compose-to', 'friend@example.test');
+  h.elements.get('compose-subject').listeners.focus();
+  await typeInto(h, 'compose-subject', 'Plan');
+  assert.match(voiceBody(h), /To: friend@example\.test\nCc: \nSubject: Plan\|/);
+  h.elements.get('compose-body').listeners.focus();
+  await typeInto(h, 'compose-body', 'Line one');
+  // Enter in the message is a new line, not a review.
+  await h.key('Enter', inField('compose-body'));
+  assert.equal(voiceHint(h), 'Ctrl+Enter review · Esc close');
+  // Esc closes and keeps the draft; c opens it again with the text.
+  await h.key('Escape', inField('compose-body'));
+  assert.equal(h.elements.get('mail-compose').hidden, true);
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'));
+  await h.key('c');
+  assert.match(voiceBody(h), /Subject: Plan\n\nLine one\|$/);
+  await h.key('Enter', { ...inField('compose-body'), ctrlKey: true });
+  assert.equal(voiceHint(h), 'Enter send · Esc edit');
+  assert.match(voiceBody(h), /^New message\nTo: friend@example\.test/);
+  // Typing is ignored on the review; Esc goes back to editing; Ctrl+Enter, then Enter sends.
+  await h.key('Escape');
+  assert.equal(voiceHint(h), 'Ctrl+Enter review · Esc close');
+  await h.key('Enter', { ...inField('compose-body'), ctrlKey: true });
+  await h.key('Enter');
+  await h.key('Enter');
+  assert.equal(sent.length, 1);
+  const [draft] = sent;
+  assert.deepEqual({ ...draft, sendId: typeof draft.sendId }, { account: 'work', mode: 'new', threadId: undefined, to: 'friend@example.test', cc: '', subject: 'Plan', body: 'Line one', sendId: 'string' });
+  assert.equal(h.elements.get('mail-compose').hidden, true);
+  assert.equal(h.elements.get('compose-body').value, '');
+});
+
+test('Gmail r and a in a mail reader prefill the reply; the send carries the thread', async () => {
+  const { fixture, sent } = mailFixture();
+  const h = await emailHarness(fixture);
+  await h.pickRow(2);
+  await h.key('a');
+  await h.flush();
+  assert.match(voiceBody(h), /^Reply all: Field survey\nTo: "Test Desk" <desk@example\.test>\nCc: team@example\.test\nSubject: Re: Field survey\n\n\|$/);
+  await typeInto(h, 'compose-body', 'Thanks');
+  await h.key('Enter', { ...inField('compose-body'), ctrlKey: true });
+  await h.key('Enter');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].mode, 'replyAll');
+  assert.equal(sent[0].threadId, 'page0-0');
+  assert.equal(sent[0].body, 'Thanks');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'hint'), 'back in the mail reader');
+});
+
+test('Gmail e, #, Shift+U and z act on the thread under the cursor or in the reader', async () => {
+  const { fixture, actions } = mailFixture();
+  const read = fixture.read;
+  fixture.read = async (account, threadId) => { actions.push({ account, threadId, action: 'read' }); return read(account, threadId); };
+  const h = await emailHarness(fixture);
+  // Row 0 is the module, row 1 Filter by Label; move to the first thread.
+  while (cursorRow(h) < 2) await h.key('j');
+  await h.key('e');
+  assert.deepEqual(actions.at(-1), { account: 'work', threadId: 'page0-0', action: 'archive' });
+  assert.match(h.upgrades.findLast(u => u.containerName === 'menu-count').content, /Archived · z undo/);
+  await h.key('z');
+  assert.deepEqual(actions.at(-1), { account: 'work', threadId: 'page0-0', action: 'unarchive' });
+  // In the reader: # moves to Trash and goes back to the list.
+  await h.key('o');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'hint'));
+  await h.key('#');
+  assert.equal(actions.at(-1).action, 'trash');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'), 'back on the list');
+  // s stars without leaving; Shift+U marks unread.
+  await h.key('o');
+  await h.key('s');
+  assert.equal(actions.at(-1).action, 'star');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'hint'), 'still in the reader');
+  await h.key('U');
+  assert.equal(actions.at(-1).action, 'unread');
+  // z undoes the unread (through the read route).
+  await h.key('z');
+  assert.equal(actions.at(-1).action, 'read');
+  // A second z has nothing left to undo.
+  const count = actions.length;
+  await h.key('z');
+  assert.equal(actions.length, count);
+});
+
+test('Gmail j in a mail reader opens the next thread of the list', async () => {
+  const { fixture } = mailFixture();
+  const opened = [];
+  const thread = fixture.thread;
+  fixture.thread = async (account, id) => { opened.push(id); return thread(account, id); };
+  const h = await emailHarness(fixture);
+  await h.pickRow(2);
+  await h.key('j');
+  await h.key('k');
+  assert.deepEqual(opened, ['page0-0', 'page0-1', 'page0-0']);
+});
+
+test('? shows the keyboard page and any back returns', async () => {
+  const h = await harness(2);
+  await h.key('?');
+  assert.match(container(h, 'body').content, /r reply · a reply all/);
+  await h.key('Escape');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'));
 });
 
 test('hold opens a full-screen voice page; release reviews; only explicit send submits once', async () => {

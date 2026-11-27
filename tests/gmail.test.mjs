@@ -14,10 +14,15 @@ test('Gmail rejects all disallowed operations before any transport call', async 
   });
   const mutation = { removeLabelIds: ['UNREAD'] };
   for (const [method, path, body] of [
-    ['POST', '/messages/send', {}], ['POST', '/drafts', {}], ['GET', '/drafts'],
-    ['POST', '/threads/abc/trash', {}], ['DELETE', '/threads/abc'],
-    ['POST', '/threads/abc/modify', { addLabelIds: ['UNREAD'] }],
-    ['POST', '/threads/abc/modify', { removeLabelIds: ['INBOX'] }],
+    ['POST', '/messages/send', {}], ['POST', '/messages/send', { raw: 'a b' }], ['POST', '/messages/send', { raw: 'abc', extra: 1 }],
+    ['POST', '/messages/send', { raw: 'abc', threadId: '../x' }], ['POST', '/messages/send', { raw: 'x'.repeat(200_001) }],
+    ['POST', '/drafts', {}], ['GET', '/drafts'], ['POST', '/messages/abc/send', { raw: 'abc' }],
+    ['POST', '/threads/abc/trash', {}], ['DELETE', '/threads/abc'], ['POST', '/threads/abc/delete'],
+    ['POST', '/messages/abc/trash'], ['POST', '/threads/abc/untrash', { x: 1 }],
+    ['POST', '/threads/abc/modify', { addLabelIds: ['SPAM'] }],
+    ['POST', '/threads/abc/modify', { addLabelIds: ['TRASH'] }],
+    ['POST', '/threads/abc/modify', { removeLabelIds: ['Label_1'] }],
+    ['POST', '/threads/abc/modify', { addLabelIds: ['INBOX'], removeLabelIds: ['UNREAD'] }],
     ['POST', '/threads/abc/modify', { removeLabelIds: ['UNREAD', 'INBOX'] }],
     ['POST', '/threads/abc/modify', { ...mutation, addLabelIds: [] }],
     ['POST', '/threads/abc/modify', { ...mutation, extra: 1 }],
@@ -53,6 +58,23 @@ test('Gmail accepts exactly the listed reads and the canonical unread removal', 
   assert(calls.slice(1, -1).every(c => c.method === 'GET' && c.body === undefined));
   assert.equal(calls.at(-1).headers.Authorization, 'Bearer access');
   assert.equal(calls.at(-1).body, '{"removeLabelIds":["UNREAD"]}');
+  // Keyboard actions (2026-11-27): one system label added or removed, trash/untrash, send.
+  const writes = [
+    [{ addLabelIds: ['UNREAD'] }, '{"addLabelIds":["UNREAD"]}'], [{ removeLabelIds: ['INBOX'] }, '{"removeLabelIds":["INBOX"]}'],
+    [{ addLabelIds: ['INBOX'] }, '{"addLabelIds":["INBOX"]}'], [{ addLabelIds: ['STARRED'] }, '{"addLabelIds":["STARRED"]}'],
+    [{ removeLabelIds: ['STARRED'] }, '{"removeLabelIds":["STARRED"]}'],
+  ];
+  for (const [body, serialized] of writes) {
+    await gmail('POST', '/threads/abc/modify', { body });
+    assert.equal(calls.at(-1).body, serialized);
+  }
+  for (const path of ['/threads/abc/trash', '/threads/abc/untrash']) {
+    await gmail('POST', path);
+    assert.equal(new URL(calls.at(-1).url).pathname, `/gmail/v1/users/me${path}`);
+    assert.equal(calls.at(-1).body, undefined);
+  }
+  await gmail('POST', '/messages/send', { body: { raw: 'QUJD', threadId: 'abc' } });
+  assert.equal(calls.at(-1).body, '{"raw":"QUJD","threadId":"abc"}');
 });
 
 test('Gmail caches until expiry and exponentially backs off on 429 and 403 rate limits', async () => {

@@ -269,14 +269,14 @@ consent, and show the account letter in the list. No other change.
 
 | # | Decision | Ruling |
 |---|---|---|
-| 1 | Gmail scope | `gmail.modify`, used only to clear the unread flag; the endpoint allowlist (constraint 4) blocks everything else |
-| 2 | Replies and drafts | none: Email never sends or drafts |
-| 3 | Archive | none for now: "the app does not archive at all" |
+| 1 | Gmail scope | `gmail.modify`, used only to clear the unread flag; the endpoint allowlist (constraint 4) blocks everything else. **2026-11-27:** allowlist adds one-label modify (UNREAD, INBOX, STARRED), threads trash/untrash and messages.send; same scope, no new consent |
+| 2 | Replies and drafts | none: Email never sends or drafts. **Superseded 2026-11-27:** compose, reply, reply all, forward from the glasses with a Bluetooth keyboard (plain text; review, then one send per draft id) |
+| 3 | Archive | none for now: "the app does not archive at all". **Superseded 2026-11-27:** archive (e), delete to Trash (#), undo (z); never permanent delete |
 | 4 | Where | this repo (orca-glass), modules in one app |
 | 5 | Module switch | click on row 0 cycles |
 | 6 | Accounts | work first; personal later (E2) |
 | 7 | Read state | Gmail sync: opening a thread marks it read in Gmail |
-| 8 | Mark unread | not built (not requested) |
+| 8 | Mark unread | not built (not requested). **2026-11-27:** Shift+U unread, Shift+I read, s star |
 
 ## Approvals
 

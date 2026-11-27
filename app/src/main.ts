@@ -16,7 +16,7 @@ import {
   type EvenAppBridge,
   type EvenHubEvent,
 } from '@evenrealities/even_hub_sdk';
-import { api, currentBase, setApiLang, setConnection, setDemo, type ChatFeatures, type ChatItem, type ChoiceMenu, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
+import { api, currentBase, setApiLang, setConnection, setDemo, type ChatFeatures, type ChatItem, type ChoiceMenu, type MailAction, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
 import { parseCode, resolveBase } from './pairing';
 import { applyPage, detectLang, getLang, setLang, t as tr } from './i18n';
 import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth, type ReaderPage } from './text';
@@ -29,6 +29,7 @@ import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, 
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, ChatReader, chatColumns, CHAT_NETWORKS_KEY, CHAT_TRANSLATE_KEY } from './chat';
+import { composeText, CURSOR, CURSOR_MARK, emptyFields, hasRecipient, MAIL_FIELDS, newSendId, sendError, type ComposeField, type ComposeFields, type MailMode } from './compose';
 
 // 画面 576x288。上に見出し(テキスト)、下に本文(リスト or テキスト)の2段構成で統一する。
 const HEAD = { containerID: 1, containerName: 'head', xPosition: 0, yPosition: 0, width: 576, height: 36 };
@@ -63,7 +64,7 @@ const TEXT_BYTES = 999;
 const POLL_MS = 1000;
 
 type Screen =
-  | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
+  | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; firstItem?: number; mailItems?: MailThread[]; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
   | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
@@ -958,7 +959,7 @@ function home(page = positions.coding.page, selected = positions.coding.cursor, 
       return i === 0 ? { marker: '*', title: tr('filterAgent'), right: `[${providerFilterLabel()}]` }
         : i === 1 ? { marker: '*', title: tr('filterWorkspace'), right: `[${workspaceFilter}]` } : { marker: '', title: a.label, right: '' };
     });
-    await showModuleList('coding', page, selected, { columns, count: tr('sessionCount', allThreads.length),
+    await showModuleList('coding', page, selected, { columns, count: tr('sessionCount', allThreads.length), firstItem: 2,
       onPreviousPage: page > 0 ? () => home(page - 1, -1) : undefined,
       onNextPage: page + 1 < pageCount ? () => home(page + 1, 1) : undefined,
       menuActions: [
@@ -1018,7 +1019,9 @@ function mailListContent(result: MailListResult, page: number, loadingRow: boole
   const lead = mailLeadRows(result.mailbox, result.filterColumn);
   const columns = [...lead, ...result.items.map(item => mailColumns(item))];
   if (loadingRow) columns.push({ marker: '', title: tr('mailLoadingMore'), right: '', busy: true });
-  return { columns, count: tr('mailUnread', result.unread),
+  // firstItem/mailItems: the keyboard acts on the thread under the cursor and j/k in the reader
+  // move along these rows.
+  return { columns, count: tr('mailUnread', result.unread), firstItem: lead.length, mailItems: result.items,
     items: columns.map(row => `${row.marker || ' '} ${row.title} ${row.right}`),
     onPreviousPage: page > 0 ? () => mailHome(page - 1, -1) : undefined,
     onNextPage: result.hasMore ? () => mailHome(page + 1, 1) : undefined,
@@ -1119,7 +1122,7 @@ async function chatHome(page = positions.chat.page, selected = positions.chat.cu
     while (page > 0 && !result.items.length && !result.hasMore && active()) result = await chat.list(--page);
     if (!active()) return;
     const columns = [{ ...filter, right: result.filterColumn }, ...result.items.map(chatColumns)];
-    await showModuleList('chat', page, selected, { columns, count: tr('chatUnread', result.unread),
+    await showModuleList('chat', page, selected, { columns, count: tr('chatUnread', result.unread), firstItem: 1,
       items: columns.map(row => `${row.marker} ${row.title} ${row.right}`),
       onPreviousPage: page > 0 ? () => chatHome(page - 1, -1) : undefined,
       onNextPage: result.hasMore ? () => chatHome(page + 1, 1) : undefined,
@@ -1450,6 +1453,381 @@ async function openChat(item: ChatItem) {
   } catch {
     if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('chat'), text: tr('chatUnavailable'), onBack: back, onClick: back });
   }
+}
+
+// ---- Keyboard: Gmail shortcuts, mail actions and typed drafts (Eugene, 2026-11-27) ----
+// "use standard Gmail keyboard shortcuts as much as possible": the PC keys with keyboard
+// shortcuts on. Lists: j/k (or Up/Down) move, o/Enter open. Readers: j/k open the next/previous
+// row of the list they came from, Space/Shift+Space page, u/Esc back. Email: c compose, r reply,
+// a reply all, f forward, e archive, # delete (to Trash), Shift+U unread, Shift+I read, s star,
+// z undo. Coding and Chat: r types a reply. ? shows the keys. Drafts open on the glasses; the
+// phone page holds the text boxes, so the browser does the editing. A mail draft reviews with
+// Ctrl+Enter (as Gmail sends with it) and a reply with Enter; Enter on the review sends once.
+type Draft = {
+  key: string; title: string; fields: ComposeFields; sendId: string; focus: ComposeField;
+  mail?: { account: string; mode: MailMode; threadId?: string };
+  send?: (text: string) => Promise<void>; // a Coding or Chat reply
+  loading?: boolean;
+};
+type Composing = { draft: Draft; background: Screen; screen: TextScreen; review: boolean; sending: boolean; note: string;
+  focus: ComposeField; writes: Promise<void>; queued: boolean };
+// A closed draft is kept (as Gmail keeps one) until it is sent; the same key opens it again.
+const drafts = new Map<string, Draft>();
+let composing: Composing | null = null;
+// Read through a call: after an await TypeScript would keep an earlier narrowing of `composing`.
+const activeDraft = () => composing?.draft;
+const COMPOSE_IDS: Record<ComposeField, string> = { to: 'compose-to', cc: 'compose-cc', subject: 'compose-subject', body: 'compose-body' };
+const composeFieldsOf = (draft: Draft): ComposeField[] => draft.mail ? MAIL_FIELDS : ['body'];
+const fieldId = (draft: Draft, field: ComposeField) => draft.mail ? COMPOSE_IDS[field] : 'reply-text';
+const fieldElement = (draft: Draft, field: ComposeField) =>
+  document.getElementById(fieldId(draft, field)) as (HTMLInputElement | HTMLTextAreaElement | null);
+
+function nativeMeasure() {
+  const ctx = document.createElement?.('canvas').getContext('2d');
+  if (ctx) ctx.font = '21px Arial';
+  return (text: string) => glassTextWidth(text, ch => ctx ? ctx.measureText(ch).width : 21);
+}
+
+function readDraftFields(c: Composing) {
+  for (const field of composeFieldsOf(c.draft)) {
+    const el = fieldElement(c.draft, field);
+    if (el) c.draft.fields[field] = el.value;
+  }
+}
+
+// The page of the draft that holds the cursor while typing; the first page on review.
+function composeContent(c: Composing) {
+  readDraftFields(c);
+  const editing = !c.review && !c.sending;
+  const el = editing ? fieldElement(c.draft, c.focus) : null;
+  const cursor = typeof el?.selectionStart === 'number' ? el.selectionStart : undefined;
+  const raw = composeText(c.draft.title, c.draft.fields, !!c.draft.mail, editing ? c.focus : undefined, cursor);
+  const pages = readerPages(raw, nativeMeasure(), READER_WRAP_WIDTH, READER_ROWS);
+  const page = editing ? pages.find(p => p.text.includes(CURSOR_MARK)) ?? pages[pages.length - 1] : pages[0];
+  const hint = c.note || (c.sending ? tr('sending') : c.review ? tr('composeReviewHint')
+    : c.draft.loading ? tr('composeLoading') : tr(c.draft.mail ? 'composeHintMail' : 'composeHintReply'));
+  return { text: page.text.replace(CURSOR_MARK, CURSOR) || ' ', hint };
+}
+
+// Coalesced and serialized: one write in flight, at most one queued behind it, so fast typing
+// sends only the latest text.
+function renderCompose() {
+  const c = composing;
+  if (!c) return Promise.resolve();
+  if (c.queued) return c.writes;
+  c.queued = true;
+  c.writes = c.writes.then(async () => {
+    c.queued = false;
+    if (composing !== c) return;
+    const { text, hint } = composeContent(c);
+    const s = c.screen;
+    const before = { text: s.text, hint: s.voiceHint };
+    Object.assign(s, { text, voiceHint: hint });
+    if (current !== s) { await show(s); return; }
+    if (before.text !== text && !await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: VOICE_BODY.containerID, containerName: VOICE_BODY.containerName, content: voiceBodyText(s) })))
+      throw new Error(tr('screenRejected'));
+    if (before.hint !== hint && !await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: VOICE_HINT.containerID, containerName: VOICE_HINT.containerName, content: hint || ' ', textColor: textBrightness() })))
+      throw new Error(tr('screenRejected'));
+  }).catch(e => diag((e as Error).message));
+  return c.writes;
+}
+
+function focusComposeField(c: Composing, field: ComposeField, atEnd: boolean) {
+  c.focus = field;
+  const el = fieldElement(c.draft, field);
+  el?.focus?.();
+  if (atEnd && el) { try { el.setSelectionRange?.(el.value.length, el.value.length); } catch { /* not a text box */ } }
+}
+
+async function openCompose(draft: Draft) {
+  const background = current;
+  if (composing || recording !== null || !background) return;
+  await (background.kind === 'text' ? readerWrites : sessionCursorWrites);
+  if (current !== background || composing) return;
+  if (background.kind === 'text') background.reading = true;
+  clearInterval(poll);
+  clearInterval(statusAnimation);
+  clearTimeout(mailRetryTimer);
+  const screen: TextScreen = { kind: 'text', title: ' ', text: ' ', voice: true, voiceHint: ' ' };
+  const c: Composing = { draft, background, screen, review: false, sending: false, note: '', focus: draft.focus, writes: Promise.resolve(), queued: false };
+  composing = c;
+  // Glasses gestures: a tap reviews (then sends), a double tap goes back.
+  screen.onClick = () => { if (c.review) void composeSend(); else composeReview(); };
+  screen.onBack = () => { if (c.sending) return; if (c.review) composeEdit(); else void closeCompose(); };
+  for (const field of composeFieldsOf(draft)) {
+    const el = fieldElement(draft, field);
+    if (el) el.value = draft.fields[field];
+  }
+  if (draft.mail) {
+    document.getElementById('mail-compose')!.hidden = false;
+    document.getElementById('mail-compose-title')!.textContent = draft.title;
+  }
+  focusComposeField(c, draft.focus, true);
+  await renderCompose();
+}
+
+function composeReview() {
+  const c = composing;
+  if (!c || c.sending || c.review || c.draft.loading) return;
+  readDraftFields(c);
+  const missing = c.draft.mail ? !hasRecipient(c.draft.fields) : !c.draft.fields.body.trim();
+  if (missing) { c.note = tr(c.draft.mail ? 'composeNoRecipient' : 'composeEmpty'); void renderCompose(); return; }
+  c.note = '';
+  c.review = true;
+  // Out of the text box, so Enter reaches the window as "send" rather than a new line.
+  fieldElement(c.draft, c.focus)?.blur?.();
+  void renderCompose();
+}
+
+function composeEdit() {
+  const c = composing;
+  if (!c || c.sending) return;
+  c.review = false;
+  c.note = '';
+  focusComposeField(c, c.focus, false);
+  void renderCompose();
+}
+
+async function composeSend() {
+  const c = composing;
+  if (!c || !c.review || c.sending) return;
+  readDraftFields(c);
+  const { draft } = c;
+  c.sending = true;
+  c.note = '';
+  await renderCompose();
+  try {
+    if (draft.mail) {
+      const { account, mode, threadId } = draft.mail;
+      const result = await api.mail.send({ account, mode, threadId, ...draft.fields, sendId: draft.sendId });
+      if (!result.ok) throw new Error('network');
+    } else await draft.send!(draft.fields.body.trim());
+  } catch (e) {
+    if (composing !== c) return;
+    c.sending = false;
+    const message = (e as Error).message;
+    // The same send id is kept, so Enter tries again without any risk of a second mail.
+    c.note = draft.mail ? sendError(message) : tr('composeNotSent', message);
+    await renderCompose();
+    return;
+  }
+  drafts.delete(draft.key);
+  for (const field of composeFieldsOf(draft)) {
+    const el = fieldElement(draft, field);
+    if (el) el.value = '';
+  }
+  c.sending = false;
+  await closeCompose(true);
+}
+
+async function closeCompose(sent = false) {
+  const c = composing;
+  if (!c) return;
+  readDraftFields(c);
+  composing = null;
+  if (!sent) drafts.set(c.draft.key, { ...c.draft, fields: { ...c.draft.fields }, focus: c.focus, loading: false });
+  fieldElement(c.draft, c.focus)?.blur?.();
+  if (c.draft.mail) document.getElementById('mail-compose')!.hidden = true;
+  await c.writes;
+  if (current !== c.screen) return;
+  const background = c.background;
+  if (background.kind === 'text') Object.assign(background, { reading: false, tail: true, offset: undefined, openAtResponse: false, pageTarget: undefined, pageWriting: false });
+  try {
+    if (background.kind === 'list' && background.module) await showModule();
+    else await show(background);
+  } catch (e) { diag((e as Error).message); void showModule(); return; }
+  if (!sent) return;
+  if (background.kind === 'text' && current === background) {
+    void writePanel(tr('composeSent'), () => current === background);
+    void refreshReader(background);
+  } else if (background.kind === 'list' && background.module === 'email') listToast(tr('composeSent'));
+}
+
+const MAIL_MODE_LABEL = { new: 'composeNew', reply: 'composeReply', replyAll: 'composeReplyAll', forward: 'composeForward' } as const;
+
+async function startMailDraft(mode: MailMode, thread?: MailThread) {
+  if (composing) return;
+  const account = thread?.account ?? mail.currentMailbox();
+  if (!account || (mode !== 'new' && !thread)) return;
+  const key = mode === 'new' ? `mail:new:${account}` : `mail:${mode}:${account}:${thread!.id}`;
+  const saved = drafts.get(key);
+  if (saved) { await openCompose(saved); return; }
+  const where = thread ? thread.subject.replace(/\s+/g, ' ').trim() : mail.mailboxName();
+  const label = tr(MAIL_MODE_LABEL[mode]);
+  const draft: Draft = {
+    key, title: where ? tr('composeTitle', label, where) : label, fields: emptyFields(), sendId: newSendId(),
+    focus: mode === 'reply' || mode === 'replyAll' ? 'body' : 'to', mail: { account, mode, threadId: thread?.id }, loading: mode !== 'new',
+  };
+  await openCompose(draft);
+  if (mode === 'new') return;
+  let failed = false;
+  try {
+    const prefill = await api.mail.compose(account, thread!.id, mode);
+    // Fill only what was not typed while the prefill was loading.
+    for (const field of ['to', 'cc', 'subject'] as const) {
+      const value = typeof prefill[field] === 'string' ? prefill[field] : '';
+      const el = activeDraft() === draft ? fieldElement(draft, field) : null;
+      if (el && !el.value) el.value = value;
+      if (!draft.fields[field]) draft.fields[field] = value;
+    }
+  } catch { failed = true; }
+  draft.loading = false;
+  const kept = drafts.get(key);
+  if (kept && activeDraft() !== draft) Object.assign(kept, { fields: { ...draft.fields, ...kept.fields, to: kept.fields.to || draft.fields.to, cc: kept.fields.cc || draft.fields.cc, subject: kept.fields.subject || draft.fields.subject }, loading: false });
+  const open = composing as Composing | null;
+  if (open?.draft === draft) {
+    if (failed) open.note = tr('composeLoadFailed');
+    void renderCompose();
+  }
+}
+
+// Coding and Chat: r opens the reply on the glasses; the phone's reply box holds the text.
+async function startReplyDraft() {
+  const target = replyTarget;
+  if (!target || composing) return;
+  const key = `reply:${target.key}`;
+  const draft = drafts.get(key) ?? { key, title: target.label, sendId: newSendId(), focus: 'body' as const,
+    fields: { ...emptyFields(), body: (document.getElementById('reply-text') as HTMLTextAreaElement).value } };
+  draft.send = target.send;
+  await openCompose(draft);
+}
+
+// A short note in the top-right count of a module list for four seconds ("Archived · z undo").
+let listToastTimer: ReturnType<typeof setTimeout> | undefined;
+function listToast(text: string) {
+  const list = current;
+  if (list?.kind !== 'list' || !list.module || list.compat) return;
+  clearTimeout(listToastTimer);
+  const write = (content: string) => {
+    sessionCursorWrites = sessionCursorWrites.then(async () => {
+      if (current !== list) return;
+      await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: MENU_COUNT.containerID, containerName: MENU_COUNT.containerName,
+        content: nativeRight(content, MENU_COUNT.width) }));
+    }).catch(e => diag((e as Error).message));
+  };
+  write(text);
+  listToastTimer = setTimeout(() => write(list.count ?? ''), 4000);
+}
+
+// Gmail's z: undo the last archive, delete or mark-unread for a minute afterwards.
+const MAIL_UNDO = { archive: 'unarchive', trash: 'untrash', unread: 'read' } as const;
+const MAIL_NOTES = { archive: 'mailArchived', trash: 'mailTrashed', unread: 'mailMarkedUnread', read: 'mailMarkedRead',
+  star: 'mailStarred', unstar: 'mailUnstarred', unarchive: 'mailUndone', untrash: 'mailUndone' } as const;
+const MAIL_UNDO_MS = 60_000;
+let lastMailAction: { thread: MailThread; undo: MailAction; at: number } | null = null;
+let mailActing = false;
+
+async function mailNote(text: string, screen: Screen | null) {
+  if (screen?.kind === 'text' && screen.reader && current === screen) await writePanel(text, () => current === screen);
+  else listToast(text);
+}
+
+function selectedMailThread(list: SessionMenuScreen): MailThread | undefined {
+  const i = (list.selected ?? 0) - 1 - (list.firstItem ?? 0);
+  return i >= 0 ? list.mailItems?.[i] : undefined;
+}
+
+async function mailAction(thread: MailThread, action: MailAction, undo = false) {
+  if (mailActing || composing) return;
+  mailActing = true;
+  const screen = current;
+  const fromReader = screen?.kind === 'text' && !!screen.reader;
+  try {
+    const result = action === 'read' ? await api.mail.read(thread.account, thread.id) : await api.mail.modify(thread.account, thread.id, action);
+    if (!result.ok) throw new Error('network');
+    if (action === 'read' || action === 'unread') thread.unread = action === 'unread';
+    if (action === 'star' || action === 'unstar') thread.starred = action === 'star';
+    const reverse = (MAIL_UNDO as Partial<Record<MailAction, MailAction>>)[action];
+    if (!undo) lastMailAction = reverse ? { thread, undo: reverse, at: Date.now() } : lastMailAction;
+    void phone?.refreshLabels();
+    const note = tr(undo ? 'mailUndone' : MAIL_NOTES[action]);
+    // Archive, delete and mark-unread leave the conversation, as Gmail does; star stays.
+    const leaves = action === 'archive' || action === 'trash' || action === 'unread';
+    if (fromReader && !leaves) { await mailNote(note, screen); return; }
+    if (screen?.kind === 'list' && screen.module === 'email' && current === screen) await mailHome(positions.email.page, undefined, screen);
+    else if (fromReader || current?.kind === 'list' && current.module === 'email') await mailHome();
+    listToast(note);
+  } catch (e) {
+    await mailNote(tr('mailActionFailed', (e as Error).message), current);
+  } finally { mailActing = false; }
+}
+
+async function mailUndo() {
+  const last = lastMailAction;
+  if (!last || Date.now() - last.at > MAIL_UNDO_MS) { await mailNote(tr('mailNothingToUndo'), current); return; }
+  lastMailAction = null;
+  await mailAction(last.thread, last.undo, true);
+}
+
+// j/k in a reader: the next or previous row of the list it was opened from (Gmail's
+// older/newer conversation). Only rows on the list page that is cached; filter rows are skipped.
+function openNeighbor(delta: number) {
+  const s = current;
+  const cached = moduleCache.get(activeModule);
+  if (s?.kind !== 'text' || !s.reader || s.voice || !cached || cached.page !== positions[activeModule].page) return;
+  const i = positions[activeModule].cursor - 1 + delta;
+  if (i < (cached.content.firstItem ?? 0) || i >= cached.content.items.length) return;
+  positions[activeModule].cursor = i + 1;
+  cached.content.onPick(i);
+}
+
+// ?: the keys on the glasses; any key or gesture back returns.
+function showKeys() {
+  const back = current;
+  if (!back || composing || (back.kind === 'text' && back.voice)) return;
+  if (back.kind === 'text') back.reading = true;
+  const leave = () => {
+    if (back.kind === 'list' && back.module) { void showModule(); return; }
+    if (back.kind === 'text') Object.assign(back, { reading: false });
+    void show(back).catch(e => diag((e as Error).message));
+  };
+  void show({ kind: 'text', title: tr('keysTitle'), text: tr('keysHelp'), onBack: leave, onClick: leave });
+}
+
+// The Gmail key map outside text boxes. Returns true when the key was used.
+function gmailKey(ev: KeyboardEvent, s: Screen, glassEvent: (type: OsEventTypeList) => void): boolean {
+  const key = ev.key;
+  const list = s.kind === 'list' ? s : null;
+  const moduleList = list?.module ? list : null;
+  const reader = s.kind === 'text' && s.reader && !s.voice && !s.comparison ? s : null;
+  switch (key) {
+    case 'ArrowUp': glassEvent(OsEventTypeList.SCROLL_TOP_EVENT); return true;
+    case 'ArrowDown': glassEvent(OsEventTypeList.SCROLL_BOTTOM_EVENT); return true;
+    case 'j': case 'k':
+      if (reader) openNeighbor(key === 'j' ? 1 : -1);
+      else glassEvent(key === 'j' ? OsEventTypeList.SCROLL_BOTTOM_EVENT : OsEventTypeList.SCROLL_TOP_EVENT);
+      return true;
+    case 'Enter': case 'o': glassEvent(OsEventTypeList.CLICK_EVENT); return true;
+    // Back. A module list has no back, and the keyboard never closes the app.
+    case 'Escape': case 'Backspace': case 'u':
+      if (!moduleList) glassEvent(OsEventTypeList.DOUBLE_CLICK_EVENT);
+      return true;
+    case ' ':
+      if (reader) flipReader(reader, ev.shiftKey ? -1 : 1);
+      return true;
+    case 'Tab':
+      if (moduleList && !modulePending) cycleModule(moduleList);
+      return true;
+    case '?': showKeys(); return true;
+  }
+  const email = activeModule === 'email' && (!!moduleList || !!reader?.reader?.mail);
+  if (!email) {
+    if (key === 'r' && reader && replyTarget) { void startReplyDraft(); return true; }
+    return false;
+  }
+  if (key === 'c') { void startMailDraft('new'); return true; }
+  if (key === 'z') { void mailUndo(); return true; }
+  const thread = reader ? reader.reader!.mail : moduleList ? selectedMailThread(moduleList) : undefined;
+  if (!thread) return false;
+  const actions: Record<string, () => unknown> = {
+    r: () => startMailDraft('reply', thread), a: () => startMailDraft('replyAll', thread), f: () => startMailDraft('forward', thread),
+    e: () => mailAction(thread, 'archive'), '#': () => mailAction(thread, 'trash'),
+    U: () => mailAction(thread, 'unread'), I: () => mailAction(thread, 'read'),
+    s: () => mailAction(thread, thread.starred ? 'unstar' : 'star'),
+  };
+  if (!Object.hasOwn(actions, key)) return false;
+  void actions[key]();
+  return true;
 }
 
 async function repaintChat(screen: TextScreen, position: 'page' | 'line' = 'page') {
@@ -1997,6 +2375,8 @@ function onEvent(e: EvenHubEvent) {
     if (s.module || s.workspacePicker || s.agentPicker || s.textPicker) {
       const index = e.listEvent?.currentSelectItemIndex ?? s.selected ?? 0;
       if (s.module && index === 0) { cycleModule(s); return; }
+      // The opened row is the list position: back returns to it and j/k in the reader move from it.
+      if (s.module) positions[s.module].cursor = index;
       // Finish in-flight cursor writes before reusing BODY on the next page.
       void sessionCursorWrites.then(() => { if (current === s) s.onPick(index); });
     }
@@ -2205,16 +2585,49 @@ async function main() {
   document.getElementById('reply-form')!.addEventListener('submit', ev => { ev.preventDefault(); reviewDraft(); });
   send.addEventListener('click', () => { void sendDraft(); });
   // Bluetooth keyboard paired with the phone (Eugene, 2026-11-27). Keys reach this page only while
-  // it is open in the Even app. In a text box: Enter reviews then sends (Shift+Enter is a new line),
-  // Esc leaves the box. Elsewhere the keys drive the glasses: Up/Down swipe, Enter click, Esc or
-  // Backspace double-click (back), Space held = tap-and-hold (voice), Tab switches module on the home
-  // list. A letter in an open Coding session or chat starts a typed reply in the phone's reply box;
-  // in the Email label picker it searches labels.
+  // it is open in the Even app. Gmail's PC shortcuts drive the glasses (gmailKey above); a draft
+  // open on the glasses takes Enter/Ctrl+Enter/Esc; the label picker takes letters as a search.
+  // In the phone's reply box tapped by hand (no draft on the glasses), Enter reviews then sends
+  // as before. Space pages like Gmail now; voice stays on the glasses' tap-and-hold.
   const glassEvent = (eventType: OsEventTypeList) => onEvent({ sysEvent: { eventType } } as unknown as EvenHubEvent);
-  let spaceHeld = false;
+  // Every box of a draft redraws the glasses as it changes, including cursor moves.
+  for (const id of [...Object.values(COMPOSE_IDS), 'reply-text']) {
+    const el = document.getElementById(id);
+    for (const name of ['input', 'keyup', 'click', 'focus']) {
+      el?.addEventListener(name, () => {
+        const c = composing;
+        if (!c) return;
+        const field = composeFieldsOf(c.draft).find(key => fieldId(c.draft, key) === id);
+        if (name === 'focus' && field && !c.review) c.focus = field;
+        if (name === 'input') c.note = '';
+        void renderCompose();
+      });
+    }
+  }
+  document.addEventListener?.('selectionchange', () => { if (composing && !composing.review) void renderCompose(); });
   window.addEventListener('keydown', (ev: KeyboardEvent) => {
     const target = ev.target as HTMLElement | null;
     const editing = !!target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable === true);
+    const c = composing;
+    if (c) {
+      const inDraft = editing && composeFieldsOf(c.draft).some(field => fieldId(c.draft, field) === target!.id);
+      if (c.review) {
+        if (ev.key === 'Enter') { ev.preventDefault(); void composeSend(); }
+        else if (ev.key === 'Escape' || (!inDraft && ev.key === 'Backspace')) { ev.preventDefault(); composeEdit(); }
+        else if (inDraft) ev.preventDefault(); // no edits while the glasses show the review
+        return;
+      }
+      if (inDraft) {
+        if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey || (!c.draft.mail && !ev.shiftKey))) { ev.preventDefault(); composeReview(); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); void closeCompose(); }
+        return;
+      }
+      if (editing) return;
+      // A draft is open but no box has the focus (a tap elsewhere on the phone page).
+      if (ev.key === 'Enter') { ev.preventDefault(); composeEdit(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); void closeCompose(); }
+      return;
+    }
     if (editing) {
       if (target!.id === 'reply-text' && ev.key === 'Enter' && !ev.shiftKey) {
         ev.preventDefault();
@@ -2226,27 +2639,7 @@ async function main() {
     const s = current;
     if (!s) return;
     if (s.kind === 'list' && s.mailPicker && typeLabelSearch(ev.key, s.mailPicker.search)) { ev.preventDefault(); return; }
-    switch (ev.key) {
-      case 'ArrowUp': glassEvent(OsEventTypeList.SCROLL_TOP_EVENT); break;
-      case 'ArrowDown': glassEvent(OsEventTypeList.SCROLL_BOTTOM_EVENT); break;
-      case 'Enter': glassEvent(OsEventTypeList.CLICK_EVENT); break;
-      case 'Escape': case 'Backspace': glassEvent(OsEventTypeList.DOUBLE_CLICK_EVENT); break;
-      case 'Tab': if (s.kind === 'list' && s.module && !modulePending) cycleModule(s); break;
-      case ' ':
-        if (!ev.repeat && !spaceHeld) { spaceHeld = true; glassEvent(OsEventTypeList.LONG_PRESS_EVENT); }
-        break;
-      default:
-        if (ev.key.length !== 1 || !replyTarget || s.kind !== 'text' || !s.reader || s.voice) return;
-        draft.focus?.();
-        draft.value += ev.key;
-        draftChanged();
-    }
-    ev.preventDefault();
-  });
-  window.addEventListener('keyup', (ev: KeyboardEvent) => {
-    if (ev.key !== ' ' || !spaceHeld) return;
-    spaceHeld = false;
-    glassEvent(OsEventTypeList.LONG_PRESS_RELEASE_EVENT);
+    if (gmailKey(ev, s, glassEvent)) ev.preventDefault();
   });
   $('conn').addEventListener('submit', async (ev) => {
     ev.preventDefault();

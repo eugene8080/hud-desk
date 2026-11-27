@@ -158,9 +158,9 @@ test('Mail unions and pages labels in newest-first order, fetches visible header
   const first = (await get(route)).data;
   assert.deepEqual(first, { items: [
     { account: 'work', id: 'newest', from: 'Newest Sender', subject: example.newestSubject,
-      date: example.now - 10, unread: true, count: 2 },
+      date: example.now - 10, unread: true, starred: false, count: 2 },
     { account: 'work', id: 'middle', from: 'middle@example.test', subject: 'Middle',
-      date: example.now - 20, unread: false, count: 1 },
+      date: example.now - 20, unread: false, starred: false, count: 1 },
   ], hasMore: true, unread: 2, loading: false });
   const threadCalls = () => example.calls.filter(c => c.route.startsWith('/threads/'));
   assert.deepEqual(threadCalls().map(c => c.route), ['/threads/newest', '/threads/middle']);
@@ -259,4 +259,106 @@ test('A page whose thread summaries are still arriving is marked loading and com
   for (let i = 0; i < 10 && page?.items.length !== 2; i++) page = (await get(route)).data;
   assert.deepEqual(page.items.map(item => item.id), ['newest', 'middle']);
   assert.equal(page.loading, false);
+});
+
+// Keyboard mail actions, compose prefill and send (2026-11-27). Synthetic mailbox only.
+function actionFixture() {
+  const base = fixture();
+  const inbox = new Set(['newest', 'middle']);
+  const trashed = new Set();
+  const sent = [];
+  const transport = (url, options) => {
+    const { pathname } = new URL(url);
+    const route = pathname.replace('/gmail/v1/users/me', '');
+    if (route === '/threads' && new URL(url).searchParams.get('labelIds') === 'INBOX') {
+      base.calls.push({ route, searchParams: new URL(url).searchParams, method: options.method });
+      return Response.json({ threads: [...inbox].filter(id => !trashed.has(id)).map(id => ({ id })) });
+    }
+    if (route === '/threads/newest/modify' && options.body === '{"removeLabelIds":["INBOX"]}') { inbox.delete('newest'); return Response.json({ id: 'newest' }); }
+    if (route === '/threads/newest/modify' && options.body === '{"addLabelIds":["INBOX"]}') { inbox.add('newest'); return Response.json({ id: 'newest' }); }
+    if (route === '/threads/middle/trash') { trashed.add('middle'); return Response.json({ id: 'middle' }); }
+    if (route === '/threads/middle/untrash') { trashed.delete('middle'); return Response.json({ id: 'middle' }); }
+    if (route === '/threads/newest/modify' && /STARRED|"addLabelIds":\["UNREAD"\]/.test(options.body)) return Response.json({ id: 'newest' });
+    if (route === '/messages/send') { sent.push(JSON.parse(options.body)); return Response.json({ id: `sent-${sent.length}`, threadId: 'newest' }); }
+    if (route === '/threads/newest' && new URL(url).searchParams.get('format') === 'full') {
+      return Response.json({ messages: [{
+        id: 'reply', internalDate: String(base.now - 10), labelIds: ['INBOX'],
+        payload: { mimeType: 'text/plain', body: { data: Buffer.from('Line one\nLine two').toString('base64url') }, headers: [
+          { name: 'From', value: '"Newest Sender" <newest@example.test>' }, { name: 'Subject', value: 'Synthetic plan' },
+          { name: 'To', value: `${address}, other@example.test` }, { name: 'Cc', value: '"Cc Person" <cc@example.test>, fixture@example.test' },
+          { name: 'Message-ID', value: '<m2@example.test>' }, { name: 'References', value: '<m1@example.test>' },
+          { name: 'Date', value: 'Wed, 25 Nov 2026 10:00:00 +0000' },
+        ] },
+      }] });
+    }
+    return base.transport(url, options);
+  };
+  return { ...base, transport, inbox, trashed, sent };
+}
+const decodeRaw = raw => Buffer.from(raw, 'base64url').toString('utf8');
+const bodyOf = message => Buffer.from(message.split('\r\n\r\n')[1].replace(/\r\n/g, ''), 'base64').toString('utf8');
+
+test('Mail keyboard actions archive, trash, undo, mark unread and star through the allowlist', async t => {
+  const example = actionFixture();
+  const get = await serve(t, config, example);
+  const inbox = '/api/mail/threads?filter=work:INBOX&size=8';
+  assert.deepEqual((await get(inbox)).data.items.map(i => i.id), ['newest', 'middle']);
+  const act = (threadId, action) => get('/api/mail/modify', { method: 'POST', body: { account: 'work', threadId, action } });
+  assert.deepEqual((await act('newest', 'archive')).data, { ok: true });
+  assert.deepEqual((await get(inbox)).data.items.map(i => i.id), ['middle'], 'archived thread leaves the Inbox list at once');
+  assert.deepEqual((await act('newest', 'unarchive')).data, { ok: true });
+  assert.deepEqual((await get(inbox)).data.items.map(i => i.id), ['newest', 'middle'], 'undo puts it back');
+  assert.deepEqual((await act('middle', 'trash')).data, { ok: true });
+  assert.deepEqual((await get(inbox)).data.items.map(i => i.id), ['newest']);
+  assert.deepEqual((await act('middle', 'untrash')).data, { ok: true });
+  assert.deepEqual((await get(inbox)).data.items.map(i => i.id), ['newest', 'middle']);
+  for (const action of ['star', 'unstar', 'unread']) assert.deepEqual((await act('newest', action)).data, { ok: true }, action);
+  for (const action of ['delete', 'spam', '', undefined]) assert.equal((await act('newest', action)).status, 400, String(action));
+  assert.equal((await act('../x', 'archive')).status, 400);
+});
+
+test('Mail compose prefills reply, reply all and forward like Gmail, without your own address', async t => {
+  const example = actionFixture();
+  const get = await serve(t, config, example);
+  const compose = mode => get(`/api/mail/compose?account=work&id=newest&mode=${mode}`);
+  assert.deepEqual((await compose('reply')).data, { to: '"Newest Sender" <newest@example.test>', cc: '', subject: 'Re: Synthetic plan' });
+  assert.deepEqual((await compose('replyAll')).data, {
+    to: '"Newest Sender" <newest@example.test>, other@example.test', cc: '"Cc Person" <cc@example.test>', subject: 'Re: Synthetic plan' });
+  assert.deepEqual((await compose('forward')).data, { to: '', cc: '', subject: 'Fwd: Synthetic plan' });
+  assert.equal((await compose('new')).status, 400);
+});
+
+test('Mail send builds the message itself, threads replies, sends once per id and refuses header injection', async t => {
+  const example = actionFixture();
+  const get = await serve(t, config, example);
+  const send = body => get('/api/mail/send', { method: 'POST', body: { account: 'work', sendId: 'fixture-send-1', ...body } });
+  const reply = { mode: 'reply', threadId: 'newest', to: '"Newest Sender" <newest@example.test>', cc: '', subject: 'Re: Synthetic plan', body: 'Thanks, done.\nSecond line' };
+  assert.deepEqual((await send(reply)).data, { ok: true, id: 'sent-1' });
+  assert.deepEqual((await send(reply)).data, { ok: true, id: 'sent-1' }, 'the same send id never sends twice');
+  assert.equal(example.sent.length, 1);
+  assert.equal(example.sent[0].threadId, 'newest');
+  const message = decodeRaw(example.sent[0].raw);
+  const headers = message.split('\r\n\r\n')[0].split('\r\n');
+  assert.deepEqual(headers, ['To: "Newest Sender" <newest@example.test>', 'Subject: Re: Synthetic plan',
+    'In-Reply-To: <m2@example.test>', 'References: <m1@example.test> <m2@example.test>',
+    'MIME-Version: 1.0', 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64']);
+  const body = bodyOf(message);
+  assert.match(body, /^Thanks, done\.\r\nSecond line\r\n\r\nOn [^\r\n]+ GMT, "Newest Sender" <newest@example\.test> wrote:\r\n> Line one\r\n> Line two$/);
+  // New mail: no thread, non-ASCII subject encoded.
+  await send({ mode: 'new', sendId: 'fixture-send-2', to: 'a@example.test, B <b@example.test>', cc: 'c@example.test', subject: '測試 plan', body: 'Hi' });
+  const fresh = decodeRaw(example.sent[1].raw);
+  assert.equal(example.sent[1].threadId, undefined);
+  assert.match(fresh, /^To: a@example\.test, "B" <b@example\.test>\r\nCc: c@example\.test\r\nSubject: =\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=\r\n/);
+  // Forward: its own thread, the forwarded block below.
+  await send({ mode: 'forward', sendId: 'fixture-send-3', threadId: 'newest', to: 'd@example.test', subject: 'Fwd: Synthetic plan', body: 'FYI' });
+  assert.equal(example.sent[2].threadId, undefined);
+  assert.match(bodyOf(decodeRaw(example.sent[2].raw)), /FYI\r\n\r\n---------- Forwarded message ---------\r\nFrom: "Newest Sender"/);
+  // Refused before any Gmail call.
+  const before = example.sent.length;
+  for (const [field, value] of [['to', 'a@example.test\r\nBcc: x@example.test'], ['subject', 'Hi\r\nBcc: x@example.test'],
+    ['to', 'not-an-address'], ['to', ''], ['mode', 'draft'], ['sendId', 'x'], ['body', 'x'.repeat(50_001)]]) {
+    const result = await send({ mode: 'new', sendId: `fixture-bad-${field}`, to: 'a@example.test', subject: 's', body: 'b', [field]: value });
+    assert.equal(result.status, 400, `${field}=${String(value).slice(0, 20)}`);
+  }
+  assert.equal(example.sent.length, before);
 });

@@ -69,7 +69,11 @@ export type Usage = Record<string, { provider?: string; status: string; error?: 
 // address: the mailbox address (bridges before 1.0.62 send only the short letter).
 export type MailAccount = { id: string; short: string; address?: string; ok: boolean; error?: string };
 export type MailLabel = { id: string; name: string; unread: number };
-export type MailThread = { account: string; id: string; from: string; subject: string; date: number; unread: boolean; count: number };
+export type MailThread = { account: string; id: string; from: string; subject: string; date: number; unread: boolean; count: number; starred?: boolean };
+// Keyboard actions on a thread (2026-11-27); 'unarchive'/'untrash' undo 'archive'/'trash'.
+export type MailAction = 'archive' | 'unarchive' | 'trash' | 'untrash' | 'unread' | 'read' | 'star' | 'unstar';
+export type MailSend = { account: string; mode: 'new' | 'reply' | 'replyAll' | 'forward'; threadId?: string;
+  to: string; cc: string; subject: string; body: string; sendId: string };
 // loading: the bridge's cold-start wait ran out and the page is incomplete (bridges before 1.0.65 omit it).
 export type MailPage = { items: MailThread[]; hasMore: boolean; unread: number; loading?: boolean };
 export type MailConversation = { subject: string; messages: { id: string; from: string; to: string; cc: string; date: number; text: string }[] };
@@ -108,6 +112,11 @@ export const api = {
     threads: (filter: string[], page: number, size = 8) => call<MailPage>('GET', `/api/mail/threads?${new URLSearchParams({ filter: filter.join(','), page: String(page), size: String(size) })}`),
     thread: (account: string, id: string) => call<MailConversation>('GET', `/api/mail/thread?${new URLSearchParams({ account, id })}`),
     read: (account: string, threadId: string) => call<{ ok: boolean }>('POST', '/api/mail/read', { account, threadId }),
+    modify: (account: string, threadId: string, action: MailAction) => call<{ ok: boolean }>('POST', '/api/mail/modify', { account, threadId, action }),
+    compose: (account: string, id: string, mode: 'reply' | 'replyAll' | 'forward') =>
+      call<{ to: string; cc: string; subject: string }>('GET', `/api/mail/compose?${new URLSearchParams({ account, id, mode })}`),
+    // The bridge sends a given sendId at most once, so a retry after a lost answer is safe.
+    send: (draft: MailSend) => call<{ ok: boolean; id?: string }>('POST', '/api/mail/send', draft, 30000),
   },
   health: () => call<{ ok: boolean }>('GET', '/healthz'),
   threads: () => call<Thread[]>('GET', '/api/threads'),

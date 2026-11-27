@@ -17,15 +17,34 @@ export class MailError extends Error {
   }
 }
 
+// Thread label changes the Email module makes (Eugene, 2026-11-27, keyboard actions): one label,
+// added or removed. UNREAD: mark read / unread; INBOX: archive / undo; STARRED: star / unstar.
+const MODIFY_LABELS = new Set(['UNREAD', 'INBOX', 'STARRED']);
+// trash / untrash move a thread to and from Trash; permanent delete is never allowed.
+const TRASH_PATH = new RegExp(`^/threads/${ID}/(?:trash|untrash)$`);
+const SEND_PATH = '/messages/send';
+const MAX_RAW = 200_000;
+const exactKeys = (object, keys) => {
+  const own = Reflect.ownKeys(object);
+  return own.length === keys.length && keys.every(key => Object.hasOwn(object, key));
+};
+const oneLabel = labels => Array.isArray(labels) && labels.length === 1 && Reflect.ownKeys(labels).length === 2 &&
+  MODIFY_LABELS.has(labels[0]);
+
 function permittedBody(method, path, body) {
   if (method === 'GET' && GET_PATH.test(path) && body === undefined) return undefined;
-  if (method === 'POST' && MODIFY_PATH.test(path) &&
-      body && Reflect.ownKeys(body).length === 1 && Object.hasOwn(body, 'removeLabelIds')) {
-    const labels = body.removeLabelIds;
-    if (Array.isArray(labels) && labels.length === 1 && labels[0] === 'UNREAD' &&
-        Reflect.ownKeys(labels).length === 2) {
-      // Serialize the exact allowed mutation independently of the caller's object.
-      return '{"removeLabelIds":["UNREAD"]}';
+  if (method === 'POST' && MODIFY_PATH.test(path) && body && typeof body === 'object') {
+    // Serialize the exact allowed mutation independently of the caller's object.
+    if (exactKeys(body, ['removeLabelIds']) && oneLabel(body.removeLabelIds)) return JSON.stringify({ removeLabelIds: [body.removeLabelIds[0]] });
+    if (exactKeys(body, ['addLabelIds']) && oneLabel(body.addLabelIds)) return JSON.stringify({ addLabelIds: [body.addLabelIds[0]] });
+  }
+  if (method === 'POST' && TRASH_PATH.test(path) && body === undefined) return undefined;
+  // The raw message is built by bridge/mail-compose.mjs; only its envelope shape is checked here.
+  if (method === 'POST' && path === SEND_PATH && body && typeof body === 'object' &&
+      typeof body.raw === 'string' && body.raw.length > 0 && body.raw.length <= MAX_RAW && /^[A-Za-z0-9_-]+$/.test(body.raw)) {
+    if (exactKeys(body, ['raw'])) return JSON.stringify({ raw: body.raw });
+    if (exactKeys(body, ['raw', 'threadId']) && typeof body.threadId === 'string' && new RegExp(`^${ID}$`).test(body.threadId)) {
+      return JSON.stringify({ raw: body.raw, threadId: body.threadId });
     }
   }
   throw new MailError('disallowed', 400);

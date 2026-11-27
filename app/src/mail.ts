@@ -10,6 +10,8 @@ export type ReaderSource<Content extends ReaderContent = ReaderContent> = {
   hold?: () => void;
   refreshOnEnd?: boolean;
   afterDisplay?: () => Promise<void>;
+  // The Email thread a mail reader shows: keyboard actions (archive, reply, ...) apply to it.
+  mail?: MailThread;
 };
 
 export function mailDate(timestamp: number, now = new Date()): string {
@@ -272,6 +274,7 @@ export class Mail {
     let displayed = false;
     return {
       title: singleLine(thread.subject),
+      mail: thread,
       load: async () => mailReaderText(await api.mail.thread(thread.account, thread.id)),
       statusText: () => failed ? t('mailNotMarkedRead') : ' ',
       afterDisplay: async () => {

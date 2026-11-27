@@ -8,8 +8,8 @@ Coding:
 - Voice: hold for a full-screen voice page with local Whisper on your PC. Release to review, click to send, double-click to cancel. Answer numbered choices and Hermes clarify questions.
 
 Email (Gmail, when your bridge is set up for it):
-- Read only: no sending, drafts or archive. Opening a thread marks it read.
-- One or more Gmail accounts, one at a time (click the address to switch). Filter by Label on the glasses or the phone, with voice search on the glasses. Seven or eight threads a page, unread and read marks. Threads open at the newest message with quoted history removed and plain text reflowed.
+- Bluetooth keyboard with Gmail shortcuts: compose, reply, forward, archive, delete, undo; drafts show on the glasses.
+- One or more Gmail accounts, one at a time (click the address to switch). Filter by Label on the glasses or the phone, with voice search on the glasses. Threads open at the newest message with quoted history removed and plain text reflowed.
 
 Chat (Beeper Desktop, when set up): Filter by Network, voice replies, voice notes transcribed on click (Cantonese tuned), English translation.
 

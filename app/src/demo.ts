@@ -7,6 +7,8 @@ type Thread = { handle: string; title: string; agent: string; state: 'idle' | 'b
 const demoLabels = ['Inbox', 'Bulletins', 'Events', 'Logistics', 'Planning', 'Projects', 'Reading', 'Reference', 'Travel', 'Updates'];
 const demoSubjects = ['Field notes newsletter', 'Workshop schedule', 'Revised packing list', 'Trail opening', 'Reading list', 'A new meeting room', 'Map corrections', 'April notes', 'Survey draft', 'Volunteer schedule'];
 const marked = new Set<string>();
+// Keyboard actions in the demo (2026-11-27): kept in memory; the demo never sends mail anywhere.
+const demoArchived = new Set<string>(), demoTrashed = new Set<string>(), demoUnread = new Set<string>(), demoStarred = new Set<string>();
 const mailDate = (i: number) => Date.now() - (i === 0 ? 21 : i * 480) * 60_000;
 const demoNetworks = ['Signal', 'Telegram', 'WhatsApp'];
 const demoChatTitles = ['Trail work', 'Workshop', 'Reading group', 'Garden planning', 'Equipment', 'Volunteer rota',
@@ -16,7 +18,11 @@ const demoChat = () => demoChatTitles.map((title, i) => ({
 }));
 const demoReplies = new Map<string, ChatConversation['messages']>();
 const homeSubjects = ['Garden club picnic', 'Library card renewal', 'Weekend market list'];
-const demoMail = () => [...demoSubjects.map((subject, i): MailThread & { labels: string[] } => ({
+const demoMail = () => demoMailRows().filter(row => !demoTrashed.has(row.id)).map(row => ({
+  ...row, labels: demoArchived.has(row.id) ? row.labels.filter(label => label !== 'INBOX') : row.labels,
+  unread: row.unread || demoUnread.has(row.id), starred: demoStarred.has(row.id),
+}));
+const demoMailRows = () => [...demoSubjects.map((subject, i): MailThread & { labels: string[] } => ({
   account: 'work', id: `demo-mail-${i}`, from: ['Field Notes Desk', 'Workshop Desk', 'Trail Team'][i % 3], subject,
   date: mailDate(i), unread: i % 3 !== 2 && !marked.has(`demo-mail-${i}`), count: i === 0 ? 3 : 1,
   labels: [...(i !== 3 ? ['INBOX'] : []), `Label_${i % (demoLabels.length - 1) + 1}`],
@@ -123,7 +129,30 @@ export function demoCall(lang: Lang, method: string, path: string, body: unknown
     case 'POST /api/mail/read':
       if (!demoMail().some(row => row.account === b.account && row.id === b.threadId)) throw new Error('Unknown sample thread');
       marked.add(String(b.threadId));
+      demoUnread.delete(String(b.threadId));
       return { ok: true };
+    case 'POST /api/mail/modify': {
+      const id = String(b.threadId);
+      if (!demoMailRows().some(row => row.account === b.account && row.id === id)) throw new Error('Unknown sample thread');
+      const sets: Record<string, [Set<string>, boolean]> = { archive: [demoArchived, true], unarchive: [demoArchived, false],
+        trash: [demoTrashed, true], untrash: [demoTrashed, false], unread: [demoUnread, true], star: [demoStarred, true], unstar: [demoStarred, false] };
+      if (b.action === 'read') { marked.add(id); demoUnread.delete(id); return { ok: true }; }
+      const change = sets[String(b.action)];
+      if (!change) throw new Error('bad request');
+      if (change[1]) change[0].add(id); else change[0].delete(id);
+      return { ok: true };
+    }
+    case 'GET /api/mail/compose': {
+      const thread = demoMail().find(row => row.account === searchParams.get('account') && row.id === searchParams.get('id'));
+      if (!thread) throw new Error('Unknown sample thread');
+      const mode = searchParams.get('mode');
+      const sender = `"${thread.from}" <desk@example.com>`;
+      return mode === 'forward' ? { to: '', cc: '', subject: `Fwd: ${thread.subject}` }
+        : { to: sender, cc: mode === 'replyAll' ? 'team@example.com' : '', subject: `Re: ${thread.subject}` };
+    }
+    case 'POST /api/mail/send':
+      if (typeof b.to !== 'string' || !/@/.test(`${b.to}${b.cc ?? ''}`)) throw new Error('no recipient');
+      return { ok: true, id: 'demo-sent' };
     case 'GET /healthz':
       return { ok: true };
     case 'GET /api/threads':
