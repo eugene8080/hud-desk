@@ -28,6 +28,8 @@ export type PhoneDeps = {
   chatNetworks(): Promise<string[]>;
   chatNetworkSelected(name: string): boolean;
   toggleChatNetwork(name: string, networks: string[]): Promise<void>;
+  chatTranslate(): boolean;
+  setChatTranslation(enabled: boolean): Promise<void>;
   // The glasses own these values; the phone reads and writes them through main.ts
   // so both screens stay in step (main re-renders the glasses after a phone change).
   filters(): { provider: string; orca: Set<string> | null; hermes: Set<string> | null };
@@ -199,6 +201,8 @@ export function createPhone(deps: PhoneDeps) {
   }
 
   function renderNetworks() {
+    byId('chat-translation').replaceChildren(checkbox(tr('chatTranslateEnglish'), deps.chatTranslate(),
+      () => deps.setChatTranslation(!deps.chatTranslate())));
     const networks = networkCatalog ?? [];
     const rows = networks.map(name => checkbox(name, deps.chatNetworkSelected(name), () => deps.toggleChatNetwork(name, networks)));
     byId('chat-network-list').replaceChildren(...(rows.length ? rows :

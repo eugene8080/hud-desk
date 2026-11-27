@@ -26,7 +26,7 @@ export function setConnection(c: { token: string; base: string; resolve?: () => 
 
 export const currentBase = () => base;
 
-async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, timeoutMs = method === 'GET' ? 8000 : 0): Promise<T> {
   if (demo) return demoCall(lang, method, path, body) as T;
   if (!base) throw new Error('Bridge is not connected');
   const binary = body instanceof Uint8Array;
@@ -39,7 +39,7 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
       },
       body: binary ? (body as BodyInit) : body ? JSON.stringify(body) : undefined,
       // A read stalled by the phone radio must not pin the glasses poll until the screen is on.
-      signal: method === 'GET' && typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(8000) : undefined,
+      signal: timeoutMs && typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(timeoutMs) : undefined,
     });
   let res: Response;
   try {
@@ -75,7 +75,17 @@ export type MailPage = { items: MailThread[]; hasMore: boolean; unread: number; 
 export type MailConversation = { subject: string; messages: { id: string; from: string; to: string; cc: string; date: number; text: string }[] };
 export type ChatItem = { id: string; title: string; date: number; unread: boolean; readOnly?: boolean };
 export type ChatPage = { items: ChatItem[]; hasMore: boolean; unread: number };
-export type ChatConversation = { messages: { from: string; own: boolean; date: number; text: string }[] };
+export type ChatMessage = {
+  id?: string;
+  from: string;
+  own: boolean;
+  date: number;
+  text: string;
+  media?: 'Voice' | 'Audio' | 'Photo' | 'Video' | 'Sticker' | 'File' | 'Location';
+  voice?: { id?: string; duration?: number; transcript?: string; language?: string };
+};
+export type ChatConversation = { messages: ChatMessage[] };
+export type ChatTranslation = { id: string; text?: string | null; voice?: string | null };
 
 export const api = {
   capabilities: () => call<{ voice: boolean; modules?: string[] }>('GET', '/api/capabilities'),
@@ -83,6 +93,10 @@ export const api = {
     networks: () => call<string[]>('GET', '/api/chat/networks'),
     list: (networks: string[], page: number) => call<ChatPage>('GET', `/api/chat/list?${new URLSearchParams({ networks: networks.join(','), page: String(page) })}`),
     messages: (id: string) => call<ChatConversation>('GET', `/api/chat/messages?${new URLSearchParams({ id })}`),
+    transcribe: (chatId: string, messageId: string) =>
+      call<{ text: string; language: string }>('POST', '/api/chat/transcribe', { chatId, messageId }, 360000),
+    translate: (chatId: string, messageIds: string[]) =>
+      call<{ items: ChatTranslation[] }>('POST', '/api/chat/translate', { chatId, messageIds }, 240000),
     send: (chatId: string, text: string) => call<{ ok: boolean }>('POST', '/api/chat/send', { chatId, text }),
   },
   mail: {

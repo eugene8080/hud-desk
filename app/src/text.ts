@@ -161,18 +161,20 @@ const NO_START = '、。，．・：；？！」』）】〕〉》ーぁぃぅ�
 const NO_END = '「『（【〔〈《\\uff08\\uff3b\\uff5b';
 const WRAP_TOKENS = new RegExp(`\\s+|[${NO_END}]*[${CJK}][${NO_START}]*|[^\\s${CJK}]+`, 'gu');
 
-export type ReaderPage = { text: string; userTurns: number[] };
+export type ReaderPage = { text: string; userTurns: number[]; firstLine: number; lastLine: number };
 
-export function readerPages(text: string, measure: (text: string) => number, width = 550, rowsPerPage = 6, byteLimit = 900): ReaderPage[] {
-  const rows: { text: string; turn: number }[] = [];
+export function readerPages(text: string, measure: (text: string) => number, width = 550, rowsPerPage = 6, byteLimit = 900,
+  startLine = 0): ReaderPage[] {
+  const rows: { text: string; turn: number; lineIndex: number }[] = [];
   const fits = (candidate: string) => measure(candidate) <= width && enc.encode(candidate).length <= byteLimit;
   let userTurn = 0, lastTurn = 0;
-  for (const line of text.split('\n')) {
+  for (const [index, line] of text.split('\n').entries()) {
+    const lineIndex = index + startLine;
     // Resolve the role before wrapping, including when a wrap starts a new page.
     if (line.startsWith('/ ')) userTurn = ++lastTurn;
     // Progress and choice prompts are unindented, outside the transcript turn.
     else if (line && !line.startsWith('  ')) userTurn = 0;
-    if (!line) { rows.push({ text: '', turn: userTurn }); continue; }
+    if (!line) { rows.push({ text: '', turn: userTurn, lineIndex }); continue; }
     // Hanging indent: a wrapped row continues under the text after the role
     // marker ('/ ', '> ') or the two-space continuation, never at column 0.
     // The indent is the run of spaces closest in width to that prefix: exactly
@@ -188,7 +190,7 @@ export function readerPages(text: string, measure: (text: string) => number, wid
       }
     }
     let row = '';
-    const wrap = () => { rows.push({ text: row.trimEnd(), turn: userTurn }); row = indent; }; // drop the space before a wrap point
+    const wrap = () => { rows.push({ text: row.trimEnd(), turn: userTurn, lineIndex }); row = indent; }; // drop the space before a wrap point
     for (const token of line.match(WRAP_TOKENS) || []) {
       if (fits(row + token)) { row += token; continue; }
       if (row.trim()) wrap();
@@ -198,7 +200,7 @@ export function readerPages(text: string, measure: (text: string) => number, wid
         row += ch;
       }
     }
-    rows.push({ text: row, turn: userTurn });
+    rows.push({ text: row, turn: userTurn, lineIndex });
   }
   // Blank rows that end a user turn (the gap before the agent's reply) are not part of the
   // block, so the highlight stops at the last row with text. Walk backwards so a run of
@@ -208,7 +210,8 @@ export function readerPages(text: string, measure: (text: string) => number, wid
   }
   const pages: ReaderPage[] = [];
   let page: typeof rows = [];
-  const save = () => pages.push({ text: page.map(row => row.text).join('\n'), userTurns: page.map(row => row.turn) });
+  const save = () => pages.push({ text: page.map(row => row.text).join('\n'), userTurns: page.map(row => row.turn),
+    firstLine: page[0].lineIndex, lastLine: page[page.length - 1].lineIndex });
   for (const row of rows) {
     if (page.length && (page.length === rowsPerPage || (byteLimit !== Infinity && enc.encode([...page, row].map(r => r.text).join('\n')).length > byteLimit))) {
       save(); page = [];

@@ -28,7 +28,7 @@ import { createPhone, type Connection } from './phone';
 import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, inkByte, nativeTextColor, parseInk, type FineFont, type FineStatus } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
-import { Chat, chatColumns, CHAT_NETWORKS_KEY } from './chat';
+import { Chat, ChatReader, chatColumns, CHAT_NETWORKS_KEY, CHAT_TRANSLATE_KEY } from './chat';
 
 // 画面 576x288。上に見出し(テキスト)、下に本文(リスト or テキスト)の2段構成で統一する。
 const HEAD = { containerID: 1, containerName: 'head', xPosition: 0, yPosition: 0, width: 576, height: 36 };
@@ -64,7 +64,7 @@ const POLL_MS = 1000;
 
 type Screen =
   | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
-  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
+  | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; voiceLines?: { id: string; line: number }[]; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
 let current: Screen | null = null;
@@ -156,28 +156,32 @@ function selectThread(t: Thread | null) {
 const READER_WRAP_WIDTH = 552;
 type TextScreen = Extract<Screen, { kind: 'text' }>;
 const readerChars = (text: string) => text.replace(/\s/g, '').length; // wrapping only adds/drops spaces
+let chatTranslate = false;
+let chatTranslateWrites = Promise.resolve();
 
 function readerLayout(s: TextScreen) {
   if (s.pageText === s.text && s.pages && s.pagesFine === s.fine) return s.pages;
   s.pagesFine = s.fine;
-  const transform = s.fine ? alignMarkdownTables : (text: string) => text;
-  let paginate: (text: string) => ReaderPage[];
+  const chatScreen = s.reader instanceof ChatReader;
+  const transform = s.fine && !chatScreen ? alignMarkdownTables : (text: string) => text;
+  let paginate: (text: string, startLine?: number) => ReaderPage[];
   if (s.fine) {
     // Monospace small text wraps by cells, with no native byte limit.
     const { textWidth, rows } = fineLayout(s.fine);
     const measure = fineMeasure(s.fine);
-    paginate = text => readerPages(text, measure, textWidth, rows, Infinity);
+    paginate = (text, startLine) => readerPages(text, measure, textWidth, rows, Infinity, startLine);
   } else {
     const ctx = document.createElement?.('canvas').getContext('2d');
     if (ctx) ctx.font = '21px Arial';
     // Wrap with the measured firmware font; Arial only sizes non-ASCII glyphs.
     const measure = (text: string) => glassTextWidth(text, ch => ctx ? ctx.measureText(ch).width : 21);
-    paginate = text => readerPages(text, measure, READER_WRAP_WIDTH, READER_ROWS);
+    paginate = (text, startLine) => readerPages(text, measure, READER_WRAP_WIDTH, READER_ROWS, undefined, startLine);
   }
   if (s.openingOffset !== undefined) {
     const start = s.openingOffset;
-    const before = start ? paginate(transform(s.text.slice(0, start - 2))) : [];
-    s.pages = [...before, ...paginate(transform(s.text.slice(start)))];
+    const before = start ? paginate(transform(s.text.slice(0, start - (chatScreen ? 1 : 2)))) : [];
+    const startLine = chatScreen && start ? s.text.slice(0, start).split('\n').length - 1 : 0;
+    s.pages = [...before, ...paginate(transform(s.text.slice(start)), startLine)];
     s.responsePage = before.length;
   } else {
     // Start the latest response on a fresh page if it spans more than the last page.
@@ -272,7 +276,8 @@ function flipReader(s: TextScreen, delta: number) {
   s.pageWriting = true;
   const write = readerWrites.then(async () => {
     while (current === s && s.pageTarget !== s.offset) {
-      const target = s.pageTarget!;
+      const target = s.pageTarget = Math.min(s.pageTarget!, readerLayout(s).length - 1);
+      if (target === s.offset) break;
       const next = { ...s, offset: target };
       const content = bodyText(next);
       if (s.fine) { if (!await paintFine(s, target)) return; }
@@ -299,7 +304,10 @@ async function refreshReader(s: TextScreen) {
     if (s.reader?.coding) await startReaderUpdates(s)?.();
     else if (s.reader?.refreshOnEnd) {
       const loaded = await s.reader.load();
-      if (current === s && loaded.text !== s.text) await updateText(s.title, loaded.text, loaded.openingOffset);
+      if (current === s) {
+        if (loaded.text !== s.text || s.reader instanceof ChatReader) await updateText(s.title, loaded.text, loaded.openingOffset);
+        if (s.reader instanceof ChatReader) void translateChat(s, s.reader);
+      }
     }
   } catch (e) { diag((e as Error).message); }
   finally {
@@ -357,9 +365,10 @@ async function show(s: Screen, reloadText = false) {
   clearInterval(menuPoll);
   if (s.kind === 'text' && s.reader) s.activityLabel = s.reader.statusText?.() ?? s.activityLabel ?? readerStatus('unknown');
   if (s.kind === 'text' && s.reader && !s.voice) {
+    if (s.reader instanceof ChatReader) Object.assign(s, s.reader.content());
     s.fine = readerText === 'native' ? undefined : readerText;
     s.tiles = undefined; // A rebuild clears every image container.
-    s.menuActions = readerMenu();
+    s.menuActions = readerMenu(s);
   }
   const previous = current;
   current = s;
@@ -519,11 +528,14 @@ function requestFineStatus(s: TextScreen) {
 }
 
 // Reader long-press menu. The Font list includes the font comparison.
-function readerMenu() {
+function readerMenu(screen: TextScreen) {
   const name = readerText === 'native' ? tr('nativeText') : fineLabel(readerText);
   return [
     { id: 1101, label: tr('usingFont', name), run: () => showFonts() },
     { id: 1107, label: tr('brightness', inkLevel), run: () => showBrightness() },
+    ...(screen.reader instanceof ChatReader
+      ? [{ id: 1108, label: tr(chatTranslate ? 'chatTranslateEnglish' : 'chatTranslateOff'), run: () => setChatTranslation(!chatTranslate) }]
+      : []),
   ];
 }
 
@@ -605,23 +617,43 @@ async function setReaderText(mode: ReaderText, screen: Screen | null = current) 
   await show(s);
 }
 
-async function updateText(title: string, text: string, openingOffset?: number) {
+function keepReaderLine(before: TextScreen, after: TextScreen) {
+  const offset = before.offset ?? 0;
+  const anchor = readerLayout(before)[offset]?.firstLine;
+  if (anchor === undefined) return;
+  const pages = readerLayout(after);
+  const first = pages.findIndex(page => page.lastLine >= anchor);
+  if (first < 0) return;
+  if (offset === before.responsePage && anchor === pages[after.responsePage ?? 0].firstLine) {
+    after.offset = after.responsePage;
+    return;
+  }
+  const past = pages.findIndex(page => page.firstLine > anchor);
+  after.offset = Math.max(first, Math.min(offset, past < 0 ? pages.length - 1 : past - 1));
+}
+
+async function updateText(title: string, text: string, openingOffset?: number, position: 'live' | 'page' | 'line' = 'live') {
   if (current?.kind !== 'text') return;
   const screen = current;
   const write = async () => {
-    if (current !== screen || (screen.reader && screen.reading)) return;
-    const next = { ...screen, title, text, openingOffset: openingOffset ?? screen.openingOffset };
-    if (screen.reader) next.offset = undefined; // Live mode follows the newest page.
+    const active = () => current === screen && (position !== 'live' || !screen.reader || !screen.reading);
+    if (!active()) return;
+    const next = { ...screen, title, text, openingOffset: openingOffset ?? screen.openingOffset,
+      ...(screen.reader instanceof ChatReader && screen.reader.content()),
+    };
+    if (screen.reader && position === 'live') next.offset = undefined; // Live mode follows the newest page.
+    if (position === 'line') keepReaderLine(screen, next);
     const content = bodyText(next);
     if (screenTitle(next) !== screenTitle(screen)) {
       if (!await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: HEAD.containerID, containerName: HEAD.containerName, content: clipBytes(screenTitle(next), TEXT_BYTES) }))) throw new Error('Glasses rejected the title update.');
     }
-    if (current !== screen || (screen.reader && screen.reading)) return;
+    if (!active()) return;
     if (screen.fine) { if (!await paintFine(screen, next.offset ?? 0, next)) return; }
     else if (!await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: BODY.containerID, containerName: BODY.containerName, content }))) throw new Error('Glasses rejected the live text update. Retrying.');
-    if (current === screen && !(screen.reader && screen.reading)) {
-      Object.assign(screen, { title, text, openingOffset: next.openingOffset, offset: next.offset,
-        pages: next.pages, pageText: next.pageText, responsePage: next.responsePage });
+    if (active()) {
+      Object.assign(screen, { title, text: next.text, openingOffset: next.openingOffset, offset: next.offset,
+        pages: next.pages, pageText: next.pageText, responsePage: next.responsePage,
+        voiceLines: 'voiceLines' in next ? next.voiceLines : undefined });
       if (screen.reader) await inputHint();
     }
   };
@@ -1251,7 +1283,8 @@ async function openReader<T extends ReaderContent>(source: ReaderSource<T> & { c
   if (current !== owner || revision !== moduleRevision) return;
   const screen: TextScreen = { ...loaded, kind: 'text', title: source.title, tail: true, openAtResponse: true, reader: source, onBack, onClick };
   await show(screen);
-  if (current !== screen || !source.afterDisplay) return;
+  if (current !== screen) return;
+  if (!source.afterDisplay) return screen;
   await source.afterDisplay();
   if (current === screen && source.statusText) {
     const label = source.statusText();
@@ -1260,6 +1293,7 @@ async function openReader<T extends ReaderContent>(source: ReaderSource<T> & { c
       await writePanel(label, () => current === screen);
     }
   }
+  return screen;
 }
 
 async function openMail(thread: MailThread) {
@@ -1285,11 +1319,47 @@ async function openChat(item: ChatItem) {
     void record({ reply: async text => (await api.chat.send(item.id, text)).ok,
       onResult: sent => { outcome = sent ? 'chatSent' : 'chatNotSent'; } }, true);
   } : undefined;
+  const source = new ChatReader(item, () => chatTranslate, () => outcome ? tr(outcome) : ' ', hold);
   try {
-    await openReader(chat.reader(item, () => outcome ? tr(outcome) : ' ', hold), back);
+    const screen = await openReader(source, back, () => {
+      if (current?.kind !== 'text' || current.reader !== source || current.pageWriting) return;
+      const screen = current;
+      const page = readerLayout(screen)[screen.offset ?? 0];
+      const ids = (screen.voiceLines ?? []).filter(({ line }) => line >= page.firstLine && line <= page.lastLine).map(({ id }) => id);
+      void source.transcribe(ids, () => repaintChat(screen).catch(() => {})).catch(() => {});
+    });
+    if (screen && current === screen) void translateChat(screen, source);
   } catch {
     if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('chat'), text: tr('chatUnavailable'), onBack: back, onClick: back });
   }
+}
+
+async function repaintChat(screen: TextScreen, position: 'page' | 'line' = 'page') {
+  if (current === screen) await updateText(screen.title, screen.text, screen.openingOffset, position);
+}
+
+async function translateChat(screen: TextScreen, source: ChatReader) {
+  if (await source.translate()) await repaintChat(screen, 'line').catch(() => {});
+}
+
+async function setChatTranslation(enabled: boolean) {
+  chatTranslate = enabled;
+  chatTranslateWrites = chatTranslateWrites.then(async () => { await bridge.setLocalStorage(CHAT_TRANSLATE_KEY, enabled ? 'en' : 'off'); })
+    .catch(() => {});
+  phone?.render();
+  const screen = current;
+  if (screen?.kind === 'text' && screen.reader instanceof ChatReader) {
+    const source = screen.reader;
+    await readerWrites;
+    if (current === screen && enabled === chatTranslate) {
+      const next = { ...screen, ...source.content() };
+      keepReaderLine(screen, next);
+      Object.assign(screen, next);
+      await show(screen);
+      if (enabled && current === screen) void translateChat(screen, source);
+    }
+  }
+  await chatTranslateWrites;
 }
 
 // Restart live updates without rebuilding the mounted chat after a successful send.
@@ -1875,6 +1945,7 @@ async function openSavedOrHome(connection: Connection, known?: Thread[]) {
   activeModule = modules.includes(stored) ? stored : 'coding';
   mail = new Mail(await bridge.getLocalStorage(MAIL_LABELS_KEY), await bridge.getLocalStorage(MAIL_ACCOUNTS_KEY), saveMailPref);
   chat = new Chat(await bridge.getLocalStorage(CHAT_NETWORKS_KEY));
+  chatTranslate = await bridge.getLocalStorage(CHAT_TRANSLATE_KEY) === 'en';
   phone?.connection(connection);
   if (activeModule === 'email') return mailHome();
   if (activeModule === 'chat') return chatHome();
@@ -1951,6 +2022,8 @@ async function main() {
     chatNetworks: () => chat?.networks() ?? Promise.resolve([]),
     chatNetworkSelected: name => chat?.isSelected(name) ?? false,
     toggleChatNetwork: (name, networks) => toggleChatNetwork(name, networks, true),
+    chatTranslate: () => chatTranslate,
+    setChatTranslation,
     filters: () => ({ provider: viewProvider, orca: viewWorkspaces, hermes: viewHermesWorkspaces }),
     setProvider: async id => { await bridge.setLocalStorage('view-provider', id); viewProvider = id; refreshGlasses(); },
     setWorkspaces: async (hermes, value) => {

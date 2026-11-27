@@ -3,6 +3,8 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { before } from './mail.mjs';
+import { createChatSpeech, MAX_ASSET_BYTES } from './chat-voice.mjs';
+import { DEFAULT_TRANSLATION_MODEL, localModelName, translateEnglish } from './chat-translate.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const ORIGIN = 'http://127.0.0.1:23373';
@@ -22,21 +24,33 @@ export class BeeperError extends Error {
 
 export function readBeeperConfig(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return null;
-  const { tokenFile = '.local/beeper-token.txt', refreshSeconds = 120 } = config;
+  const { tokenFile = '.local/beeper-token.txt', refreshSeconds = 120, translationModel = DEFAULT_TRANSLATION_MODEL } = config;
   if (!text(tokenFile) || !Number.isInteger(refreshSeconds) || refreshSeconds < 1 ||
       refreshSeconds * 1000 > 2 ** 31 - 1) return null;
   const file = resolve(ROOT, tokenFile);
   const fromLocal = relative(resolve(ROOT, '.local'), file);
   if (!fromLocal || fromLocal === '..' || fromLocal.startsWith('..' + sep) || isAbsolute(fromLocal)) return null;
-  return { tokenFile: file, refreshSeconds };
+  const { asrLanguage = 'yue', asrScript = 's2hk' } = config;
+  const path = key => text(config[key]) ? resolve(ROOT, config[key]) : undefined;
+  const speech = {
+    python: path('asrPython'), ffmpeg: path('ffmpegPath'), modelDir: path('asrModelDir'), vadDir: path('asrVadDir'),
+    language: ['yue', 'auto', 'zh'].includes(asrLanguage) ? asrLanguage : 'yue',
+    script: asrScript === 'none' ? 'none' : 's2hk',
+  };
+  return { tokenFile: file, refreshSeconds, translationModel, speech };
 }
 
 const messagePath = id => `/v1/chats/${encodeURIComponent(id)}/messages`;
 
-// GET accounts, GET chats, GET/POST chat messages:
+const assetPath = '/v1/assets/serve';
+const assetURL = value => typeof value === 'string' && value.length <= 4096 &&
+  /^(?:local)?mxc:\/\/[^\s?#\\]+$/u.test(value) ? value : '';
+
+// GET accounts, chats and message assets, GET/POST chat messages:
 // https://developers.beeper.com/desktop-api-reference/
-function permitted(method, path, body) {
+function permitted(method, path, body, query) {
   if (method === 'GET' && body === undefined && (path === '/v1/accounts' || path === '/v1/chats')) return undefined;
+  if (method === 'GET' && path === assetPath && body === undefined && assetURL(query?.url)) return undefined;
   const segment = /^\/v1\/chats\/([^/]+)\/messages$/.exec(path)?.[1];
   if (segment) {
     const id = decodeSegment(segment);
@@ -58,9 +72,9 @@ export function createBeeperClient(tokenFile, {
   transport = fetch, readToken = () => readFile(tokenFile, 'utf8'), sleep = delay,
 } = {}) {
   return async (method, path, { query, body } = {}) => {
-    const payload = permitted(method, path, body);
+    const payload = permitted(method, path, body, query);
     const url = new URL(path, ORIGIN);
-    // Only list cursors affect upstream GETs. Writes never carry query parameters.
+    // Writes never carry query parameters. Asset URLs come from a message read.
     if (method === 'GET' && path === '/v1/chats') {
       url.searchParams.set('limit', '200');
       if (query?.cursor) {
@@ -68,6 +82,7 @@ export function createBeeperClient(tokenFile, {
         url.searchParams.set('direction', 'before');
       }
     }
+    if (path === assetPath) url.searchParams.set('url', query.url);
     let token;
     try { token = text(await readToken()); } catch { /* Keep file errors private. */ }
     if (!token || /\s/u.test(token)) throw new BeeperError('beeper-auth', 502);
@@ -76,11 +91,12 @@ export function createBeeperClient(tokenFile, {
       try {
         response = await transport(url, {
           method, headers: { authorization: `Bearer ${token}`, ...(payload && { 'content-type': 'application/json' }) },
-          body: payload, redirect: 'error', signal: AbortSignal.timeout(2500),
+          body: payload, redirect: 'error', signal: AbortSignal.timeout(path === assetPath ? 30000 : 2500),
         });
       } catch { throw new BeeperError('beeper-network', 502); }
       if (response.ok) {
-        try { return await response.json(); } catch { throw new BeeperError('beeper-response', 502); }
+        try { return path === assetPath ? await readAsset(response) : await response.json(); }
+        catch { throw new BeeperError('beeper-response', 502); }
       }
       await response.body?.cancel().catch(() => {});
       const transient = response.status === 429 || response.status >= 500;
@@ -93,6 +109,57 @@ export function createBeeperClient(tokenFile, {
       throw new BeeperError(response.status === 401 || response.status === 403 ? 'beeper-auth' : 'beeper-request', 502);
     }
   };
+}
+
+async function readAsset(response) {
+  const chunks = [];
+  let size = 0;
+  // The limit applies even if Beeper has no Content-Length.
+  for await (const chunk of response.body) {
+    size += chunk.length;
+    if (size > MAX_ASSET_BYTES) throw new Error('Audio too large');
+    chunks.push(chunk);
+  }
+  if (!size) throw new Error('Empty audio');
+  return Buffer.concat(chunks, size);
+}
+
+const media = { VOICE: 'Voice', AUDIO: 'Audio', IMAGE: 'Photo', VIDEO: 'Video', STICKER: 'Sticker', FILE: 'File', LOCATION: 'Location' };
+const visible = item => item && !item.isHidden && !item.isDeleted && item.type !== 'REACTION';
+const isAudio = attachment => attachment?.type === 'audio' || attachment?.isVoiceNote === true ||
+  /^audio\//i.test(text(attachment?.mimeType));
+const english = lang => /^(en(?:[-_].+)?|english)$/i.test(lang ?? '');
+
+function chatMessage(item, transcript) {
+  const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+  const audio = item.type === 'VOICE' || item.type === 'AUDIO' || attachments.some(isAudio);
+  const attachment = audio ? attachments.find(a => isAudio(a) && a.isVoiceNote) ?? attachments.find(isAudio) : undefined;
+  const tag = audio ? (item.type === 'VOICE' || attachment?.isVoiceNote ? 'Voice' : 'Audio')
+    : Object.hasOwn(media, item.type) ? media[item.type] : undefined;
+  const caption = text(item.text);
+  if (!tag && !caption) return null;
+  const url = assetURL(attachment?.srcURL) || assetURL(attachment?.id);
+  const stored = text(attachment?.transcription?.transcription);
+  const spoken = stored ? { text: stored, language: text(attachment.transcription.language) }
+    : transcript?.url === url ? transcript : undefined;
+  const id = validId(item.id) ? item.id : undefined;
+  return {
+    url,
+    message: {
+      id, from: text(item.senderName), own: item.isSender === true, date: date(item.timestamp), text: caption,
+      ...(tag && { media: tag }),
+      ...(audio && { voice: {
+        id, ...(Number.isFinite(attachment?.duration) && attachment.duration >= 0 && { duration: attachment.duration }),
+        ...(spoken && { transcript: spoken.text, language: spoken.language }),
+      } }),
+    },
+  };
+}
+
+function retain(map, key, value) {
+  map.delete(key);
+  map.set(key, value);
+  if (map.size > 2048) map.delete(map.keys().next().value);
 }
 
 function snapshot(load, refreshMs) {
@@ -116,8 +183,15 @@ function snapshot(load, refreshMs) {
   };
 }
 
-export function createBeeper(config, { clientOptions, coldWaitMs = 3000 } = {}) {
+export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech = createChatSpeech(config.speech), ollamaTransport } = {}) {
   const request = createBeeperClient(config.tokenFile, clientOptions);
+  const transcripts = new Map(), transcribing = new Map(), translations = new Map(), translating = new Map();
+  const messageKey = (chatId, id) => JSON.stringify([chatId, id]);
+  async function messages(chatId) {
+    const page = await request('GET', messagePath(chatId));
+    if (!Array.isArray(page?.items)) throw new BeeperError('beeper-response', 502);
+    return page.items.filter(visible).map(item => chatMessage(item, transcripts.get(messageKey(chatId, item.id)))).filter(Boolean);
+  }
   const refreshMs = config.refreshSeconds * 1000;
   const accounts = snapshot(async () => {
     const rows = await request('GET', '/v1/accounts');
@@ -184,11 +258,67 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000 } = {}) 
     'GET /api/chat/messages': async params => {
       const id = params.get('id');
       if (!validId(id)) throw badRequest();
-      const page = await request('GET', messagePath(id));
-      if (!Array.isArray(page?.items)) throw new BeeperError('beeper-response', 502);
-      return { messages: page.items.filter(item => !item.isHidden && !item.isDeleted && text(item.text)).map(item => ({
-        from: text(item.senderName), own: item.isSender === true, date: date(item.timestamp), text: text(item.text),
-      })).sort((a, b) => a.date - b.date) };
+      return { messages: (await messages(id)).map(row => row.message).sort((a, b) => a.date - b.date) };
+    },
+    'POST /api/chat/transcribe': async (_params, input) => {
+      if (!input || Object.keys(input).length !== 2 || !validId(input.chatId) || !validId(input.messageId)) throw badRequest();
+      const { chatId, messageId } = input;
+      const row = (await messages(chatId)).find(row => row.message.id === messageId);
+      if (!row?.message.voice) throw new BeeperError('voice-unavailable', 404);
+      const { transcript, language } = row.message.voice;
+      if (transcript) return { text: transcript, language: language || '' };
+      if (!row.url) throw new BeeperError('voice-unavailable', 404);
+      const key = messageKey(chatId, messageId);
+      if (transcribing.has(key)) return transcribing.get(key);
+      if (transcribing.size >= 24) throw new BeeperError('voice-busy', 503);
+      const pending = (async () => {
+        try {
+          const result = await speech.transcribe(() => request('GET', assetPath, { query: { url: row.url } }));
+          const value = { text: text(result?.text), language: text(result?.language) };
+          if (!value.text || !value.language) throw new Error('Empty transcript');
+          retain(transcripts, key, { ...value, url: row.url });
+          return value;
+        } catch { throw new BeeperError('transcription-failed', 502); }
+        finally { transcribing.delete(key); }
+      })();
+      transcribing.set(key, pending);
+      return pending;
+    },
+    'POST /api/chat/translate': async (_params, input) => {
+      if (!input || Object.keys(input).length !== 2 || !validId(input.chatId) || !Array.isArray(input.messageIds) ||
+          input.messageIds.length > 200 || !input.messageIds.every(validId)) throw badRequest();
+      const { chatId, messageIds } = input;
+      const ids = new Set(messageIds);
+      const rows = (await messages(chatId)).map(row => row.message).filter(message => ids.has(message.id));
+      const items = rows.map(({ id }) => ({ id }));
+      const entries = [];
+      rows.forEach((message, i) => {
+        for (const [field, source] of [['text', message.text], ['voice', !english(message.voice?.language) && message.voice?.transcript]]) {
+          if (!source) continue;
+          const key = messageKey(chatId, message.id);
+          const cached = translations.get(key)?.[field];
+          if (cached?.source === source) items[i][field] = cached.value;
+          else entries.push({ i, key, field, source });
+        }
+      });
+      if (entries.length) {
+        const key = JSON.stringify(entries.map(({ key, field, source }) => [key, field, source]));
+        let pending = translating.get(key);
+        if (!pending) {
+          if (translating.size >= 4) throw new BeeperError('translation-busy', 503);
+          if (!localModelName(config.translationModel)) throw new BeeperError('translation-model', 502);
+          pending = translateEnglish(config.translationModel, entries.map(entry => entry.source), ollamaTransport)
+            .catch(() => { throw new BeeperError('translation-failed', 502); })
+            .finally(() => translating.delete(key));
+          translating.set(key, pending);
+        }
+        (await pending).forEach((value, index) => {
+          const { i, key, field, source } = entries[index];
+          retain(translations, key, { ...translations.get(key), [field]: { source, value } });
+          items[i][field] = value;
+        });
+      }
+      return { items };
     },
     'POST /api/chat/send': async (_params, input) => {
       if (!input || Object.keys(input).length !== 2 || !validId(input.chatId) || !text(input.text)) throw badRequest();
@@ -197,5 +327,5 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000 } = {}) 
       return { ok: true };
     },
   };
-  return { routes, close: () => { closed = true; clearInterval(timer); } };
+  return { routes, close: () => { closed = true; clearInterval(timer); speech.close?.(); } };
 }

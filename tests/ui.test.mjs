@@ -261,6 +261,90 @@ test('Shared reader page metadata carries Chat user turns across message continu
   assert.deepEqual([...page.userTurns], [1, 1, 0, 0]);
 });
 
+test('Chat click transcribes voice on the visible page, shows failures and retries in place', async () => {
+  const { chat, messages, sends } = chatFixture();
+  messages[1] = { ...messages[1], id: 'first', text: '', media: 'Voice', voice: { id: 'first', duration: 12 } };
+  messages.unshift({ ...messages[0], id: 'latest', date: messages[0].date + 1, text: '', media: 'Audio', voice: { id: 'latest' } });
+  const requests = [];
+  chat.transcribe = (chatId, id) => new Promise((resolve, reject) => requests.push({ chatId, id, resolve, reject }));
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat });
+  await h.pickRow(2);
+  assert.match(container(h, 'body').content, /\[Audio\]/);
+  for (let i = 0; i < 5; i++) await h.scroll('up');
+  assert.match(container(h, 'body').content, /\[Voice 0:12\]/);
+  const pageBefore = container(h, 'hint').content;
+  await h.tap();
+  assert.match(container(h, 'body').content, /\[Voice 0:12 · transcribing…\]/);
+  assert.deepEqual(requests.map(({ id }) => id), ['first']);
+  await h.tap();
+  assert.equal(requests.length, 1);
+  requests[0].reject(new Error('Synthetic failure'));
+  await h.flush();
+  assert.match(container(h, 'body').content, /\[Voice 0:12 · not transcribed\]/);
+  await h.tap();
+  requests[1].resolve({ text: '雨後可以看見彩虹。\n' + 'Another synthetic line.\n'.repeat(20), language: 'chinese' });
+  await h.flush();
+  assert.match(container(h, 'body').content, /\[Voice 0:12\] 雨後可以看見彩虹。/);
+  assert.match(pageBefore, /Pg1\//);
+  assert.match(container(h, 'hint').content, /Pg1\//);
+  assert.notEqual(container(h, 'hint').content, pageBefore);
+  assert.equal(sends.length, 0);
+});
+
+test('Chat Translate is shared with the phone, persists and adds English in brackets', async () => {
+  const { chat, messages } = chatFixture();
+  messages[0] = { ...messages[0], id: 'text', text: '雨停了。' };
+  messages[1] = { ...messages[1], id: 'voice', text: '', media: 'Voice',
+    voice: { id: 'voice', duration: 12, transcript: '巴士已經到站。', language: 'yue' } };
+  const requests = [];
+  chat.translate = async (chatId, ids) => {
+    requests.push({ chatId, ids: [...ids] });
+    return { items: [{ id: 'text', text: 'The rain stopped.' }, { id: 'voice', voice: 'The bus has arrived.' }] };
+  };
+  const options = { capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat };
+  const h = await moduleHarness(options);
+  await h.pickRow(2);
+  assert.equal(h.phone().chatTranslate(), false);
+  assert.equal(requests.length, 0);
+  assert.ok(h.pages.at(-1).menuObject.menuItems.some(({ itemName }) => itemName === 'Translate: Off'));
+  await h.menu(1108);
+  assert.equal(h.phone().chatTranslate(), true);
+  assert.equal(h.storage.get('chat-translate'), 'en');
+  assert.ok(h.pages.at(-1).menuObject.menuItems.some(({ itemName }) => itemName === 'Translate: English'));
+  assert.deepEqual(requests, [{ chatId: 'fixture-0', ids: ['text', 'voice'] }]);
+  assert.match(container(h, 'body').content, /雨停了。 \(The rain stopped\.\)/);
+  await h.scroll('up');
+  assert.match(container(h, 'body').content, /\[Voice 0:12\] 巴士已經到站。 \(The bus has arrived\.\)/);
+  const restored = await moduleHarness({ ...options, storage: Object.fromEntries(h.storage) });
+  await restored.pickRow(2);
+  assert.match(container(restored, 'body').content, /\(The rain stopped\.\)/);
+  await restored.phone().setChatTranslation(false);
+  assert.doesNotMatch(container(restored, 'body').content, /The rain stopped/);
+  assert.equal(restored.storage.get('chat-translate'), 'off');
+});
+
+test('Chat translates each new transcript and keeps the newest message visible after older translations reflow', async () => {
+  const { chat, messages } = chatFixture();
+  const date = messages[0].date;
+  messages.splice(0, messages.length,
+    ...Array.from({ length: 6 }, (_, i) => ({ id: `early-${i}`, own: true, from: '', date: date - 100 + i, text: '等一陣。' })),
+    { id: 'voice-new', own: true, from: '', date, text: '', media: 'Voice', voice: { id: 'voice-new', duration: 6 } });
+  const batches = [];
+  chat.translate = async (_id, ids) => {
+    batches.push(Array.from(ids));
+    return { items: Array.from(ids, id => id === 'voice-new'
+      ? (batches.length > 1 ? { id, voice: 'The lights are on.' } : { id })
+      : { id, text: 'Please wait a moment while I check the synthetic timetable for today and later in the week.' }) };
+  };
+  chat.transcribe = async () => ({ text: '燈著咗。', language: 'yue' });
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat', 'chat-translate': 'en' }, chat });
+  await h.pickRow(2);
+  assert.match(container(h, 'body').content, /\[Voice 0:06\]/);
+  await h.tap();
+  assert.match(container(h, 'body').content, /\[Voice 0:06\] 燈著咗。 \(The lights are on\.\)/);
+  assert.deepEqual(batches, [['early-0', 'early-1', 'early-2', 'early-3', 'early-4', 'early-5', 'voice-new'], ['voice-new']]);
+});
+
 test('Chat shares Coding voice review, sends once per click, and cancels with no POST', async () => {
   const { chat, sends } = chatFixture();
   const h = await harness(2, true, 'hold', '', 0, false, '', '', '',

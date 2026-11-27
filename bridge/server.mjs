@@ -232,7 +232,8 @@ async function handlePrivate(req, res, url, module, route, token, privateHostAll
       }
     }
     const result = await route(url.searchParams, input);
-    count = (Array.isArray(result) ? result : result.items ?? result.messages ?? []).length;
+    const transcribed = module === 'chat' && url.pathname === '/api/chat/transcribe' && Boolean(result.text);
+    count = Array.isArray(result) ? result.length : result.items?.length ?? result.messages?.length ?? Number(transcribed);
     return send(res, 200, result);
   } catch (error) {
     return error instanceof MailError || error instanceof BeeperError
