@@ -1,18 +1,20 @@
-// Pairing code `eho1.<topic>.<token>` and the bridge origin.
-// Tailscale only (2026-11-27): the app reaches the bridge at the HTTPS origin its build names
-// (ORCA_GLASS_BRIDGE_ORIGIN, also listed in app/app.json's network whitelist). The Cloudflare
-// quick tunnel and the signed ntfy.sh discovery it needed were removed; the topic part of the code
-// is kept so existing codes still parse, and is no longer used.
+// Both origins are fixed by the build and must be permitted by app/app.json.
+import type { RelayPairing } from './relay-transport';
 declare const __BRIDGE_ORIGIN__: string;
+declare const __RELAY_ORIGIN__: string;
 
-export type Pairing = { topic: string; token: string };
+export type Pairing = { topic: string; token: string } | RelayPairing;
 
 export function parseCode(code: string): Pairing | null {
-  const m = code.trim().match(/^eho1\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/);
-  return m ? { topic: m[1], token: m[2] } : null;
+  const clean = code.trim();
+  const direct = clean.match(/^eho1\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/);
+  if (direct) return { topic: direct[1], token: direct[2] };
+  // 32 bytes in canonical base64url have 43 characters and two zero pad bits.
+  const relay = clean.match(/^eho2\.([A-Za-z0-9_-]{42}[AEIMQUYcgkosw048])\.([A-Za-z0-9_-]{42}[AEIMQUYcgkosw048])$/);
+  return relay ? { routeId: relay[1], key: relay[2] } : null;
 }
 
 // The build's bridge origin, or null for a build without one (only the demo works there).
-export async function resolveBase(_p: Pairing): Promise<string | null> {
-  return __BRIDGE_ORIGIN__ || null;
+export async function resolveBase(pairing: Pairing): Promise<string | null> {
+  return ('routeId' in pairing ? __RELAY_ORIGIN__ : __BRIDGE_ORIGIN__) || null;
 }

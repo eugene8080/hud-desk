@@ -2991,7 +2991,9 @@ async function connect() {
   try {
     const base = await resolveBase(pairing);
     if (!base) throw new Error(tr('noRelay'));
-    setConnection({ token: pairing.token, base, resolve: () => resolveBase(pairing) });
+    setConnection('routeId' in pairing
+      ? { base, relay: pairing }
+      : { base, token: pairing.token, resolve: () => resolveBase(pairing) });
     await api.health();
     const threads = await api.threads();
     const ms = Date.now() - t0;

@@ -38,13 +38,13 @@ const en = {
   launchedNotSent: 'Launched, but the prompt was not sent ({0})',
   notPairedDiag: 'Not set up: paste the pairing code and save',
   notPaired: 'Open HUD Desk on your phone\nand enter the pairing code\n\n(Setup on your PC is required)',
-  noRelay: 'Could not find your PC on the relay (the tunnel on your PC may be stopped)',
+  noRelay: 'This HUD Desk build has no origin configured for this pairing code.',
   viaCode: 'pairing code',
   diagOk: 'OK {0}ms\nVia: {1}\nBridge: {2}\nThreads: {3}',
   diagNg: 'NG {0}\nVia: {1}\nBridge: {2}',
   offlineTitle: 'Cannot reach your PC',
   offline: 'Check that the bridge and tunnel are running on your PC\n\n{0}\n\nClick to reconnect',
-  badCode: 'NG Invalid pairing code (one line starting with eho1.)',
+  badCode: 'Invalid pairing code. Use one line starting with eho1. or eho2.',
   pageIntro: 'View, reply to and start <a href="https://github.com/stablyai/orca">Orca</a> agent sessions on your PC from G2. <b>Setup on your PC is required.</b>',
   setupTitle: 'Getting started (on your PC)',
   setupSteps: '<li>Install Orca on your PC</li><li>Ask Codex to "set up HUD Desk" (skill: <a href="https://github.com/eugene8080/hud-desk">github.com/eugene8080/hud-desk</a>)</li><li>On Home, tap the connection bar, paste the pairing code it gives you and save</li>',
@@ -306,13 +306,13 @@ const ja: Record<Key, string> = {
   launchedNotSent: '起動しましたが指示は未送信です({0})', // upstream
   notPairedDiag: '未設定: 接続コードを貼って保存してください', // upstream
   notPaired: 'スマホの HUD Desk を開いて\n接続コードを設定してください\n\n(PC 側の準備が必要です)', // upstream (Mac -> PC)
-  noRelay: '連絡板に PC の接続先が見つかりません(PC 側のトンネルが止まっている可能性)', // upstream (Mac -> PC)
+  noRelay: 'この接続コードに対応する接続先が HUD Desk に設定されていません。',
   viaCode: '接続コード', // upstream
   diagOk: 'OK {0}ms\n方式: {1}\n接続先: {2}\nスレッド {3}件', // upstream
   diagNg: 'NG {0}\n方式: {1}\n接続先: {2}', // upstream
   offlineTitle: 'PC につながりません', // upstream (Mac -> PC)
   offline: 'PC の中継サーバとトンネルが動いているか確認してください\n\n{0}\n\nクリックで再接続', // upstream (Mac -> PC)
-  badCode: 'NG 接続コードの形式が違います(eho1. で始まる1行)', // upstream
+  badCode: '接続コードの形式が違います。eho1. または eho2. で始まる1行を入力してください。',
   pageIntro: 'G2 から PC 上の <a href="https://github.com/stablyai/orca">Orca</a> のエージェントを見る・返信する・起動するアプリです。<b>PC 側の準備が必要です。</b>', // upstream (Mac -> PC)
   setupTitle: 'はじめに(PC 側の準備)', // upstream (Mac -> PC)
   setupSteps: '<li>PC に Orca を入れておく</li><li>Codex に「HUD Desk をセットアップして」と頼む(スキル: <a href="https://github.com/eugene8080/hud-desk">github.com/eugene8080/hud-desk</a>)</li><li>ホームで接続バーをタップし、表示された接続コードを貼って保存</li>',

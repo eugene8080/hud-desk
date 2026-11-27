@@ -17,6 +17,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      - name: Install relay dependencies
+        run: npm ci
       - name: Install app dependencies
         run: npm ci --prefix app
       - name: Unit tests

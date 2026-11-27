@@ -8,8 +8,12 @@ const app = join(root, 'app');
 const manifest = JSON.parse(readFileSync(join(app, 'app.json'), 'utf8'));
 const allowed = manifest.permissions.find(p => p.name === 'network')?.whitelist ?? [];
 const origin = process.env.ORCA_GLASS_BRIDGE_ORIGIN || allowed[0];
+const relayOrigin = process.env.ORCA_GLASS_RELAY_ORIGIN || '';
 if (!origin || new URL(origin).origin !== origin || !origin.startsWith('https://') || !allowed.includes(origin)) {
   throw new Error('Beta bridge must be an HTTPS origin explicitly listed in app/app.json');
+}
+if (relayOrigin && (new URL(relayOrigin).origin !== relayOrigin || !relayOrigin.startsWith('https://') || !allowed.includes(relayOrigin))) {
+  throw new Error('Beta relay must be an HTTPS origin explicitly listed in app/app.json');
 }
 const output = join(root, '.local', `orca-glass-${manifest.version}.ehpk`);
 mkdirSync(join(root, '.local'), { recursive: true });
@@ -17,7 +21,7 @@ mkdirSync(join(root, '.local'), { recursive: true });
 function run(args) {
   const result = spawnSync(process.execPath, args, {
     cwd: app, stdio: 'inherit',
-    env: { ...process.env, ORCA_GLASS_BRIDGE_ORIGIN: origin },
+    env: { ...process.env, ORCA_GLASS_BRIDGE_ORIGIN: origin, ORCA_GLASS_RELAY_ORIGIN: relayOrigin },
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`Beta build step failed: ${args[0]} (exit ${result.status})`);
@@ -30,4 +34,4 @@ const cli = JSON.parse(readFileSync(join(app, 'node_modules/@evenrealities/evenh
 const executable = typeof cli.bin === 'string' ? cli.bin : cli.bin.evenhub;
 run([join(app, 'node_modules/@evenrealities/evenhub-cli', executable),
   'pack', 'app.json', 'dist', '-o', output, '--sdk-ver', manifest.min_sdk_version]);
-console.log(`Beta package: ${output}\nBridge: ${origin}\nPairing credential is entered once on the phone; it is not bundled.`);
+console.log(`Beta package: ${output}\nBridge: ${origin}${relayOrigin ? `\nRelay: ${relayOrigin}` : ''}\nPairing credential is entered once on the phone; it is not bundled.`);

@@ -1,6 +1,7 @@
 // 接続コードで解決した中継サーバ(bridge/server.mjs)の API クライアント。
 import { demoCall } from './demo';
 import type { Lang } from './i18n';
+import { createRelayTransport, type RelayPairing } from './relay-transport';
 let token = '';
 let base = '';
 
@@ -17,11 +18,14 @@ export function setDemo(on: boolean) {
 }
 
 let resolveBase: (() => Promise<string | null>) | null = null;
+let relay: ReturnType<typeof createRelayTransport> | null = null;
 
-export function setConnection(c: { token: string; base: string; resolve?: () => Promise<string | null> }) {
-  token = c.token;
+export function setConnection(c: { base: string } &
+  ({ token: string; resolve?: () => Promise<string | null> } | { relay: RelayPairing })) {
   base = c.base.replace(/\/+$/, '');
-  resolveBase = c.resolve ?? null;
+  token = 'token' in c ? c.token : '';
+  resolveBase = 'token' in c ? c.resolve ?? null : null;
+  relay = 'relay' in c ? createRelayTransport(base, c.relay) : null;
 }
 
 export const currentBase = () => base;
@@ -30,12 +34,17 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, tim
   if (demo) return demoCall(lang, method, path, body) as T;
   if (!base) throw new Error('Bridge is not connected');
   const binary = body instanceof Uint8Array;
+  const urlPath = `${path}${path.includes('?') ? '&' : '?'}lang=${lang}`;
+  const contentType = binary ? 'application/octet-stream' : 'application/json';
+  const relayRequest = relay;
   const req = () =>
-    fetch(`${base}${path}${path.includes('?') ? '&' : '?'}lang=${lang}`, {
+    relayRequest ? relayRequest(method, urlPath,
+      binary ? body : body ? new TextEncoder().encode(JSON.stringify(body)) : undefined, contentType, timeoutMs) :
+    fetch(`${base}${urlPath}`, {
       method,
       headers: {
         authorization: `Bearer ${token}`,
-        'content-type': binary ? 'application/octet-stream' : 'application/json',
+        'content-type': contentType,
       },
       body: binary ? (body as BodyInit) : body ? JSON.stringify(body) : undefined,
       // A read stalled by the phone radio must not pin the glasses poll until the screen is on.

@@ -8,6 +8,10 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
+- [ ] **Public relay for self-hosters (2026-11-27):** implementation and local checks in
+  `docs/relay.md`. A relay host and origin remain to be chosen. A release needs the exact
+  origin in the network manifest and a packaged WebView check on a phone.
+
 - [ ] **HUD Desk listing (2026-11-27, beta 1.0.91):** done: rename, tagline, icon, description,
   screenshots, Usage bars, bridge restart (task 'HUD Desk Bridge'), repo eugene8080/hud-desk,
   privacy text, Japanese text. Portal privacy attachment stays as it is (Eugene, 2026-11-27: "no
