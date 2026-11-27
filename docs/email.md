@@ -4,6 +4,9 @@ Updated: 2026-11-26
 
 ## Bridge setup
 
+For IMAP/SMTP or a Gmail API account using your own Google Cloud project, see
+[Email for self-hosters](email-providers.md).
+
 Add the following keys to the existing gitignored `bridge/config.local.json` in the checkout that runs the bridge. Fill the private values from the checkout's local setup notes. Use the existing installed-app OAuth client and mint an Orca Glass token for the chosen mailbox.
 
 ```json
@@ -43,6 +46,10 @@ Open the consent URL printed in the terminal and sign in to the configured mailb
 | `GET /api/mail/threads?filter=work:INBOX,work:Label_123&page=0&size=8` | Union of the chosen labels, deduplicated by account and thread. Includes newest-first summaries, `hasMore`, and the total unread in the configured window. Pages start at 0 and sizes default to 8 and cap at 20. |
 | `GET /api/mail/thread?account=work&id=<thread-id>` | Thread subject and cleaned plain-text messages, oldest first. This operation only reads. |
 | `POST /api/mail/read` with `{"account":"work","threadId":"<thread-id>"}` | Clears UNREAD on the entire thread and returns `{"ok":true}`. Repeating the operation is safe. |
+| `POST /api/mail/modify` with account, threadId and action | Mark read or unread, star or unstar, archive or restore, and trash or restore. |
+| `GET /api/mail/compose?account=work&id=<thread-id>&mode=reply` | Prefills recipients and subject for reply, replyAll or forward. |
+| `POST /api/mail/send` with account, mode, sendId, to, cc, subject and body | Sends a new message or uses threadId to quote an original. |
+| `GET /api/mail/image?account=work&message=<message-id>&part=<part-id>` | Renders one image. Use remote instead of part for an HTML picture index. |
 
 The bridge uses paged Gmail thread ID lists for label membership, ordering and unread totals. It loads From, Subject and Date metadata only for the visible E1 page and fetches bodies on explicit open. When configured for multiple accounts, it also reads dates for candidates to merge mailbox orderings. The per-account snapshots refresh in the background after first use. A cold list waits up to about three seconds before returning cached results. A successful mark-read clears the unread flag and count in memory immediately.
 
@@ -50,8 +57,9 @@ The bridge uses paged Gmail thread ID lists for label membership, ordering and u
 
 All paths are relative to Gmail's `/gmail/v1/users/me`.
 
-- GET `/profile`, `/labels`, `/labels/{id}`, `/threads`, `/threads/{id}`, and `/messages/{id}`.
-- POST `/threads/{id}/modify` with exactly `{"removeLabelIds":["UNREAD"]}`.
+- GET `/profile`, `/labels`, `/labels/{id}`, `/threads`, `/threads/{id}`, `/messages/{id}`, and `/messages/{id}/attachments/{id}`.
+- POST `/threads/{id}/modify` with a single addition or removal of UNREAD, INBOX or STARRED.
+- POST `/threads/{id}/trash`, `/threads/{id}/untrash` and `/messages/send` with their allowlisted payloads.
 
 The client rejects any other method, path or mutation body before credential refresh or transport. The granted Google scope permits broader changes, so the bridge enforces this narrower list at the client boundary.
 

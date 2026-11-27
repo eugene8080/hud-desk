@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { readOAuthClient, GMAIL_SCOPE, TOKEN_URL } from '../bridge/gmail.mjs';
 import { readMailConfig } from '../bridge/mail.mjs';
 
@@ -84,7 +84,10 @@ async function saveToken(account, token) {
 }
 
 async function main(args) {
-  if (args.length !== 2 || args[0] !== '--account') throw new Error('Usage: node scripts/mail-auth.mjs --account <id>');
+  if (![2, 4].includes(args.length) || args[0] !== '--account' ||
+      (args.length === 4 && (args[2] !== '--client' || !args[3]))) {
+    throw new Error('Usage: node scripts/mail-auth.mjs --account <id> [--client <desktop-client.json>]');
+  }
   let config;
   try {
     const file = new URL('../bridge/config.local.json', import.meta.url);
@@ -93,8 +96,10 @@ async function main(args) {
     throw new Error('Could not load the mail block in bridge/config.local.json.');
   }
   const account = config?.accounts.find(entry => entry.id === args[1]);
-  if (!account) throw new Error('Account is not configured in a valid mail block.');
-  const { client_id, client_secret } = await readOAuthClient(config.oauthClientFile);
+  if (account?.provider !== 'gmail-api') throw new Error('Account is not configured for Gmail API in a valid mail block.');
+  const clientFile = args[3] ? resolve(args[3]) : account.oauthClientFile;
+  if (clientFile !== account.oauthClientFile) throw new Error('Set oauthClientFile for this account to the same file as --client.');
+  const { client_id, client_secret } = await readOAuthClient(clientFile);
   const { code, redirectUri, verifier } = await authorizationCode(client_id);
   const token = await jsonFrom(TOKEN_URL, {
     method: 'POST',

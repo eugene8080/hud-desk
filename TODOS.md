@@ -66,6 +66,9 @@ Completed/superseded release notes: [history](docs/todo-history.md).
   for a few seconds (3 s cold-start rule) -- check how the glasses show it; (4) after G2
   confirmation, tell Eugene the messenger-glass Gmail facade can go back to Beeper-only
   (messenger-glass TODOS #14). E2/C/R not started. See `docs/email.md`.
+  2026-11-27 self-host Email: Gmail API with a user-owned Google project, or IMAP/SMTP with an app
+  password. Bridge routes verified with fake transports. Live provider and OAuth checks are pending.
+  Setup and provider differences are in `docs/email-providers.md`.
 
 - [ ] **Quick Tunnel fixed metrics port -- next restart verification:**
   2026-11-10 pin `tunnel/quick.yml` to loopback 127.0.0.1:20261, outside the
