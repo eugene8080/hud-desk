@@ -161,11 +161,18 @@ const NO_START = '、。，．・：；？！」』）】〕〉》ーぁぃぅ�
 const NO_END = '「『（【〔〈《\\uff08\\uff3b\\uff5b';
 const WRAP_TOKENS = new RegExp(`\\s+|[${NO_END}]*[${CJK}][${NO_START}]*|[^\\s${CJK}]+`, 'gu');
 
-export function readerPages(text: string, measure: (text: string) => number, width = 550, rowsPerPage = 6, byteLimit = 900): string[] {
-  const rows: string[] = [];
+export type ReaderPage = { text: string; userTurns: number[] };
+
+export function readerPages(text: string, measure: (text: string) => number, width = 550, rowsPerPage = 6, byteLimit = 900): ReaderPage[] {
+  const rows: { text: string; turn: number }[] = [];
   const fits = (candidate: string) => measure(candidate) <= width && enc.encode(candidate).length <= byteLimit;
+  let userTurn = 0, lastTurn = 0;
   for (const line of text.split('\n')) {
-    if (!line) { rows.push(''); continue; }
+    // Resolve the role before wrapping, including when a wrap starts a new page.
+    if (line.startsWith('/ ')) userTurn = ++lastTurn;
+    // Progress and choice prompts are unindented, outside the transcript turn.
+    else if (line && !line.startsWith('  ')) userTurn = 0;
+    if (!line) { rows.push({ text: '', turn: userTurn }); continue; }
     // Hanging indent: a wrapped row continues under the text after the role
     // marker ('/ ', '> ') or the two-space continuation, never at column 0.
     // The indent is the run of spaces closest in width to that prefix: exactly
@@ -181,7 +188,7 @@ export function readerPages(text: string, measure: (text: string) => number, wid
       }
     }
     let row = '';
-    const wrap = () => { rows.push(row.trimEnd()); row = indent; }; // the space before a wrap point is dropped too
+    const wrap = () => { rows.push({ text: row.trimEnd(), turn: userTurn }); row = indent; }; // drop the space before a wrap point
     for (const token of line.match(WRAP_TOKENS) || []) {
       if (fits(row + token)) { row += token; continue; }
       if (row.trim()) wrap();
@@ -191,16 +198,17 @@ export function readerPages(text: string, measure: (text: string) => number, wid
         row += ch;
       }
     }
-    rows.push(row);
+    rows.push({ text: row, turn: userTurn });
   }
-  const pages: string[] = [];
-  let page: string[] = [];
+  const pages: ReaderPage[] = [];
+  let page: typeof rows = [];
+  const save = () => pages.push({ text: page.map(row => row.text).join('\n'), userTurns: page.map(row => row.turn) });
   for (const row of rows) {
-    if (page.length && (page.length === rowsPerPage || enc.encode([...page, row].join('\n')).length > byteLimit)) {
-      pages.push(page.join('\n')); page = [];
+    if (page.length && (page.length === rowsPerPage || (byteLimit !== Infinity && enc.encode([...page, row].map(r => r.text).join('\n')).length > byteLimit))) {
+      save(); page = [];
     }
     page.push(row);
   }
-  if (page.length) pages.push(page.join('\n'));
-  return pages.length ? pages : [''];
+  save();
+  return pages;
 }
