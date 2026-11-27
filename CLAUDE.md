@@ -56,6 +56,20 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.70 (Eugene: three dimmer Ink 1 options, Tube turns with more space and dim,
+Dots 1/3 and 1/4). Fills come from one 4x4 Bayer dither in absolute coordinates: Ink 1 7/8 (14/16),
+3/4 (12/16), 5/8 (10/16), Dots 1/2 (8/16, the checker as before), 1/3 (5/16), 1/4 (4/16). Tube
+wide: scanline pitch 4; Tube dim: pitch 3 with a checker band; text on a scanline row dims to 62 %
+at each variant's pitch. 15 options; Compare backgrounds is the first row of the Background menu;
+the comparison is one row per option (fits Departure 7x14). 230 tests, build pass. Cleanup the same
+day (Eugene asked): merged orca-glass worktrees chat-module, reader-highlight, super-app-bridge,
+super-app-ui removed through Orca with local branches (node_modules junctions in two of them
+unlinked first; main deps verified intact); their merged origin branches kept. D:/dev/gazechat
+deleted (everything on the archived GitHub repo). g2new revoked by Eugene. The retired mail facade,
+Orca Glass Email and Hermes's Google tokens share one OAuth client (project 213943968205): do NOT
+revoke 'the app' in the Google account, that would cut off Orca Glass and Hermes. Deleting
+D:/dev/messenger-glass (its .local holds the facade's refresh token) is the retirement for it.
+
 2026-11-27 bridge restarted with Eugene's approval for 1.0.69 (old supervisor 20716/server 21108/
 whisper 21832/tunnel 21128+cloudflared 21500; new supervisor 6768, server 62660, tunnel watcher
 56512, whisper 62444 --vad); local and tailnet healthz ok. Counts-only check (GET only, nothing

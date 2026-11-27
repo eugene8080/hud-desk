@@ -581,15 +581,15 @@ function showFonts() {
   }, true);
 }
 
-// Backgrounds menu (Eugene, 2026-11-27): its own row in the reader's long-press menu; every
-// option, then Compare backgrounds (moved here from the Font list).
+// Backgrounds menu (Eugene, 2026-11-27): its own row in the reader's long-press menu. Compare
+// backgrounds first (always on the first page of the 16 rows), then every option.
 function showBackgrounds(reader: TextScreen) {
   const selected = TURN_BACKGROUNDS.indexOf(turnBackground);
-  const labels = [...TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : '')), tr('compareBackgrounds')];
+  const labels = [tr('compareBackgrounds'), ...TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : ''))];
   let saving = false;
-  return showTextPicker(reader, labels, selected, async i => {
-    if (i === TURN_BACKGROUNDS.length) { await openComparison(reader, 'backgrounds').catch(e => diag((e as Error).message)); return; }
-    const option = TURN_BACKGROUNDS[i];
+  return showTextPicker(reader, labels, selected + 1, async i => {
+    if (i === 0) { await openComparison(reader, 'backgrounds').catch(e => diag((e as Error).message)); return; }
+    const option = TURN_BACKGROUNDS[i - 1];
     if (saving || !option) return;
     const picker = current;
     saving = true;

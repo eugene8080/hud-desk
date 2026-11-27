@@ -2144,7 +2144,7 @@ test('saved removed reader modes and the saved comparison font fall back to Term
   await h.pick(2);
   const native = container(h, 'body').content;
   await h.menu(1109);
-  await h.pick(8);
+  await h.pick(0);
   assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus')));
   await h.scroll('up');
   assert.equal(h.pages.at(-1).containerTotalNum, 7);
@@ -2188,67 +2188,74 @@ test('user turn background follows wrapped and indented rows across pages withou
   assert.equal(tilePixel(earlier, right, 4 + (rows - 2) * line), 0);
 });
 
-test('Backgrounds menu: Lines 1/3 by default, every option saves, Compare backgrounds inside it', async () => {
+const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+const ditherLit = k => (x, y) => BAYER4[y & 3][x & 3] < k;
+
+test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options save, one comparison row each', async () => {
   const { line, textX, textWidth } = fineExports.fineLayout('terminus');
   const right = textX + textWidth - 1;
   const text = '/ Check this.\n> Checked.';
-  const scan = y => y % 3 === 2;
   // A value saved by a removed option (Ink 3) falls back to Lines 1/3.
-  const storage = { 'reader-text': 'terminus', 'reader-turn-bg': '3' };
-  const h = await moduleHarness({ storage });
+  const h = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-turn-bg': '3' } });
   h.api.thread = async () => ({ text });
   await h.pick(2);
   for (const y of [3, 4, 5, 6]) assert.equal(tilePixel(sentFineTiles(h), right, y), y >= 4 && y % 3 === 0 ? 17 : 0);
-  // Its own row in the long-press menu; the list ends with Compare backgrounds.
   await h.menu(1109);
-  assert.deepEqual(menuItems(h), ['None', 'Ink 1', 'Lines 1/2', 'Lines 1/3 ✓', 'Dots 1/2', 'Tube turns', 'Tube', '1px frame', 'Compare backgrounds']);
-  await h.pick(8);
+  assert.deepEqual(menuItems(h), ['Compare backgrounds', 'None', 'Ink 1', 'Ink 1 · 7/8', 'Ink 1 · 3/4', 'Ink 1 · 5/8',
+    'Lines 1/2', 'Lines 1/3 ✓', 'Dots 1/2', 'Dots 1/3']);
+  await h.pick(0);
   const comparison = sentFineTiles(h);
-  const block = i => 4 + i * (2 * line + fineExports.BACKGROUND_GAP);
-  const lit = (i, test) => Array.from({ length: line }, (_, r) => block(i) + r)
-    .every(y => [right - 1, right].every(x => tilePixel(comparison, x, y) === (test(x, y) ? 17 : 0)));
-  assert.ok(lit(0, () => false), 'None');
-  assert.ok(lit(1, () => true), 'Ink 1');
-  assert.ok(lit(2, (_x, y) => y % 2 === 0), 'Lines 1/2');
-  assert.ok(lit(3, (_x, y) => y % 3 === 0), 'Lines 1/3');
-  assert.ok(lit(4, (x, y) => (x + y) % 2 === 0), 'Dots 1/2');
-  assert.ok(lit(5, (_x, y) => !scan(y)), 'Tube turns');
-  assert.ok(lit(6, (_x, y) => !scan(y)), 'Tube');
-  // 1px frame at Ink 2: right edge lit on every row of the turn, inside empty.
-  assert.ok(Array.from({ length: line }, (_, r) => tilePixel(comparison, right, block(7) + r) === 34).every(Boolean), '1px frame');
-  assert.equal(tilePixel(comparison, right - 1, block(7) + 1), 0);
-  for (let i = 0; i < 8; i++) assert.equal(tilePixel(comparison, right, block(i) + line + 1), 0, `reply row ${i}`);
+  const row = i => 4 + i * (line + fineExports.BACKGROUND_GAP);
+  const lit = (i, test) => Array.from({ length: line }, (_, r) => row(i) + r)
+    .every(y => [right - 3, right - 2, right - 1, right].every(x => tilePixel(comparison, x, y) === (test(x, y) ? 17 : 0)));
+  const scan = (pitch, fill) => (x, y) => y % pitch !== pitch - 1 && ditherLit(fill)(x, y);
+  const expected = [() => false, () => true, ditherLit(14), ditherLit(12), ditherLit(10), (_x, y) => y % 2 === 0,
+    (_x, y) => y % 3 === 0, ditherLit(8), ditherLit(5), ditherLit(4), scan(3, 16), scan(4, 16), scan(3, 8), scan(3, 16)];
+  const names = ['None', 'Ink 1', 'Ink 7/8', 'Ink 3/4', 'Ink 5/8', 'Lines 1/2', 'Lines 1/3', 'Dots 1/2', 'Dots 1/3',
+    'Dots 1/4', 'Tube turns', 'Tube wide', 'Tube dim', 'Tube'];
+  expected.forEach((test, i) => assert.ok(lit(i, test), names[i]));
+  // 1px frame at Ink 2: the right edge lit on every row of the turn, inside empty.
+  assert.ok(Array.from({ length: line }, (_, r) => tilePixel(comparison, right, row(14) + r) === 34).every(Boolean), '1px frame');
+  assert.equal(tilePixel(comparison, right - 1, row(14) + 1), 0);
   for (const font of fineExports.FINE_FONTS) {
     const { line: fontLine } = fineExports.fineLayout(font);
-    assert.ok(4 + 8 * (2 * fontLine + fineExports.BACKGROUND_GAP) + 8 + fontLine <= 287, font);
+    assert.ok(4 + 15 * (fontLine + fineExports.BACKGROUND_GAP) + 8 + fontLine <= 287, font);
   }
   await h.scroll('down');
-  // Pick Tube: band lit on two rows of three, the whole screen scanned (frame at step 9 on y = 5).
+  // Page two: swipe past Dots 1/3 to Dots 1/4 ... 1px frame, then pick Tube.
   await h.menu(1109);
-  await h.pick(6);
+  for (let i = 0; i < 3; i++) await h.scroll('down');
+  assert.deepEqual(menuItems(h), ['Dots 1/4', 'Tube turns', 'Tube wide', 'Tube dim', 'Tube', '1px frame']);
+  await h.pick(4);
   assert.equal(h.storage.get('reader-turn-bg'), 'tube');
   const tube = sentFineTiles(h);
   assert.equal(tilePixel(tube, right, 4), 17);
   assert.equal(tilePixel(tube, right, 5), 0);
-  assert.equal(tilePixel(tube, 0, 5), 153);
+  assert.equal(tilePixel(tube, 0, 5), 153); // the whole screen is scanned: frame at step 9 on y = 5
   assert.equal(tilePixel(tube, 0, 4), 255);
-  // Tube turns leaves the screen frame alone.
-  await h.menu(1109);
-  await h.pick(5);
-  assert.equal(h.storage.get('reader-turn-bg'), 'tubeturns');
-  assert.equal(tilePixel(sentFineTiles(h), 0, 5), 255);
-  // 1px frame.
-  await h.menu(1109);
-  await h.pick(7);
-  assert.equal(h.storage.get('reader-turn-bg'), 'frame');
-  assert.equal(tilePixel(sentFineTiles(h), right, 5), 34);
-  await h.menu(1109);
-  assert.equal(menuItems(h)[7], '1px frame ✓');
   // At App Brightness 1 no background is drawn: no step below Ink 1 text.
-  const dim = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-ink': '1', 'reader-turn-bg': 'lines2' } });
+  const dim = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-ink': '1', 'reader-turn-bg': 'ink34' } });
   dim.api.thread = async () => ({ text });
   await dim.pick(2);
   for (const y of [4, 5]) assert.equal(tilePixel(sentFineTiles(dim), right, y), 0);
+});
+
+test('every Background label fits the glasses menu, and tube variants scan their own pitch', () => {
+  for (const option of fineExports.TURN_BACKGROUNDS) {
+    const label = `Background: ${fineExports.turnBackgroundLabel(option)}`;
+    assert.ok(listExports.glassWidth(label) <= 210, label);
+  }
+  const page = { text: '/ MMMM', userTurns: [1] };
+  const status = { left: '', right: '' };
+  const { textX, line } = fineExports.fineLayout('terminus');
+  const plain = fineExports.renderFineScreen(page, 'terminus', status, 15, 'none');
+  for (const [option, pitch] of [['tubeturns', 3], ['tubewide', 4], ['tubedim', 3]]) {
+    const tiles = fineExports.renderFineScreen(page, 'terminus', status, 15, option);
+    for (let y = 4; y < 4 + line; y++) for (let x = textX; x < textX + 36; x++) {
+      if (tilePixel(plain, x, y) === 255) assert.equal(tilePixel(tiles, x, y), y % pitch === pitch - 1 ? 153 : 255, `${option} ${x},${y}`);
+    }
+    assert.equal(tilePixel(tiles, 0, 5), 255, `${option} leaves the screen frame alone`);
+  }
 });
 
 test('scanlines dim lit text pixels on every third row and never drop them below Ink 1', () => {
