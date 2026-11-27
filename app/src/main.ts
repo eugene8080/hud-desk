@@ -16,7 +16,7 @@ import {
   type EvenAppBridge,
   type EvenHubEvent,
 } from '@evenrealities/even_hub_sdk';
-import { api, currentBase, setApiLang, setConnection, setDemo, type ChoiceMenu, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
+import { api, currentBase, setApiLang, setConnection, setDemo, type ChatItem, type ChoiceMenu, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
 import { parseCode, resolveBase } from './pairing';
 import { applyPage, detectLang, getLang, setLang, t as tr } from './i18n';
 import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth, type ReaderPage } from './text';
@@ -28,6 +28,7 @@ import { createPhone, type Connection } from './phone';
 import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
+import { Chat, chatColumns, CHAT_NETWORKS_KEY } from './chat';
 
 // 画面 576x288。上に見出し(テキスト)、下に本文(リスト or テキスト)の2段構成で統一する。
 const HEAD = { containerID: 1, containerName: 'head', xPosition: 0, yPosition: 0, width: 576, height: 36 };
@@ -62,7 +63,7 @@ const TEXT_BYTES = 999;
 const POLL_MS = 1000;
 
 type Screen =
-  | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
+  | { kind: 'list'; title: string; items: string[]; module?: GlassModule; workspacePicker?: boolean; mailPicker?: { page: number; search: string }; chatPicker?: { page: number; networks: string[] }; agentPicker?: boolean; textPicker?: boolean; headings?: number[]; menuActions?: { id: number; label: string; run: () => unknown }[]; compat?: boolean; columns?: SessionColumns[]; count?: string; selected?: number; paintedSelection?: number; menuFrame?: number; paintedCursor?: string; cursorWriting?: boolean; paging?: boolean; onPreviousPage?: () => unknown; onNextPage?: () => unknown; onPick: (i: number) => void; onBack?: () => void; onHold?: () => void }
   | { kind: 'text'; title: string; text: string; usageMode?: ResetMode; conversationText?: string; choiceMenu?: ChoiceMenu | null; tail?: boolean; offset?: number; pageText?: string; pages?: ReaderPage[]; pageTarget?: number; pageWriting?: boolean; reading?: boolean; refreshing?: boolean; responsePage?: number; openAtResponse?: boolean; openingOffset?: number; model?: string; voice?: boolean; voiceHint?: string; voiceTail?: boolean; activityLabel?: string; activityState?: string; reportedSeconds?: number | null; statusFrame?: number; statusStartedAt?: number; savedHistory?: boolean; reader?: ReaderSource & { coding?: Thread }; fine?: FineFont; pagesFine?: FineFont; tiles?: number[][]; fineLabel?: string; fineQueued?: boolean; comparison?: Comparison; menuActions?: { id: number; label: string; run: () => unknown }[]; onClick?: () => void; onBack?: () => void; };
 
 let bridge: EvenAppBridge;
@@ -78,15 +79,20 @@ let panelWrites: Promise<void> = Promise.resolve();
 let sessionCursorWrites: Promise<void> = Promise.resolve();
 let modules: GlassModule[] = ['coding'];
 let activeModule: GlassModule = 'coding';
-const positions: Record<GlassModule, ModulePosition> = { coding: { page: 0, cursor: 0 }, email: { page: 0, cursor: 0 } };
+const positions: Record<GlassModule, ModulePosition> = {
+  coding: { page: 0, cursor: 0 }, email: { page: 0, cursor: 0 }, chat: { page: 0, cursor: 0 },
+};
 let moduleTimer: ReturnType<typeof setTimeout> | undefined;
 let moduleRevision = 0;
 let modulePending = false;
 let mail: Mail;
+let chat: Chat;
 let voiceAvailable = false;
 let moduleStorageWrites = Promise.resolve();
 let mailStorageWrites = Promise.resolve();
 let mailFilterRevision = 0;
+let chatFilterRevision = 0;
+let chatStorageWrites = Promise.resolve();
 let selectedThread: Thread | null = null;
 let sending = false;
 let holding = false;
@@ -126,7 +132,7 @@ function refreshGlasses() {
   positions.coding.page = 0;
   const s = current;
   if (s?.kind === 'list' && s.module === 'coding' && !modulePending) void home(0, 0);
-  else if (s?.kind === 'list' && s.workspacePicker && !s.mailPicker) void workspaceOptions();
+  else if (s?.kind === 'list' && s.workspacePicker && !s.mailPicker && !s.chatPicker) void workspaceOptions();
   else if (s?.kind === 'list' && s.agentPicker) void viewOptions();
 }
 const providerFilterLabel = () => viewProvider === 'all' ? tr('allOrcaSessions') : agentLabel(viewProvider);
@@ -245,7 +251,8 @@ const statusIconX = (model?: string) => VOICE.xPosition + (model ? glassWidth(`$
 function readerHint(s: TextScreen, seconds: number | null | undefined) {
   bodyText(s);
   const page = s.refreshing ? tr('refreshing') : tr('pageCounter', s.offset! + 1, s.pages!.length);
-  if (!s.reader?.coding) return nativeRight(page, HINT.width);
+  if (!s.reader?.coding) return nativeRight(s.reader?.hold
+    ? statusRight(null, false, page, text => glassWidth(text) <= HINT.width - 6) : page, HINT.width);
   const left = s.activityState === 'working'
     ? Math.max(...workingLabels().map(word => glassWidth(statusLeft(`. ${word}...`, s.model))))
     : glassWidth(statusLeft(s.activityLabel || readerStatus('unknown'), s.model));
@@ -256,7 +263,10 @@ function readerHint(s: TextScreen, seconds: number | null | undefined) {
 function flipReader(s: TextScreen, delta: number) {
   const pages = readerLayout(s);
   // Swiping down past the last page resumes live updates and fetches now.
-  if (delta > 0 && !s.pageWriting && (s.offset ?? 0) >= pages.length - 1) { if (s.reader?.coding) void refreshReader(s); return; }
+  if (delta > 0 && !s.pageWriting && (s.offset ?? 0) >= pages.length - 1) {
+    if (s.reader?.coding || s.reader?.refreshOnEnd) void refreshReader(s);
+    return;
+  }
   s.reading = true; // Freeze this snapshot and its page count while browsing.
   s.pageTarget = Math.max(0, Math.min(pages.length - 1, (s.pageTarget ?? s.offset ?? 0) + delta));
   if (s.pageWriting) return;
@@ -287,7 +297,11 @@ async function refreshReader(s: TextScreen) {
   try {
     await inputHint();
     if (current !== s) return;
-    await startReaderUpdates(s)?.();
+    if (s.reader?.coding) await startReaderUpdates(s)?.();
+    else if (s.reader?.refreshOnEnd) {
+      const loaded = await s.reader.load();
+      if (current === s && loaded.text !== s.text) await updateText(s.title, loaded.text, loaded.openingOffset);
+    }
   } catch (e) { diag((e as Error).message); }
   finally {
     s.refreshing = false;
@@ -471,7 +485,11 @@ async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boo
 // changes (and is re-sent) at most once a minute while idle text stays put.
 function fineStatus(s: TextScreen, page: number): FineStatus {
   const label = s.fineLabel ?? s.activityLabel ?? readerStatus('unknown');
-  if (!s.reader?.coding) return { left: label, right: tr('pageCounter', page + 1, readerLayout(s).length) };
+  if (!s.reader?.coding) {
+    const where = s.refreshing ? tr('refreshing') : tr('pageCounter', page + 1, readerLayout(s).length);
+    const room = fineLayout(s.fine!).columns - fineCells(label) - 1;
+    return { left: label, right: s.reader?.hold ? statusRight(null, false, where, text => fineCells(text) <= room) : where };
+  }
   // Working labels start with a Braille spinner frame; tile modes draw the
   // scanner sweep in its place, stepping with the same frame counter.
   const working = label[0] !== '/' && label.length > 2;
@@ -608,12 +626,12 @@ async function setReaderText(mode: ReaderText, screen: Screen | null = current) 
   await show(s);
 }
 
-async function updateText(title: string, text: string) {
+async function updateText(title: string, text: string, openingOffset?: number) {
   if (current?.kind !== 'text') return;
   const screen = current;
   const write = async () => {
     if (current !== screen || (screen.reader && screen.reading)) return;
-    const next = { ...screen, title, text };
+    const next = { ...screen, title, text, openingOffset: openingOffset ?? screen.openingOffset };
     if (screen.reader) next.offset = undefined; // Live mode follows the newest page.
     const content = bodyText(next);
     if (screenTitle(next) !== screenTitle(screen)) {
@@ -622,7 +640,11 @@ async function updateText(title: string, text: string) {
     if (current !== screen || (screen.reader && screen.reading)) return;
     if (screen.fine) { if (!await paintFine(screen, next.offset ?? 0, next)) return; }
     else if (!await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: BODY.containerID, containerName: BODY.containerName, content }))) throw new Error('Glasses rejected the live text update. Retrying.');
-    if (current === screen && !(screen.reader && screen.reading)) { screen.title = title; screen.text = text; screen.offset = next.offset; screen.pages = next.pages; screen.pageText = next.pageText; screen.responsePage = next.responsePage; if (screen.reader) await inputHint(); }
+    if (current === screen && !(screen.reader && screen.reading)) {
+      Object.assign(screen, { title, text, openingOffset: next.openingOffset, offset: next.offset,
+        pages: next.pages, pageText: next.pageText, responsePage: next.responsePage });
+      if (screen.reader) await inputHint();
+    }
   };
   if (screen.reader) {
     const work = readerWrites.then(write);
@@ -717,7 +739,11 @@ function cancelModuleSwitch() {
   moduleRevision++;
 }
 
-function showModule(mounted?: SessionMenuScreen) { return activeModule === 'email' ? mailHome(undefined, undefined, mounted) : home(undefined, undefined, mounted); }
+function showModule(mounted?: SessionMenuScreen) {
+  if (activeModule === 'chat') return chatHome(undefined, undefined, mounted);
+  if (activeModule === 'email') return mailHome(undefined, undefined, mounted);
+  return home(undefined, undefined, mounted);
+}
 
 function selectModule(next: GlassModule) {
   cancelModuleSwitch();
@@ -903,6 +929,81 @@ async function mailHome(page = positions.email.page, selected = positions.email.
       menuActions: [{ id: 1001, label: tr('refresh'), run: () => mailHome() }],
       onPick: i => { if (i === 0) void mailLabels(0, 0, true); },
     });
+  }
+}
+
+async function chatHome(page = positions.chat.page, selected = positions.chat.cursor, mounted?: SessionMenuScreen) {
+  selectThread(null);
+  const owner = current;
+  const revision = moduleRevision;
+  const filterRevision = chatFilterRevision;
+  const active = () => current === owner && revision === moduleRevision && filterRevision === chatFilterRevision;
+  const filter = { marker: '*', title: tr('mailFilter'), right: '' };
+  const pickFilter = () => { void chatNetworks(); };
+  const menuActions = [{ id: 1001, label: tr('refresh'), run: () => chatHome() }];
+  try {
+    let result = await chat.list(page);
+    while (page > 0 && !result.items.length && !result.hasMore && active()) result = await chat.list(--page);
+    if (!active()) return;
+    const columns = [{ ...filter, right: result.filterColumn }, ...result.items.map(chatColumns)];
+    await showModuleList('chat', page, selected, { columns, count: tr('chatUnread', result.unread),
+      items: columns.map(row => `${row.marker} ${row.title} ${row.right}`),
+      onPreviousPage: page > 0 ? () => chatHome(page - 1, -1) : undefined,
+      onNextPage: result.hasMore ? () => chatHome(page + 1, 1) : undefined,
+      menuActions,
+      onPick: i => { if (i === 0) pickFilter(); else if (result.items[i - 1]) void openChat(result.items[i - 1]); },
+    }, mounted);
+  } catch {
+    if (!mounted && active()) await showModuleList('chat', page, 0, {
+      columns: [filter, { marker: '', title: tr('chatUnavailable'), right: '' }],
+      items: [filter.title, tr('chatUnavailable')], headings: [2], menuActions,
+      onPick: i => { if (i === 0) pickFilter(); },
+    });
+  }
+}
+
+async function toggleChatNetwork(name: string | null, networks: string[], fromPhone = false) {
+  const value = chat.toggle(name, networks);
+  const revision = ++chatFilterRevision;
+  const owner = current;
+  moduleCache.delete('chat');
+  positions.chat.page = 0;
+  phone?.render();
+  chatStorageWrites = chatStorageWrites.then(async () => { await bridge.setLocalStorage(CHAT_NETWORKS_KEY, value); })
+    .catch(e => diag((e as Error).message));
+  await chatStorageWrites;
+  if (!fromPhone || current !== owner || revision !== chatFilterRevision || activeModule !== 'chat') return;
+  if (owner?.kind === 'list' && owner.chatPicker) await chatNetworks(owner.chatPicker.page, owner.selected, networks);
+  else if (owner?.kind === 'list' && owner.module === 'chat') await chatHome(0);
+  else if (modulePending) await finishModuleSwitch(owner, moduleRevision);
+}
+
+async function chatNetworks(page = 0, selected = 0, catalog?: string[]) {
+  const back = () => chatHome(positions.chat.page, 1);
+  const owner = current;
+  const revision = moduleRevision;
+  try {
+    const networks = catalog ?? await chat.networks();
+    if (current !== owner || revision !== moduleRevision || activeModule !== 'chat') return;
+    const size = 8;
+    page = Math.max(0, Math.min(page, Math.ceil(networks.length / size) - 1));
+    const visible = networks.slice(page * size, (page + 1) * size);
+    const check = (on: boolean, label: string) => `[${on ? 'x' : ' '}] ${label}`;
+    const items = [tr('done'), check(chat.isAll(), tr('chatAllNetworks')),
+      ...visible.map(name => check(chat.isSelected(name), name))];
+    await show({ kind: 'list', workspacePicker: true, chatPicker: { page, networks }, title: tr('chatFilterNetwork'),
+      items, selected: selected < 0 ? items.length - 1 : Math.min(selected, items.length - 1),
+      onPreviousPage: page ? () => chatNetworks(page - 1, -1, networks) : undefined,
+      onNextPage: (page + 1) * size < networks.length ? () => chatNetworks(page + 1, 2, networks) : undefined,
+      onBack: back, onPick: async i => {
+        if (i === 0) { await back(); return; }
+        const picker = current;
+        await toggleChatNetwork(i === 1 ? null : visible[i - 2], networks);
+        if (current === picker) await chatNetworks(page, i, networks);
+      },
+    });
+  } catch {
+    if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('chat'), text: tr('chatUnavailable'), onBack: back, onClick: back });
   }
 }
 
@@ -1122,6 +1223,22 @@ async function openMail(thread: MailThread) {
   }
 }
 
+async function openChat(item: ChatItem) {
+  const owner = current;
+  const revision = moduleRevision;
+  const back = () => chatHome();
+  let outcome: 'chatSent' | 'chatNotSent' | undefined;
+  const hold = voiceAvailable && !item.readOnly ? () => {
+    void record({ reply: async text => (await api.chat.send(item.id, text)).ok,
+      onResult: sent => { outcome = sent ? 'chatSent' : 'chatNotSent'; } }, true);
+  } : undefined;
+  try {
+    await openReader(chat.reader(item, () => outcome ? tr(outcome) : ' ', hold), back);
+  } catch {
+    if (current === owner && revision === moduleRevision) await show({ kind: 'text', title: moduleLabel('chat'), text: tr('chatUnavailable'), onBack: back, onClick: back });
+  }
+}
+
 // Restart live updates without rebuilding the mounted chat after a successful send.
 function startReaderUpdates(screen: Screen | null): (() => Promise<void>) | undefined {
   clearInterval(poll);
@@ -1259,7 +1376,8 @@ const MAX_REC_SEC = 60;
 const voiceReview = () => tr('voiceReview');
 const voiceReturn = () => tr('voiceReturn');
 
-type VoiceTarget = { thread: Thread } | { search: (text: string) => Promise<void> };
+type VoiceTarget = { thread: Thread } | { search: (text: string) => Promise<void> } |
+  { reply: (text: string) => Promise<boolean>; onResult: (sent: boolean) => void };
 async function record(target: VoiceTarget, hold = false) {
   if ((hold && !holding) || recording !== null || cancelCapture) return;
   diag('Hold received. Opening voice screen…');
@@ -1302,9 +1420,10 @@ async function record(target: VoiceTarget, hold = false) {
     if (!overlayActive) return;
     overlayActive = false;
     await voiceWrites;
+    if (current !== voiceScreen) return;
     if (background.kind === 'text') Object.assign(background, { reading: false, tail: true, offset: undefined, openAtResponse: false, pageTarget: undefined, pageWriting: false });
     try { await show(background); }
-    catch (e) { diag((e as Error).message); void home(); }
+    catch (e) { diag((e as Error).message); void showModule(); }
   };
   recording = [];
   const chunks = recording;
@@ -1334,18 +1453,22 @@ async function record(target: VoiceTarget, hold = false) {
   cancelCapture = cancel;
   const back = () => { cancel(); void closeVoice(); };
   const sendText = async (text: string, shown: string) => {
-    if (cancelled || submitted || sending || !('thread' in target)) return;
+    if (cancelled || submitted || sending || 'search' in target) return;
     submitted = true;
     sending = true;
     cancelCapture = null;
     try {
       await voiceShow(shown, tr('sending'));
-      if (choiceMenu) {
+      if ('reply' in target) {
+        target.onResult(await target.reply(text).catch(() => false));
+        if (background.kind === 'text') background.activityLabel = background.reader?.statusText?.();
+      } else if (choiceMenu) {
         const value = choiceNumber(text);
         if (!value || !choiceMenu.options.some(o => o.value === value)) throw new Error(tr('sayOptionNumber'));
         await api.choice(target.thread.handle, choiceMenu.id, value);
       } else await api.say(target.thread.handle, text);
       await closeVoice();
+      if ('reply' in target && background.kind === 'text' && current === background) void refreshReader(background);
     } catch (e) {
       await voiceShow((e as Error).message, voiceReturn(), { onBack: () => { void closeVoice(); }, onClick: () => { void closeVoice(); } }).catch(e => diag((e as Error).message));
     } finally { sending = false; }
@@ -1698,8 +1821,10 @@ async function openSavedOrHome(connection: Connection, known?: Thread[]) {
   const stored = await bridge.getLocalStorage('module') as GlassModule;
   activeModule = modules.includes(stored) ? stored : 'coding';
   mail = new Mail(await bridge.getLocalStorage(MAIL_LABELS_KEY), await bridge.getLocalStorage(MAIL_ACCOUNTS_KEY), saveMailPref);
+  chat = new Chat(await bridge.getLocalStorage(CHAT_NETWORKS_KEY));
   phone?.connection(connection);
   if (activeModule === 'email') return mailHome();
+  if (activeModule === 'chat') return chatHome();
   const handle = await bridge.getLocalStorage('open-thread');
   if (handle) {
     const list = known ?? await api.threads().catch(() => []);
@@ -1725,6 +1850,7 @@ function redrawForLanguage() {
   if (!s) return;
   if (s.kind === 'list' && s.module) { if (!modulePending) void showModule(); return; }
   if (s.kind === 'list' && s.mailPicker) { void mailLabels(s.mailPicker.page, s.selected ?? 0, false, s.mailPicker.search); return; }
+  if (s.kind === 'list' && s.chatPicker) { void chatNetworks(s.chatPicker.page, s.selected, s.chatPicker.networks); return; }
   if (s.kind === 'list' && (s.workspacePicker || s.agentPicker)) { refreshGlasses(); return; }
   if (s.kind === 'text' && s.usageMode) { void usage(); return; }
   if (s.kind === 'text' && s.reader && !s.voice) {
@@ -1770,6 +1896,9 @@ async function main() {
     toggleMailLabel: key => toggleMailLabel(key, true),
     mailAccountsOff: () => mail?.accountsOff() ?? new Set(),
     toggleMailAccount: id => toggleMailAccount(id, true),
+    chatNetworks: () => chat?.networks() ?? Promise.resolve([]),
+    chatNetworkSelected: name => chat?.isSelected(name) ?? false,
+    toggleChatNetwork: (name, networks) => toggleChatNetwork(name, networks, true),
     filters: () => ({ provider: viewProvider, orca: viewWorkspaces, hermes: viewHermesWorkspaces }),
     setProvider: async id => { await bridge.setLocalStorage('view-provider', id); viewProvider = id; refreshGlasses(); },
     setWorkspaces: async (hermes, value) => {

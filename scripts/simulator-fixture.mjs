@@ -1,6 +1,13 @@
 // Real SDK/rendering, isolated fake sessions/audio: never submit agent input.
 import { createServer } from '../app/node_modules/vite/dist/node/index.js';
 import { fileURLToPath } from 'node:url';
+import { createBeeper, readBeeperConfig } from '../bridge/beeper.mjs';
+import { createBeeperFixture } from './beeper-fixture.mjs';
+
+const beeperFixture = createBeeperFixture();
+const beeper = createBeeper(readBeeperConfig({}), {
+  clientOptions: { transport: beeperFixture.transport, readToken: async () => 'fixture-token' },
+});
 
 const port = Number(process.env.ORCA_GLASS_SIM_PORT || 8791);
 const moduleDelay = Number(process.env.ORCA_GLASS_SIM_MODULE_DELAY || 0);
@@ -33,7 +40,7 @@ const timing=(module,phase)=>{if(${moduleDelay > 0})console.log('Module timing '
 const timed=async(module,load)=>{timing(module,'fetch start');try{return await load();}finally{timing(module,'fetch end');}};
 const request=async(query='')=>{const r=await fetch('/__fixture'+query);return r.json();};
 const read=async(handle)=>{const r=await fetch('/__fixture/read?handle='+encodeURIComponent(handle));const data=await r.json();if(!r.ok)throw new Error(data.error);return data;};
-const mailRequest=async(path,params,body)=>{
+const privateRequest=async(path,params,body)=>{
  const r=await fetch(path+(params?'?'+new URLSearchParams(params):''),body?{method:'POST',body:JSON.stringify(body)}:undefined);
  const data=await r.json();if(!r.ok)throw new Error(data.error);return data;
 };
@@ -43,13 +50,19 @@ export const api={
   threads:async()=>timed('Coding',async()=>(await request('?module=coding')).threads),workspaces:async()=>(await request()).workspaces,
   thread:read,history:read,
   activity:async(handle)=>{const r=await fetch('/__fixture/activity?handle='+encodeURIComponent(handle));return r.json();},
-  health:async()=>({ok:true}),capabilities:()=>mailRequest('/api/capabilities', new URLSearchParams(location.search).has('legacyModules')?{legacyModules:'1'}:undefined),
+  health:async()=>({ok:true}),capabilities:()=>privateRequest('/api/capabilities', new URLSearchParams(location.search).has('legacyModules')?{legacyModules:'1'}:undefined),
+  chat:{
+   networks:()=>privateRequest('/api/chat/networks'),
+   list:(networks,page)=>timed('Chat',()=>privateRequest('/api/chat/list',{networks:networks.join(','),page})),
+   messages:id=>privateRequest('/api/chat/messages',{id}),
+   send:(chatId,text)=>privateRequest('/api/chat/send',null,{chatId,text}),
+  },
   mail:{
-   accounts:()=>mailRequest('/api/mail/accounts'),
-   labels:(account)=>mailRequest('/api/mail/labels',{account}),
-   threads:(filter,page)=>timed('Email',()=>mailRequest('/api/mail/threads',{filter:filter.join(','),page,size:'8'})),
-   thread:(account,id)=>mailRequest('/api/mail/thread',{account,id}),
-   read:(account,threadId)=>mailRequest('/api/mail/read',null,{account,threadId}),
+   accounts:()=>privateRequest('/api/mail/accounts'),
+   labels:(account)=>privateRequest('/api/mail/labels',{account}),
+   threads:(filter,page)=>timed('Email',()=>privateRequest('/api/mail/threads',{filter:filter.join(','),page,size:'8'})),
+   thread:(account,id)=>privateRequest('/api/mail/thread',{account,id}),
+   read:(account,threadId)=>privateRequest('/api/mail/read',null,{account,threadId}),
   },
   usage:async()=>(await request()).usage,
   transcribe:async()=>({text:(await request()).transcript}),
@@ -69,7 +82,7 @@ const timer=setInterval(()=>{
    return true;
   }
   const content=p?.method==='rebuildPageContainer'?p.data.textObject?.find(c=>c.containerName==='head')?.content:p?.data?.containerName==='head'?p.data.content:'';
-  const module=/^(Coding|Email) /.exec(content||'')?.[1];
+  const module=/^\\[(Coding|Email|Chat)\\] /.exec(content||'')?.[1];
   const timing=phase=>{if(${moduleDelay > 0}&&module)console.log('Module timing '+JSON.stringify({module,phase,at:performance.now()}));};
   timing(p?.method==='rebuildPageContainer'?'render start':'head');
   const result=await original(name,...args);
@@ -92,7 +105,7 @@ const server = await createServer({
         if (!req.url?.startsWith('/__fixture') && !req.url?.startsWith('/api/')) return next();
         try {
           const url = new URL(req.url, 'http://127.0.0.1');
-          if (moduleDelay > 0 && (url.pathname === '/api/mail/threads' || url.searchParams.get('module') === 'coding')) {
+          if (moduleDelay > 0 && (['/api/mail/threads', '/api/chat/list'].includes(url.pathname) || url.searchParams.get('module') === 'coding')) {
             await new Promise(resolve => setTimeout(resolve, moduleDelay));
           }
           if (url.pathname.startsWith('/api/')) {
@@ -101,8 +114,15 @@ const server = await createServer({
               let raw = ''; for await (const part of req) raw += part;
               body = JSON.parse(raw);
             }
-            const { demoCall } = await vite.ssrLoadModule('/src/demo.ts');
-            const result = url.pathname === '/api/capabilities' && url.searchParams.has('legacyModules') ? { voice: true } : demoCall('en', req.method, req.url, body);
+            let result;
+            if (url.pathname.startsWith('/api/chat/')) {
+              const route = beeper.routes[`${req.method} ${url.pathname}`];
+              if (!route) { res.writeHead(404); res.end(); return; }
+              result = await route(url.searchParams, body);
+            } else {
+              const { demoCall } = await vite.ssrLoadModule('/src/demo.ts');
+              result = url.pathname === '/api/capabilities' && url.searchParams.has('legacyModules') ? { voice: true } : demoCall('en', req.method, req.url, body);
+            }
             res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(result)); return;
           }
           if (req.method === 'GET' && ['/__fixture/read', '/__fixture/activity'].includes(url.pathname)) {

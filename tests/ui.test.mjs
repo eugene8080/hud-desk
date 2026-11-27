@@ -39,6 +39,13 @@ function mailModule(api) {
   return exports;
 }
 
+const chatSource = ts.transpileModule(readFileSync(new URL('../app/src/chat.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+function chatModule(api) {
+  const exports = {};
+  vm.runInNewContext(chatSource, { exports, require: name => ({ './i18n': i18nExports, './mail': mailModule(api), './api': { api } })[name] });
+  return exports;
+}
+
 // Exercise the real controller with a simulated Even bridge: no agent input,
 // microphone access, network, or hardware claims.
 async function harness(count = 2, voice = false, mode = 'tap', savedView = '', startupResult = 0, rejectAlignedMenu = false, savedWorkspaces = '', savedUsage = '', savedOpen = '', options = {}) {
@@ -64,6 +71,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     history: async () => ({ text: 'Older terminal output' }),
     capabilities: async () => ({ voice, ...(options.capabilities ?? {}) }),
     mail: options.mail,
+    chat: options.chat,
     transcribe: async pcm => { transcriptions.push(pcm); return { text: 'A voice test.' }; },
     say: async (handle, text) => { sends.push({ handle, text }); return { sent: text }; },
     choice: async (handle, menuId, value) => { choices.push({ handle, menuId, value }); return { sent: value }; },
@@ -93,6 +101,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     './usage-reset': usageResetExports,
     './session-list': listExports,
     './mail': mailModule(api),
+    './chat': chatModule(api),
     './filters': filterExports,
     './fine-text': fineExports,
     // The phone page is DOM-only and checked in a browser preview; the glasses tests see a no-op.
@@ -150,6 +159,123 @@ const mailFixture = () => {
   };
   return { fixture, messages, requests };
 };
+
+function chatFixture() {
+  const date = new Date(2026, 10, 25, 14, 5).getTime();
+  const networks = ['Signal', 'Telegram', 'WhatsApp'];
+  const rows = Array.from({ length: 10 }, (_, i) => ({
+    id: `fixture-${i}`, title: `Sample group ${i + 1}`, date: date - i * 60_000, unread: i % 2 === 0,
+    network: networks[i % networks.length], readOnly: i === 9,
+  }));
+  const messages = [
+    { own: false, from: 'Fixture sender', date, text: 'Synthetic latest message.\n' + Array.from({ length: 12 }, (_, i) => `Sample line ${i + 1}.`).join('\n') },
+    { own: true, from: '', date: date - 60_000, text: 'Synthetic earlier message.' },
+  ];
+  const sends = [], lists = [], reads = [];
+  const chat = {
+    networks: async () => networks,
+    list: async (picks, page) => {
+      lists.push({ picks: [...picks], page });
+      const matches = rows.filter(row => !picks.length || picks.includes(row.network));
+      return { items: matches.slice(page * 8, page * 8 + 8), hasMore: matches.length > (page + 1) * 8,
+        unread: matches.filter(row => row.unread).length };
+    },
+    messages: async id => { reads.push(id); return { messages: [...messages] }; },
+    send: async (id, text) => { sends.push({ id, text }); return { ok: true }; },
+  };
+  return { chat, sends, lists, reads, messages, networks, rows };
+}
+
+test('Row zero cycles Coding, Email, Chat, then Coding in bridge capability order', async () => {
+  const { chat } = chatFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['chat', 'email', 'coding'] }, mail: mailFixture().fixture, chat });
+  assert.deepEqual([...h.phone().modules().offered], ['coding', 'email', 'chat']);
+  for (const name of ['Email', 'Chat', 'Coding']) {
+    await h.tap(); await h.debounce();
+    assert.ok(container(h, 'head').content.startsWith(`[${name}]`));
+    assert.equal(h.storage.get('module'), name.toLowerCase());
+  }
+});
+
+test('Chat list uses eight rows, unread markers and a saved filter shared with the phone', async () => {
+  const { chat, lists, networks } = chatFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat });
+  assert.match(container(h, 'menu-count').content, /5 unread chats/);
+  assert.match(container(h, 'body').content, /Sample group 8/);
+  assert.doesNotMatch(container(h, 'body').content, /Sample group 9/);
+  assert.match(container(h, 'menu-cursor').content.split('\n')[2], /\//);
+  assert.match(container(h, 'menu-cursor').content.split('\n')[3], /--/);
+  for (let i = 0; i < 10; i++) await h.scroll('down');
+  assert.match(container(h, 'body').content, /Sample group 9/);
+  assert.equal(lists.at(-1).page, 1);
+  await h.pickRow(1);
+  assert.match(container(h, 'body').content, /\[x\] Signal/);
+  await h.pickRow(2);
+  assert.equal(h.phone().chatNetworkSelected('Signal'), false);
+  assert.equal(h.storage.get('chat-networks'), '["Telegram","WhatsApp"]');
+  await h.phone().toggleChatNetwork('Telegram', networks);
+  assert.match(container(h, 'body').content, /\[ \] Telegram/);
+  await h.pickRow(0);
+  assert.match(container(h, 'menu-right').content, /\[WhatsApp\]/);
+  assert.deepEqual(lists.at(-1), { page: 0, picks: ['WhatsApp'] });
+  const restored = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] },
+    storage: Object.fromEntries(h.storage), chat });
+  assert.equal(restored.phone().chatNetworkSelected('Signal'), false);
+  assert.match(container(restored, 'menu-right').content, /\[WhatsApp\]/);
+});
+
+test('Chat reader opens at the newest message start and refreshes past the last page without a write', async () => {
+  const { chat, messages, reads, sends } = chatFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat });
+  await h.pickRow(2);
+  assert.match(container(h, 'body').content, /^> Fixture sender: Synthetic latest message/);
+  await h.scroll('up');
+  assert.match(h.upgrades.findLast(item => item.containerName === 'body').content, /^\/ Synthetic earlier message/);
+  assert.equal(reads.length, 1);
+  messages.push({ text: 'Synthetic refresh result.', date: messages[0].date + 1000, own: true, from: '' });
+  for (let i = 0; i < 3; i++) await h.scroll('down');
+  assert.equal(reads.length, 2);
+  assert.match(h.upgrades.findLast(item => item.containerName === 'body').content, /^\/ Synthetic refresh result/);
+  assert.equal(sends.length, 0);
+  await h.back();
+  assert.match(container(h, 'menu-count').content, /5 unread chats/);
+});
+
+test('Shared reader page metadata carries Chat user turns across message continuations', () => {
+  const { chatReaderText } = chatModule({});
+  const { text } = chatReaderText({ messages: [
+    { own: true, from: '', date: 1, text: 'Synthetic first line.\nSecond line.' },
+    { own: false, from: 'Fixture sender', date: 2, text: 'Synthetic reply.\n/ Message text.' },
+  ] });
+  const [page] = textExports.readerPages(text, str => str.length, 60);
+  assert.deepEqual([...page.userTurns], [1, 1, 0, 0, 0]);
+});
+
+test('Chat shares Coding voice review, sends once per click, and cancels with no POST', async () => {
+  const { chat, sends } = chatFixture();
+  const h = await harness(2, true, 'hold', '', 0, false, '', '', '',
+    { capabilities: { modules: ['coding', 'chat'] }, storage: { module: 'chat' }, chat });
+  await h.pickRow(2);
+  const review = async () => { h.press(); await h.flush(); h.audio(); h.release(); await h.flush(); };
+  await review();
+  assert.equal(voiceBody(h), 'A voice test.');
+  assert.match(h.upgrades.findLast(item => item.containerName === 'voice-hint').content, /Tap to send \/ Double tap to cancel/);
+  assert.equal(sends.length, 0);
+  await h.back();
+  assert.equal(sends.length, 0);
+  await review();
+  let complete;
+  chat.send = (id, text) => { sends.push({ id, text }); return new Promise(resolve => { complete = resolve; }); };
+  await h.tap(); await h.tap();
+  assert.deepEqual(sends, [{ id: 'fixture-0', text: 'A voice test.' }]);
+  complete({ ok: true }); await h.flush();
+  assert.equal(container(h, 'voice').content, 'sent');
+  await review();
+  chat.send = async () => { throw new Error('Synthetic failure'); };
+  await h.tap();
+  assert.equal(container(h, 'voice').content, 'not sent');
+  assert.equal(h.sends.length, 0);
+});
 
 test('row zero fits the centered longest release title, module labels and counts', () => {
   const { glassWidth, moduleHeading, nativeRight, MENU_HEAD, MENU_COUNT } = listExports;
@@ -394,7 +520,7 @@ test('mail list dates use the local day, and filter summaries show first label a
   assert.ok(listExports.glassWidth(fitted) <= listExports.MENU_RIGHT.width - 6);
 });
 
-test('the mail POST carries the account and thread ID and never replays after a disconnect', async () => {
+test('the Email and Chat POSTs use their exact payload and never replay after a disconnect', async () => {
   const exports = {};
   const requests = [];
   let resolveCount = 0;
@@ -402,11 +528,18 @@ test('the mail POST carries the account and thread ID and never replays after a 
   vm.runInNewContext(source, { exports, require: () => ({}), TextEncoder, Uint8Array, AbortSignal,
     fetch: async (url, req) => { requests.push({ url, req }); throw new Error('synthetic disconnect'); } });
   exports.setConnection({ token: 'sample', base: 'http://127.0.0.1:12345', resolve: async () => { resolveCount++; return 'http://127.0.0.1:12346'; } });
-  await assert.rejects(exports.api.mail.read('work', 'thread-123'), /Delivery uncertain/);
-  assert.equal(requests.length, 1);
-  assert.match(requests[0].url, /\/api\/mail\/read\?/);
-  assert.equal(requests[0].req.method, 'POST');
-  assert.deepEqual(JSON.parse(requests[0].req.body), { account: 'work', threadId: 'thread-123' });
+  for (const [send, path, expected] of [
+    [() => exports.api.mail.read('work', 'thread-123'), '/api/mail/read', { account: 'work', threadId: 'thread-123' }],
+    [() => exports.api.chat.send('fixture-123', 'Synthetic reply.'), '/api/chat/send', { chatId: 'fixture-123', text: 'Synthetic reply.' }],
+  ]) {
+    const before = requests.length;
+    await assert.rejects(send(), /Delivery uncertain/);
+    assert.equal(requests.length - before, 1);
+    const { url, req } = requests.at(-1);
+    assert.equal(new URL(url).pathname, path);
+    assert.equal(req.method, 'POST');
+    assert.deepEqual(JSON.parse(req.body), expected);
+  }
   assert.equal(resolveCount, 0);
 });
 

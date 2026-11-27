@@ -72,9 +72,18 @@ export type MailLabel = { id: string; name: string; unread: number };
 export type MailThread = { account: string; id: string; from: string; subject: string; date: number; unread: boolean; count: number };
 export type MailPage = { items: MailThread[]; hasMore: boolean; unread: number };
 export type MailConversation = { subject: string; messages: { id: string; from: string; to: string; cc: string; date: number; text: string }[] };
+export type ChatItem = { id: string; title: string; date: number; unread: boolean; readOnly?: boolean };
+export type ChatPage = { items: ChatItem[]; hasMore: boolean; unread: number };
+export type ChatConversation = { messages: { from: string; own: boolean; date: number; text: string }[] };
 
 export const api = {
   capabilities: () => call<{ voice: boolean; modules?: string[] }>('GET', '/api/capabilities'),
+  chat: {
+    networks: () => call<string[]>('GET', '/api/chat/networks'),
+    list: (networks: string[], page: number) => call<ChatPage>('GET', `/api/chat/list?${new URLSearchParams({ networks: networks.join(','), page: String(page) })}`),
+    messages: (id: string) => call<ChatConversation>('GET', `/api/chat/messages?${new URLSearchParams({ id })}`),
+    send: (chatId: string, text: string) => call<{ ok: boolean }>('POST', '/api/chat/send', { chatId, text }),
+  },
   mail: {
     accounts: () => call<MailAccount[]>('GET', '/api/mail/accounts'),
     labels: (account: string) => call<MailLabel[]>('GET', `/api/mail/labels?${new URLSearchParams({ account })}`),

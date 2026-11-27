@@ -1,6 +1,6 @@
 // デモモード: 中継サーバなしで全画面を試せる架空データ(審査・ストア画像用)。実在の名前や会話は入れない
 import type { Lang } from './i18n';
-import type { MailThread } from './api';
+import type { ChatConversation, MailThread } from './api';
 
 type Thread = { handle: string; title: string; agent: string; state: 'idle' | 'busy' | 'unknown' };
 
@@ -8,6 +8,13 @@ const demoLabels = ['Inbox', 'Bulletins', 'Events', 'Logistics', 'Planning', 'Pr
 const demoSubjects = ['Field notes newsletter', 'Workshop schedule', 'Revised packing list', 'Trail opening', 'Reading list', 'A new meeting room', 'Map corrections', 'April notes', 'Survey draft', 'Volunteer schedule'];
 const marked = new Set<string>();
 const mailDate = (i: number) => Date.now() - (i === 0 ? 21 : i * 480) * 60_000;
+const demoNetworks = ['Signal', 'Telegram', 'WhatsApp'];
+const demoChatTitles = ['Trail work', 'Workshop', 'Reading group', 'Garden planning', 'Equipment', 'Volunteer rota',
+  'Map review', 'Field reports', 'Walking group', 'Library room'];
+const demoChat = () => demoChatTitles.map((title, i) => ({
+  id: `demo-chat-${i}`, title, network: demoNetworks[i % demoNetworks.length], date: mailDate(i), unread: i % 3 !== 1,
+}));
+const demoReplies = new Map<string, ChatConversation['messages']>();
 const homeSubjects = ['Garden club picnic', 'Library card renewal', 'Weekend market list'];
 const demoMail = () => [...demoSubjects.map((subject, i): MailThread & { labels: string[] } => ({
   account: 'work', id: `demo-mail-${i}`, from: ['Field Notes Desk', 'Workshop Desk', 'Trail Team'][i % 3], subject,
@@ -62,7 +69,30 @@ export function demoCall(lang: Lang, method: string, path: string, body: unknown
   const b = (body ?? {}) as Record<string, unknown>;
   switch (`${method} ${pathname}`) {
     case 'GET /api/capabilities':
-      return { voice: true, modules: ['coding', 'email'] };
+      return { voice: true, modules: ['coding', 'email', 'chat'] };
+    case 'GET /api/chat/networks':
+      return demoNetworks;
+    case 'GET /api/chat/list': {
+      const networks = searchParams.get('networks');
+      const rows = demoChat().filter(row => !networks || networks.split(',').includes(row.network));
+      const start = Number(searchParams.get('page')) * 8;
+      return { items: rows.slice(start, start + 8), hasMore: rows.length > start + 8, unread: rows.filter(row => row.unread).length };
+    }
+    case 'GET /api/chat/messages': {
+      const chat = demoChat().find(row => row.id === searchParams.get('id'));
+      if (!chat) throw new Error('Unknown sample chat');
+      return { messages: [
+        { own: true, from: '', date: chat.date - 60_000, text: 'Is the sample schedule ready?' },
+        { own: false, from: 'Fixture sender', date: chat.date, text: 'The sample schedule is ready for review.' },
+        ...(demoReplies.get(chat.id) ?? []),
+      ] };
+    }
+    case 'POST /api/chat/send': {
+      const id = String(b.chatId);
+      if (!demoChat().some(row => row.id === id) || typeof b.text !== 'string' || !b.text.trim()) throw new Error('Invalid sample reply');
+      demoReplies.set(id, [...(demoReplies.get(id) ?? []), { own: true, from: '', date: Date.now(), text: b.text }]);
+      return { ok: true };
+    }
     case 'GET /api/mail/accounts':
       return [{ id: 'work', short: 'W', address: 'work@example.com', ok: true },
         { id: 'home', short: 'H', address: 'home@example.com', ok: true }];

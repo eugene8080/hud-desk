@@ -12,6 +12,7 @@ import * as secrets from './secrets.mjs';
 import { transcribe, voiceAvailable, warmWhisper } from './whisper.mjs';
 import { MailError } from './gmail.mjs';
 import { allowPrivateHost, createMail, readMailConfig } from './mail.mjs';
+import { BeeperError, createBeeper, readBeeperConfig } from './beeper.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const DIST = join(here, '../app/dist');
@@ -138,24 +139,30 @@ const activityTrace = new Map();
 
 export function createBridge({
   token = process.env.EHO_TOKEN || secrets.token(),
-  mailConfig = local.mail, privateHosts = local.privateHosts, mailOptions,
+  mailConfig = local.mail, beeperConfig = local.beeper, privateHosts = local.privateHosts, mailOptions, beeperOptions,
 } = {}) {
   const settings = readMailConfig(mailConfig);
   const mail = settings && createMail(settings, mailOptions);
+  const beeperSettings = readBeeperConfig(beeperConfig);
+  const chat = beeperSettings && createBeeper(beeperSettings, beeperOptions);
   const privateHostAllowed = allowPrivateHost(privateHosts);
-  const capabilities = () => ({ voice: voiceAvailable(), modules: mail ? ['coding', 'email'] : ['coding'] });
-  const server = createServer((req, res) => handle(req, res, token, capabilities, mail, privateHostAllowed));
+  const capabilities = () => ({ voice: voiceAvailable(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])] });
+  const server = createServer((req, res) => handle(req, res, token, capabilities, mail, chat, privateHostAllowed));
   if (mail) server.once('close', mail.close);
+  if (chat) server.once('close', chat.close);
   return server;
 }
 
-async function handle(req, res, token, capabilities, mail, privateHostAllowed) {
+async function handle(req, res, token, capabilities, mail, chat, privateHostAllowed) {
   const url = new URL(req.url, 'http://x');
   // アプリを別オリジン(固定の置き場所)から開いても呼べるようにする。認証は Bearer なので Cookie は使わない
   res.setHeader('access-control-allow-origin', '*');
   const key = `${req.method} ${url.pathname}`;
   if (mail && url.pathname.startsWith('/api/mail/')) {
-    return handleMail(req, res, url, mail.routes[key], token, privateHostAllowed);
+    return handlePrivate(req, res, url, 'mail', mail.routes[key], token, privateHostAllowed);
+  }
+  if (url.pathname.startsWith('/api/chat/')) {
+    return handlePrivate(req, res, url, 'chat', chat?.routes[key], token, privateHostAllowed);
   }
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
@@ -199,7 +206,7 @@ async function handle(req, res, token, capabilities, mail, privateHostAllowed) {
   }
 }
 
-async function handleMail(req, res, url, route, token, privateHostAllowed) {
+async function handlePrivate(req, res, url, module, route, token, privateHostAllowed) {
   const started = Date.now();
   let count = 0;
   // Browsers send preflight without bearer credentials. Apply the host gate to preflight as well.
@@ -228,12 +235,12 @@ async function handleMail(req, res, url, route, token, privateHostAllowed) {
     count = (Array.isArray(result) ? result : result.items ?? result.messages ?? []).length;
     return send(res, 200, result);
   } catch (error) {
-    return error instanceof MailError
+    return error instanceof MailError || error instanceof BeeperError
       ? send(res, error.status, { error: error.code })
       : send(res, 500, { error: 'internal' });
   } finally {
-    const path = route ? url.pathname : '/api/mail/*';
-    console.log(`[mail] ${path} ${res.statusCode} count=${count} ${Date.now() - started}ms`);
+    const path = route ? url.pathname : `/api/${module}/*`;
+    console.log(`[${module}] ${path} ${res.statusCode} count=${count} ${Date.now() - started}ms`);
   }
 }
 
