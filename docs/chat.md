@@ -95,3 +95,12 @@ FFmpeg converts voice attachments to 16 kHz mono WAV. The bridge removes the tem
 The reader displays Beeper's latest message batch. Older server-side history, attachment playback, quoted-message replies, editing, and marking a chat unread are outside this beta. Chats Beeper marks read-only show the reader without voice reply.
 
 The test suite and Even simulator fixture use synthetic Beeper data. The RTX 5090 smoke test used eSpeak NG-generated speech in Ogg/Opus, M4A/AAC, and MP3. Warm calls including decoding took 0.11–0.13 seconds per 1.3–2.3 second clip. Cold calls took 13–39 seconds. Forced Cantonese tagged 4/4 Cantonese clips correctly with 14 character edits over 29 reference characters. Forced Mandarin tagged 4/4 with 6 edits over 31 characters. Auto tagged only 1/4 of these short Cantonese clips as Cantonese. This small synthetic sample measures the pipeline and is insufficient to estimate real voice-note accuracy.
+
+## Availability (2026-11-27)
+
+`GET /api/capabilities` adds `chatFeatures: { transcribe, translate }`. `transcribe` is true when the
+bridge finds ffmpeg and the Python interpreter (PATH, `beeper.ffmpegPath`, `beeper.asrPython` or
+`.local/voice/venv`). `translate` is true when Ollama on `127.0.0.1:11434` answers `/api/show` for
+`beeper.translationModel` with a local model (cached one minute). The app hides Translate (reader menu
+and phone) and ignores reader clicks for transcription when a feature is false, and re-reads the
+capabilities each time a chat opens. A bridge without the field offers both, as before.

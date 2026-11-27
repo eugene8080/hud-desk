@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { before } from './mail.mjs';
 import { createChatSpeech, MAX_ASSET_BYTES } from './chat-voice.mjs';
-import { DEFAULT_TRANSLATION_MODEL, localModelName, translateEnglish } from './chat-translate.mjs';
+import { DEFAULT_TRANSLATION_MODEL, localModelName, translateEnglish, translationAvailable } from './chat-translate.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const ORIGIN = 'http://127.0.0.1:23373';
@@ -344,5 +344,14 @@ export function createBeeper(config, { clientOptions, coldWaitMs = 3000, speech 
       return { ok: true };
     },
   };
-  return { routes, close: () => { closed = true; clearInterval(timer); speech.close?.(); } };
+  // Which optional Chat features this PC can serve (Eugene, 2026-11-27: turn off what is unavailable).
+  // The Ollama check is cached for a minute so capabilities stay fast.
+  let translateCheck = { at: 0, value: Promise.resolve(false) };
+  const features = async () => {
+    if (Date.now() - translateCheck.at > 60000) {
+      translateCheck = { at: Date.now(), value: translationAvailable(config.translationModel, ollamaTransport) };
+    }
+    return { transcribe: speech.available ? speech.available() : true, translate: await translateCheck.value };
+  };
+  return { routes, features, close: () => { closed = true; clearInterval(timer); speech.close?.(); } };
 }

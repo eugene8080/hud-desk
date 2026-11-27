@@ -81,13 +81,20 @@ export function createChatSpeech(settings) {
   let closed = false;
   const stop = () => { clearTimeout(idle); worker?.stop(); worker = undefined; };
   process.once('exit', stop);
+  const ffmpegPath = () => executable('ffmpeg') || (settings.ffmpeg && existsSync(settings.ffmpeg) ? settings.ffmpeg : undefined);
+  const pythonPath = () => {
+    const venv = process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python';
+    const localPython = join(voiceDir, 'venv', venv);
+    if (settings.python) return existsSync(settings.python) ? settings.python : undefined;
+    return existsSync(localPython) ? localPython : executable('python');
+  };
   return {
+    // Offered to the app only when both tools exist; models are checked by the worker on first use.
+    available: () => !closed && Boolean(ffmpegPath() && pythonPath()),
     transcribe(loadAudio) {
       const work = queue.then(async () => {
-        const ffmpeg = executable('ffmpeg') || settings.ffmpeg;
-        const venv = process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python';
-        const localPython = join(voiceDir, 'venv', venv);
-        const python = settings.python || (existsSync(localPython) ? localPython : executable('python'));
+        const ffmpeg = ffmpegPath();
+        const python = pythonPath();
         if (closed || !ffmpeg || !python) throw new Error('Chat speech setup required');
         clearTimeout(idle);
         let folder;

@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.71**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.72**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.71,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.72,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.71)
+## Feature list (beta 1.0.72)
 
 ### All modules
 
@@ -83,6 +83,8 @@ Rule for every agent: each beta release updates this file in the release commit:
   Traditional characters).
 - Translate: English (reader menu and phone, off by default) adds an English translation in
   brackets after messages and transcripts in other languages, made by a local Ollama model.
+- Each of these is offered only when the bridge PC has its engine: without FunASR and ffmpeg a
+  click does not transcribe; without Ollama and the model, Translate is hidden.
 - Voice reply as in Coding: hold, release to review, click to send, double-click to cancel. A send
   is never repeated automatically. Opening an unread chat marks it read in Beeper.
 
@@ -121,5 +123,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.71: Reader backgrounds tidied: Ink 5/8, 1/2 and 1/4; Lines 1/3, 1/4 and 1/8; Dots 1/3; Tube dim and Tube; 1px frame. The 1px frame now puts several messages of yours in a row inside one frame.
+1.0.72: Chat offers voice-note transcription and Translate: English only when your PC has the local engines for them (FunASR with ffmpeg; Ollama with the translation model). Otherwise they are switched off automatically.
 <!-- whatsnew:end -->

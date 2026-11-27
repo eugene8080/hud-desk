@@ -301,6 +301,29 @@ test('Chat click transcribes voice on the visible page, shows failures and retri
   assert.equal(sends.length, 0);
 });
 
+test('Chat hides Translate and ignores clicks for transcription when the bridge PC lacks the engines', async () => {
+  const { chat, messages } = chatFixture();
+  messages[1] = { ...messages[1], id: 'voice', text: '', media: 'Voice', voice: { id: 'voice', duration: 7 } };
+  let transcribed = 0;
+  chat.transcribe = async () => { transcribed++; return { text: 'Synthetic transcript.', language: 'en' }; };
+  const options = { capabilities: { modules: ['coding', 'chat'], chatFeatures: { transcribe: false, translate: false } },
+    storage: { module: 'chat', 'chat-translate': 'en' }, chat };
+  const h = await moduleHarness(options);
+  assert.equal(h.phone().chatTranslateAvailable(), false);
+  await h.pickRow(2);
+  assert.equal(h.pages.at(-1).menuObject.menuItems.some(({ itemID }) => itemID === 1108), false);
+  await h.scroll('up');
+  await h.tap(); await h.flush();
+  assert.equal(transcribed, 0);
+  // With the engines present, the same click transcribes and Translate is offered.
+  const ready = await moduleHarness({ ...options, capabilities: { modules: ['coding', 'chat'], chatFeatures: { transcribe: true, translate: true } } });
+  await ready.pickRow(2);
+  assert.ok(ready.pages.at(-1).menuObject.menuItems.some(({ itemID }) => itemID === 1108));
+  await ready.scroll('up');
+  await ready.tap(); await ready.flush();
+  assert.equal(transcribed, 1);
+});
+
 test('Chat Translate is shared with the phone, persists and adds English in brackets', async () => {
   const { chat, messages } = chatFixture();
   messages[0] = { ...messages[0], id: 'text', text: '雨停了。' };

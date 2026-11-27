@@ -16,7 +16,7 @@ import {
   type EvenAppBridge,
   type EvenHubEvent,
 } from '@evenrealities/even_hub_sdk';
-import { api, currentBase, setApiLang, setConnection, setDemo, type ChatItem, type ChoiceMenu, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
+import { api, currentBase, setApiLang, setConnection, setDemo, type ChatFeatures, type ChatItem, type ChoiceMenu, type MailThread, type Provider, type Thread, type Usage, type Workspace } from './api';
 import { parseCode, resolveBase } from './pairing';
 import { applyPage, detectLang, getLang, setLang, t as tr } from './i18n';
 import { clipBytes, tailBytes, textSections, readerPages, latestResponseStart, choiceNumber, readerContent, glassTextWidth, type ReaderPage } from './text';
@@ -158,6 +158,16 @@ const READER_WRAP_WIDTH = 552;
 type TextScreen = Extract<Screen, { kind: 'text' }>;
 const readerChars = (text: string) => text.replace(/\s/g, '').length; // wrapping only adds/drops spaces
 let chatTranslate = false;
+// Hidden or inert when the bridge PC lacks the engine (no FunASR/ffmpeg, Ollama or model missing).
+let chatFeatures: ChatFeatures = { transcribe: true, translate: true };
+const translating = () => chatTranslate && chatFeatures.translate;
+function applyCapabilities(capabilities: { chatFeatures?: ChatFeatures } | null) {
+  const next = capabilities?.chatFeatures;
+  if (!next) return;
+  const changed = next.transcribe !== chatFeatures.transcribe || next.translate !== chatFeatures.translate;
+  chatFeatures = { transcribe: next.transcribe === true, translate: next.translate === true };
+  if (changed) phone?.render();
+}
 let chatTranslateWrites = Promise.resolve();
 
 function readerLayout(s: TextScreen) {
@@ -537,7 +547,7 @@ function readerMenu(screen: TextScreen) {
     { id: 1101, label: tr('usingFont', name), run: () => showFonts() },
     { id: 1109, label: tr('background', turnBackgroundLabel(turnBackground)), run: () => showBackgrounds(screen) },
     { id: 1107, label: tr('brightness', inkLevel), run: () => showBrightness() },
-    ...(screen.reader instanceof ChatReader
+    ...(screen.reader instanceof ChatReader && chatFeatures.translate
       ? [{ id: 1108, label: tr(chatTranslate ? 'chatTranslateEnglish' : 'chatTranslateOff'), run: () => setChatTranslation(!chatTranslate) }]
       : []),
   ];
@@ -1345,13 +1355,16 @@ async function openChat(item: ChatItem) {
       onResult: sent => { outcome = sent ? 'chatSent' : 'chatNotSent'; } }, true);
   } : undefined;
   let readFailed = false;
-  const source = new ChatReader(item, () => chatTranslate, () => outcome ? tr(outcome) : readFailed ? tr('chatNotMarkedRead') : ' ', hold);
+  // Re-read the features in the background: Ollama may have started since the app connected.
+  void api.capabilities().then(applyCapabilities, () => {});
+  const source = new ChatReader(item, translating, () => outcome ? tr(outcome) : readFailed ? tr('chatNotMarkedRead') : ' ', hold);
   try {
     const screen = await openReader(source, back, () => {
       if (current?.kind !== 'text' || current.reader !== source || current.pageWriting) return;
       const screen = current;
       const page = readerLayout(screen)[screen.offset ?? 0];
       const ids = (screen.voiceLines ?? []).filter(({ line }) => line >= page.firstLine && line <= page.lastLine).map(({ id }) => id);
+      if (!chatFeatures.transcribe) return;
       void source.transcribe(ids, () => repaintChat(screen).catch(() => {})).catch(() => {});
     });
     // Opening an unread chat on the glasses marks it read in Beeper (Eugene, 2026-11-27), once,
@@ -1976,6 +1989,7 @@ async function openSavedOrHome(connection: Connection, known?: Thread[]) {
   const capabilities = await api.capabilities().catch(() => null);
   voiceAvailable = capabilities?.voice === true;
   modules = offeredModules(capabilities?.modules);
+  applyCapabilities(capabilities);
   const stored = await bridge.getLocalStorage('module') as GlassModule;
   activeModule = modules.includes(stored) ? stored : 'coding';
   mail = new Mail(await bridge.getLocalStorage(MAIL_LABELS_KEY), await bridge.getLocalStorage(MAIL_ACCOUNTS_KEY), saveMailPref);
@@ -2059,6 +2073,7 @@ async function main() {
     chatNetworkSelected: name => chat?.isSelected(name) ?? false,
     toggleChatNetwork: (name, networks) => toggleChatNetwork(name, networks, true),
     chatTranslate: () => chatTranslate,
+    chatTranslateAvailable: () => chatFeatures.translate,
     setChatTranslation,
     filters: () => ({ provider: viewProvider, orca: viewWorkspaces, hermes: viewHermesWorkspaces }),
     setProvider: async id => { await bridge.setLocalStorage('view-provider', id); viewProvider = id; refreshGlasses(); },

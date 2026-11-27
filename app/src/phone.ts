@@ -29,6 +29,7 @@ export type PhoneDeps = {
   chatNetworkSelected(name: string): boolean;
   toggleChatNetwork(name: string, networks: string[]): Promise<void>;
   chatTranslate(): boolean;
+  chatTranslateAvailable(): boolean;
   setChatTranslation(enabled: boolean): Promise<void>;
   // The glasses own these values; the phone reads and writes them through main.ts
   // so both screens stay in step (main re-renders the glasses after a phone change).
@@ -201,8 +202,10 @@ export function createPhone(deps: PhoneDeps) {
   }
 
   function renderNetworks() {
-    byId('chat-translation').replaceChildren(checkbox(tr('chatTranslateEnglish'), deps.chatTranslate(),
-      () => deps.setChatTranslation(!deps.chatTranslate())));
+    // Hidden when the bridge PC has no local translation model.
+    byId('chat-translation').replaceChildren(...(deps.chatTranslateAvailable()
+      ? [checkbox(tr('chatTranslateEnglish'), deps.chatTranslate(), () => deps.setChatTranslation(!deps.chatTranslate()))]
+      : [el('p', 'muted', tr('chatTranslateUnavailable'))]));
     const networks = networkCatalog ?? [];
     const rows = networks.map(name => checkbox(name, deps.chatNetworkSelected(name), () => deps.toggleChatNetwork(name, networks)));
     byId('chat-network-list').replaceChildren(...(rows.length ? rows :

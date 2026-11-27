@@ -56,6 +56,16 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.72 (Eugene: turn off unavailable features automatically). Bridge capabilities
+report chatFeatures {transcribe, translate}: ffmpeg + Python interpreter found; Ollama answers
+/api/show for the configured local model (1-minute cache, never throws). App hides Translate (menu
+1108, phone checkbox with a note) and ignores transcription clicks when false; re-reads on each chat
+open; missing field = both offered. 233 tests, build pass. Bridge part live after the next approved
+restart (on PSCAP11 both engines exist, so nothing changes visibly). Answered: the Cloudflare quick
+tunnel (tunnel/watch.mjs + cloudflared) is upstream's phone-to-PC route; the packaged app only
+whitelists the tailnet origin and ntfy.sh, so it is unused here; for other users the question is
+whether Even Hub accepts a wildcard origin (e.g. *.ts.net:8443), unverified.
+
 2026-11-27 beta 1.0.71 (Eugene, second pass on backgrounds): Ink 5/8, Ink 1/2, Ink 1/4 (solid Ink 1,
 7/8, 3/4 removed; Ink 1/2 and 1/4 are pixel-identical to the old Dots 1/2 and 1/4, so a saved
 dots2/dots4 maps to ink12/ink14 and those Dots entries are gone; Dots 1/3 stays); Lines 1/3

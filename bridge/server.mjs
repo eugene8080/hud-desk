@@ -146,7 +146,8 @@ export function createBridge({
   const beeperSettings = readBeeperConfig(beeperConfig);
   const chat = beeperSettings && createBeeper(beeperSettings, beeperOptions);
   const privateHostAllowed = allowPrivateHost(privateHosts);
-  const capabilities = () => ({ voice: voiceAvailable(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])] });
+  const capabilities = async () => ({ voice: voiceAvailable(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])],
+    ...(chat?.features && { chatFeatures: await chat.features() }) });
   const server = createServer((req, res) => handle(req, res, token, capabilities, mail, chat, privateHostAllowed));
   if (mail) server.once('close', mail.close);
   if (chat) server.once('close', chat.close);

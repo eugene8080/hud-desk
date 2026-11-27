@@ -6,6 +6,21 @@ export const DEFAULT_TRANSLATION_MODEL = 'qwen3.8:27b';
 export const localModelName = name => typeof name === 'string' &&
   /^[a-zA-Z0-9_.-]+(?::[a-zA-Z0-9_.-]+)?$/.test(name) && !/cloud/i.test(name);
 
+// True when Ollama answers on this PC and the model is installed locally (not a cloud alias).
+// Any error, including Ollama not running, means unavailable; it never throws.
+export async function translationAvailable(model, transport = fetch) {
+  if (!localModelName(model)) return false;
+  try {
+    const response = await transport(ORIGIN + '/api/show', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model }),
+      redirect: 'error', signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) return false;
+    const info = await response.json();
+    return Boolean(info?.model_info?.['general.architecture']) && !info.remote_model && !info.remote_host;
+  } catch { return false; }
+}
+
 export async function translateEnglish(model, entries, transport = fetch) {
   const call = async (path, data) => {
     const response = await transport(ORIGIN + path, {

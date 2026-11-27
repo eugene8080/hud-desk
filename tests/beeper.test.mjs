@@ -117,6 +117,19 @@ test('Chat routes require private host and bearer, including the send and CORS g
   assert.equal(fixture.calls.length, 0);
 });
 
+test('Capabilities report which Chat features this PC can serve', async t => {
+  const missing = await serve(t, { speech: { available: () => false, transcribe: async () => assert.fail('no transcription') },
+    ollamaTransport: async () => { throw new Error('Ollama is not running'); } });
+  assert.deepEqual((await missing('/api/capabilities')).data.chatFeatures, { transcribe: false, translate: false });
+  const ready = await serve(t, { speech: { available: () => true, transcribe: async () => ({}) },
+    ollamaTransport: async () => Response.json({ model_info: { 'general.architecture': 'fixture' } }) });
+  assert.deepEqual((await ready('/api/capabilities')).data.chatFeatures, { transcribe: true, translate: true });
+  // A cloud alias is not a local model.
+  const cloud = await serve(t, { speech: { available: () => true, transcribe: async () => ({}) },
+    ollamaTransport: async () => Response.json({ model_info: { 'general.architecture': 'fixture' }, remote_host: 'https://fixture.test' }) });
+  assert.equal((await cloud('/api/capabilities')).data.chatFeatures.translate, false);
+});
+
 test('Opening a chat marks the whole chat read: one POST with an empty body, list row updated', async t => {
   const calls = [];
   const request = await serve(t, { transport: async (url, options) => {

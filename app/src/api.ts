@@ -73,6 +73,8 @@ export type MailThread = { account: string; id: string; from: string; subject: s
 // loading: the bridge's cold-start wait ran out and the page is incomplete (bridges before 1.0.65 omit it).
 export type MailPage = { items: MailThread[]; hasMore: boolean; unread: number; loading?: boolean };
 export type MailConversation = { subject: string; messages: { id: string; from: string; to: string; cc: string; date: number; text: string }[] };
+// Optional Chat features the bridge PC can serve; a bridge before 1.0.72 omits this (both offered).
+export type ChatFeatures = { transcribe: boolean; translate: boolean };
 export type ChatItem = { id: string; title: string; date: number; unread: boolean; readOnly?: boolean };
 export type ChatPage = { items: ChatItem[]; hasMore: boolean; unread: number };
 export type ChatMessage = {
@@ -88,7 +90,7 @@ export type ChatConversation = { messages: ChatMessage[] };
 export type ChatTranslation = { id: string; text?: string | null; voice?: string | null };
 
 export const api = {
-  capabilities: () => call<{ voice: boolean; modules?: string[] }>('GET', '/api/capabilities'),
+  capabilities: () => call<{ voice: boolean; modules?: string[]; chatFeatures?: ChatFeatures }>('GET', '/api/capabilities'),
   chat: {
     networks: () => call<string[]>('GET', '/api/chat/networks'),
     list: (networks: string[], page: number) => call<ChatPage>('GET', `/api/chat/list?${new URLSearchParams({ networks: networks.join(','), page: String(page) })}`),
