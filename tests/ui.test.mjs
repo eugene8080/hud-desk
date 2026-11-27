@@ -845,7 +845,7 @@ test('Filter by Agent stays in the list and contextual menu gets the three moved
   assert.equal(menuItems(h)[0], 'Hermes Agent');
 });
 
-test('Filter by Agent lists Hermes Agent, then All Orca sessions and each Orca agent', async () => {
+test('Filter by Agent lists Hermes Agent, then All coding sessions and each Orca agent', async () => {
   const h = await harness();
   h.api.threads = async () => [
     { handle: 'codex', title: 'Codex conversation', agent: 'codex' },
@@ -857,12 +857,12 @@ test('Filter by Agent lists Hermes Agent, then All Orca sessions and each Orca a
   await h.pick(0);
   // No title, divider or back row; double-click returns.
   assert.equal(JSON.stringify([...menuItems(h)]),
-    JSON.stringify(['Hermes Agent', 'All Orca Sessions ✓', 'Claude', 'Codex', 'OpenCode', 'Gemini']));
+    JSON.stringify(['Hermes Agent', 'All Coding Sessions ✓', 'Claude', 'Codex', 'OpenCode', 'Gemini']));
   // The cursor opens on the ticked row.
   await h.scroll('up');
   assert.match(h.upgrades.at(-1).content.split('\n')[0], /^> Hermes Agent/);
   await h.scroll('down');
-  assert.match(h.upgrades.at(-1).content.split('\n')[1], /^> All Orca Sessions/);
+  assert.match(h.upgrades.at(-1).content.split('\n')[1], /^> All Coding Sessions/);
   await h.pick(4);
   assert.deepEqual(saved, [['view-provider', 'opencode']]);
   let items = menuItems(h);
@@ -894,8 +894,8 @@ test('Hermes mixed models share one filter and saved reader uses confirmed voice
     { handle: 'claude', title: 'Claude regression', agent: 'claude' },
   ];
   await h.pick(0);
-  assert.equal(JSON.stringify([...menuItems(h)]), JSON.stringify(['Hermes Agent', 'All Orca Sessions ✓', 'Claude', 'Codex']));
-  // All Orca Sessions never includes Hermes.
+  assert.equal(JSON.stringify([...menuItems(h)]), JSON.stringify(['Hermes Agent', 'All Coding Sessions ✓', 'Claude', 'Codex']));
+  // All Coding Sessions never includes Hermes.
   assert.ok(!menuItems(h).some(s => /^Hermes (?!Agent)/.test(s)));
   await h.pick(0);
   assert.equal(menuItems(h).length, 9);
@@ -1080,6 +1080,26 @@ test('a read-only Orca chat shows [Read-only] and takes no typed or held reply',
   await h.key('r');
   assert.equal(h.pages.length, pages, 'no reply page');
   assert.deepEqual(h.mic, []);
+});
+
+test('plain Coding sessions are listed without Orca and the reader tracks reply availability', async () => {
+  const h = await harness(0, true, 'hold', '', 0, false, '', '', '', { capabilities: { orca: false } });
+  h.threads.push({ handle: 'local:claude:fixture', title: 'Plain Claude session', workspaceName: 'sample',
+    agent: 'claude', state: 'idle', readOnly: true });
+  h.api.history = async () => ({ source: 'claude-transcript', text: '/ Inspect fixture\n> Fixture ready.' });
+  let readOnly = true;
+  h.api.activity = async () => ({ state: 'waiting', readOnly });
+  await h.menu(1001);
+  assert.doesNotMatch(h.pages.at(-1).menuObject.menuItems.map(i => i.itemName).join(), /New Session/);
+  assert.match(container(h, 'menu-right').content, /\[sample\/Claude\]/);
+  await h.pick(2);
+  assert.match(container(h, 'hint').content, /\[Read-only\]/);
+  assert.equal(h.elements.get('composer').hidden, true);
+  readOnly = false;
+  await Promise.all([...h.timers.values()].map(fn => fn()));
+  assert.doesNotMatch(container(h, 'hint').content, /\[Read-only\]/);
+  assert.equal(h.elements.get('composer').hidden, false);
+  assert.deepEqual(h.sends, []);
 });
 
 test('Gmail keys: r in a Chat reader replies to that chat from the glasses', async () => {
@@ -1808,7 +1828,7 @@ test('compact session menu uses native text and one update per cursor move', asy
   const actionRows = columns.find(c => c.containerName === 'body').content.split('\n').slice(0, 4);
   assert.ok(actionRows.every(row => /^ {1}\S/.test(row)));
   assert.ok(!actionRows.join(' ').includes('Usage'));
-  assert.match(columns.find(c => c.containerName === 'menu-right').content.split('\n')[0], /All Orca sessions/);
+  assert.match(columns.find(c => c.containerName === 'menu-right').content.split('\n')[0], /All coding sessions/);
   assert.equal(columns.find(c => c.containerName === 'menu-right').content.split('\n')[2].trim(), '[Codex]');
   assert.equal(h.pages.at(-1).containerTotalNum, 6);
   const all = [...columns];
@@ -2457,7 +2477,7 @@ test('Hermes and Orca keep separate workspace pages, selections and session list
   await h.pick(hermesPage.indexOf('[ ] Grand Master Bot'));
   assert.equal(saved.at(-1)[0], 'view-hermes-workspaces');
   await h.pick(0);
-  // Switch to All Orca Sessions: Orca workspace page with its own saved selection.
+  // Switch to All Coding Sessions: Orca workspace page with its own saved selection.
   await h.pick(0); await h.pick(1);
   list = [...menuItems(h)];
   assert.ok(list.some(s => s.includes('Claude port')) && !list.some(s => /Hermes chat|Codex work/.test(s)), list.join(' | '));
@@ -2525,7 +2545,7 @@ test('phone filters and glasses share one saved selection and redraw each other'
   // A glasses change redraws the phone page.
   const renders = h.phoneCalls.filter(c => c[0] === 'render').length;
   await h.pick(0);
-  await h.pick(1); // All Orca Sessions
+  await h.pick(1); // All Coding Sessions
   assert.ok(h.phoneCalls.filter(c => c[0] === 'render').length > renders);
   assert.equal(phone.filters().provider, 'all');
 });
@@ -3013,7 +3033,7 @@ test('Filter by Agent pages past ten rows with visible more-below and more-above
   const rows = () => h.pages.at(-1).textObject.find(c => c.containerName === 'body').content.split(String.fromCharCode(10)).map(r => r.replace(/^[> ] /, '').trim());
   // Hermes + All + ten agents = twelve rows: nine on page one, then the cue.
   assert.equal(rows().length, 10);
-  assert.deepEqual(rows().slice(0, 2), ['Hermes Agent', 'All Orca Sessions ✓']);
+  assert.deepEqual(rows().slice(0, 2), ['Hermes Agent', 'All Coding Sessions ✓']);
   assert.equal(rows().at(-1), 'v more below');
   // Swipe down past the last agent (the cue row is skipped): page two.
   for (let i = 0; i < 8; i++) await h.scroll('down');

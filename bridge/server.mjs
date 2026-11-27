@@ -16,6 +16,7 @@ import { allowPrivateHost, createMail, readMailConfig } from './mail.mjs';
 import { BeeperError, createBeeper, readBeeperConfig } from './beeper.mjs';
 import { createImaging, ImageError, readView } from './image.mjs';
 import { relayIdentity, relayOrigin } from './relay-config.mjs';
+import { createLocalAgents, isLocalAgent, localAgentKey } from './local-agents.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const DIST = join(here, '../app/dist');
@@ -65,9 +66,9 @@ function limitSummary(rl, lang) {
   return { ok: true, note: parts.join(' ') || msg(lang, 'unknownUsage') };
 }
 
-async function providers(q) {
+async function providers(q, orca) {
   const lang = langOf(q);
-  const limits = await o.usage().catch(() => ({}));
+  const limits = await orca.usage().catch(() => ({}));
   return Promise.all(
     config.agents.filter(a => a.id === 'codex').map(async (a) => {
       const has = await installed(a.command);
@@ -96,57 +97,92 @@ async function body(req) {
   return s ? JSON.parse(s) : {};
 }
 
-const routes = {
-  'GET /api/threads': () => o.listThreads(),
-  'GET /api/activity': (q) => o.activity(q.get('handle')),
-  'GET /api/thread': (q) => o.readThread(q.get('handle')),
-  'GET /api/history': (q) => o.readHistory(q.get('handle')),
-  // An image pasted into a Claude or Codex session, by its [Image N] number in the history.
-  // Not cached: a /clear restarts the numbering on the same terminal.
-  'GET /api/history/image': (q) => {
-    const index = Number(q.get('index'));
-    if (!Number.isSafeInteger(index) || index < 1) throw new ImageError('bad request', 400);
-    return imaging.render(null, () => o.readHistoryImage(q.get('handle'), index), readView(key => q.get(key)));
-  },
-  'POST /api/choice': (_q, b) => o.choose(b.handle, b.menuId, b.value),
-  'GET /api/replies': (q) => config.replies.filter(r => r.enter).map((r) => pick(r.label, langOf(q))),
-  'POST /api/reply': async (q, b) => {
-    const lang = langOf(q);
-    const r = config.replies.filter(r => r.enter)[b.index];
-    if (!r) throw new Error('unknown reply');
-    const text = pick(r.text, lang);
-    if ((await o.readThread(b.handle)).menu) throw new Error('Use the current question choices, not a text reply');
-    // Enter なしの数字は選択肢用。選択肢が無い時に送ると入力欄に数字が残り次の返信に混ざる
-    if (!r.enter && /^\d+$/.test(text) && !(await o.hasNumberedMenu(b.handle))) {
-      throw new Error(msg(lang, 'noMenu'));
-    }
-    await o.sendToThread(b.handle, text, r.enter);
-    return { sent: pick(r.label, lang) };
-  },
-  // 音声入力: 文字起こしと、確認後の自由文送信
-  'POST /api/transcribe': async (q, pcm) => ({ text: pcm.length ? await transcribe(pcm, langOf(q)) : '' }),
-  'POST /api/say': async (_q, b) => {
-    if ((await o.readThread(b.handle)).menu) throw new Error('Use the current question choices, not a text reply');
-    const text = String(b.text || '').trim();
-    if (!text || text.length > 2000) throw new Error('bad text');
-    await o.sendToThread(b.handle, text, true);
-    return { sent: text };
-  },
-  'GET /api/usage': () => o.usage(),
-  'GET /api/providers': providers,
-  // Orca のフォルダ(非git)は CLI で名前を引けないため config で明示する
-  'GET /api/workspaces': async () => [...(config.workspaces || []), ...(await o.listWorkspaces())],
-  'GET /api/prompts': (q) => config.prompts.map((p) => pick(p.label, langOf(q))),
-  'POST /api/session': async (q, b) => {
-    const lang = langOf(q);
-    const agent = config.agents.find((a) => a.id === b.agent);
-    const prompt = config.prompts[b.prompt];
-    if (!agent || agent.id !== 'codex' || !prompt || !agent.models.includes(b.model)) throw new Error('Only Codex sessions are enabled');
-    const command = b.model === 'default' ? agent.command : `${agent.command} --model ${b.model}`;
-    const r = await o.startSession({ workspaceId: b.workspaceId, command, prompt: pick(prompt.text, lang) });
-    return r.reason ? { ...r, reason: msg(lang, r.reason) } : r;
-  },
-};
+function codingRoutes(agents, orca) {
+  let listing, listedAt = -Infinity, pending;
+  async function loadOrca() {
+    const excluded = new Set();
+    const threads = await orca.listThreads({ timeoutMs: 2_500, onBindings: bindings => {
+      for (const { provider, id } of bindings) excluded.add(localAgentKey(provider, id));
+    } }).catch(() => null);
+    listing = { available: !!threads, threads: threads || [], excluded };
+    listedAt = Date.now();
+    return listing;
+  }
+  function orcaSnapshot(fresh = false) {
+    if (!fresh && Date.now() - listedAt < 3_000) return listing;
+    return pending ??= loadOrca().finally(() => { pending = null; });
+  }
+  const readThread = handle => isLocalAgent(handle)
+    ? agents.read(handle).then(history => ({ ...history, menu: null, progress: '' }))
+    : orca.readThread(handle);
+  const sendToThread = (handle, text, enter) => isLocalAgent(handle)
+    ? agents.send(handle, text, async () => (await orcaSnapshot(true)).excluded)
+    : orca.sendToThread(handle, text, enter);
+  const routes = {
+    'GET /api/threads': async () => {
+      const { threads, excluded } = await orcaSnapshot();
+      return [...threads, ...await agents.list(excluded)].sort((a, b) => (b.lastOutputAt || 0) - (a.lastOutputAt || 0));
+    },
+    'GET /api/activity': (q) => {
+      const handle = q.get('handle');
+      return isLocalAgent(handle) ? agents.activity(handle) : orca.activity(handle);
+    },
+    'GET /api/thread': (q) => readThread(q.get('handle')),
+    'GET /api/history': (q) => {
+      const handle = q.get('handle');
+      return isLocalAgent(handle) ? agents.read(handle) : orca.readHistory(handle);
+    },
+    // An image pasted into a Claude or Codex session, by its [Image N] number in the history.
+    // Not cached: a /clear restarts the numbering on the same terminal.
+    'GET /api/history/image': (q) => {
+      const index = Number(q.get('index'));
+      if (!Number.isSafeInteger(index) || index < 1) throw new ImageError('bad request', 400);
+      const handle = q.get('handle');
+      return imaging.render(null, () => isLocalAgent(handle) ? agents.image(handle, index) : orca.readHistoryImage(handle, index),
+        readView(key => q.get(key)));
+    },
+    'POST /api/choice': (_q, b) => {
+      if (isLocalAgent(b.handle)) throw new Error('Local CLI sessions do not expose terminal choices.');
+      return orca.choose(b.handle, b.menuId, b.value);
+    },
+    'GET /api/replies': (q) => config.replies.filter(r => r.enter).map((r) => pick(r.label, langOf(q))),
+    'POST /api/reply': async (q, b) => {
+      const lang = langOf(q);
+      const r = config.replies.filter(r => r.enter)[b.index];
+      if (!r) throw new Error('unknown reply');
+      const text = pick(r.text, lang);
+      if (!isLocalAgent(b.handle) && (await readThread(b.handle)).menu) throw new Error('Use the current question choices, not a text reply');
+      await sendToThread(b.handle, text, r.enter);
+      return { sent: pick(r.label, lang) };
+    },
+    // 音声入力: 文字起こしと、確認後の自由文送信
+    'POST /api/transcribe': async (q, pcm) => ({ text: pcm.length ? await transcribe(pcm, langOf(q)) : '' }),
+    'POST /api/say': async (_q, b) => {
+      if (!isLocalAgent(b.handle) && (await readThread(b.handle)).menu) throw new Error('Use the current question choices, not a text reply');
+      const text = String(b.text || '').trim();
+      if (!text || text.length > 2000) throw new Error('bad text');
+      await sendToThread(b.handle, text, true);
+      return { sent: text };
+    },
+    'GET /api/usage': () => orca.usage(),
+    'GET /api/providers': async (q) => (await orcaSnapshot()).available ? providers(q, orca) : [],
+    // Orca のフォルダ(非git)は CLI で名前を引けないため config で明示する
+    'GET /api/workspaces': async () => [...(config.workspaces || []), ...((await orcaSnapshot()).available
+      ? await orca.listWorkspaces().catch(() => []) : [])],
+    'GET /api/prompts': (q) => config.prompts.map((p) => pick(p.label, langOf(q))),
+    'POST /api/session': async (q, b) => {
+      const lang = langOf(q);
+      const agent = config.agents.find((a) => a.id === b.agent);
+      const prompt = config.prompts[b.prompt];
+      if (!agent || agent.id !== 'codex' || !prompt || !agent.models.includes(b.model)) throw new Error('Only Codex sessions are enabled');
+      if (!(await orcaSnapshot()).available) throw new Error('Starting a new session requires Orca.');
+      const command = b.model === 'default' ? agent.command : `${agent.command} --model ${b.model}`;
+      const r = await orca.startSession({ workspaceId: b.workspaceId, command, prompt: pick(prompt.text, lang) });
+      return r.reason ? { ...r, reason: msg(lang, r.reason) } : r;
+    },
+  };
+  return { routes, orcaAvailable: async () => (await orcaSnapshot()).available };
+}
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 const activityTrace = new Map();
@@ -155,22 +191,26 @@ export function createBridge({
   token = process.env.EHO_TOKEN || secrets.token(),
   mailConfig = local.mail, beeperConfig = local.beeper, privateHosts = local.privateHosts, mailOptions, beeperOptions,
   relayConfig = null, identity,
+  localAgentsConfig = config.localAgents, localAgentsOptions,
 } = {}) {
+  const agents = createLocalAgents(localAgentsConfig, localAgentsOptions);
+  const { routes, orcaAvailable } = codingRoutes(agents, o);
   const settings = readMailConfig(mailConfig);
   const mail = settings && createMail(settings, { imaging, ...mailOptions });
   const beeperSettings = readBeeperConfig(beeperConfig);
   const chat = beeperSettings && createBeeper(beeperSettings, { imaging, ...beeperOptions });
   const privateHostAllowed = allowPrivateHost(privateHosts);
   const capabilities = async () => ({ voice: voiceAvailable(), images: imaging.available(), imageRead: await imaging.readable(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])],
+    orca: await orcaAvailable(), localAgents: agents.capabilities(),
     ...(chat?.features && { chatFeatures: await chat.features() }) });
-  const direct = (req, res) => handle(req, res, token, capabilities, mail, chat, privateHostAllowed);
+  const direct = (req, res) => handle(req, res, token, routes, capabilities, mail, chat, privateHostAllowed);
   const server = createServer(direct);
   const origin = relayOrigin(relayConfig);
   if (origin) {
     const pairing = identity ?? relayIdentity();
     // Only traffic authenticated and replay-checked by connectRelay enters this
     // adapter. Internet callers cannot claim a trusted host with an HTTP header.
-    const trusted = (req, res) => handle(req, res, token, capabilities, mail, chat, () => true);
+    const trusted = (req, res) => handle(req, res, token, routes, capabilities, mail, chat, () => true);
     let stopRelay;
     server.once('listening', async () => {
       try {
@@ -220,7 +260,7 @@ async function relayRequest(handler, token, { method, path, contentType }, bytes
   return result;
 }
 
-async function handle(req, res, token, capabilities, mail, chat, privateHostAllowed) {
+async function handle(req, res, token, routes, capabilities, mail, chat, privateHostAllowed) {
   const url = new URL(req.url, 'http://x');
   // アプリを別オリジン(固定の置き場所)から開いても呼べるようにする。認証は Bearer なので Cookie は使わない
   res.setHeader('access-control-allow-origin', '*');

@@ -44,15 +44,17 @@ function stateFromTitle(title) {
   return 'unknown';
 }
 
-export async function listThreads() {
-  const hermesDiscovery = hermes.discover();
+export async function listThreads({ onBindings, timeoutMs } = {}) {
+  const options = { timeoutMs };
   const [{ terminals, visualLayouts }, { worktrees }, agents] = await Promise.all([
-    orca(['terminal', 'list', '--include-visual-layouts']),
-    orca(['worktree', 'ps']),
+    orca(['terminal', 'list', '--include-visual-layouts'], options),
+    orca(['worktree', 'ps'], options),
     // Chats (not terminal panes) come only from the agent list; a failure there keeps the terminals.
-    orca(['agent', 'list']).then(r => r.agents, () => []),
+    orca(['agent', 'list'], options).then(r => r.agents, () => []),
   ]);
+  const hermesDiscovery = hermes.discover();
   const names = sessionTitles(visualLayouts, worktrees);
+  const chats = chatThreads(agents, worktrees);
   const threads = terminals
     .filter((t) => t.connected && !t.orphaned)
     .flatMap((t) => {
@@ -75,8 +77,18 @@ export async function listThreads() {
       })(),
       lastOutputAt: t.lastOutputAt,
     }]; })
-    .concat(chatThreads(agents, worktrees))
+    .concat(chats)
     .sort((a, b) => (b.lastOutputAt || 0) - (a.lastOutputAt || 0));
+  if (onBindings) {
+    const handles = new Set(threads.map(t => t.handle));
+    const chatIds = new Set(chats.map(t => chatSessionId(t.handle)));
+    const { orcaProviderSessions } = await import('./conversation.mjs');
+    // Optional Orca storage may be absent or from an older version.
+    try {
+      onBindings(orcaProviderSessions(terminals.filter(t => handles.has(t.handle)),
+        (agents || []).filter(a => chatIds.has(a.orcaSessionId))));
+    } catch { /* Orca rows still work if its saved bindings cannot be read. */ }
+  }
   await hermesDiscovery;
   return (await hermes.merge(threads, terminals)).sort((a, b) => (b.lastOutputAt || 0) - (a.lastOutputAt || 0));
 }

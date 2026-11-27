@@ -1,6 +1,13 @@
 {
   "relay": null,
   "workspaces": [],
+  "localAgents": {
+    "enabled": true,
+    "limit": 30,
+    "cacheMs": 10000,
+    "claude": { "enabled": true },
+    "codex": { "enabled": true }
+  },
   "replies": [
     {
       "label": "1 (Yes)",
