@@ -10,7 +10,15 @@ usage() {
   echo "Usage: $0 {install|uninstall|status}"
 }
 
+xml_text() {
+  printf '%s' "$1" | sed -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+}
+
 write_plist() {
+  local node_bin="$1" root_xml start_xml node_xml
+  root_xml=$(xml_text "$ROOT")
+  start_xml=$(xml_text "$START")
+  node_xml=$(xml_text "$node_bin")
   mkdir -p "$HOME/Library/LaunchAgents" "$ROOT/.local"
   cat >"$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -22,18 +30,19 @@ write_plist() {
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>${START}</string>
+    <string>${start_xml}</string>
+    <string>${node_xml}</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>${ROOT}</string>
+  <string>${root_xml}</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>${ROOT}/.local/launchd-output.log</string>
+  <string>${root_xml}/.local/launchd-output.log</string>
   <key>StandardErrorPath</key>
-  <string>${ROOT}/.local/launchd-error.log</string>
+  <string>${root_xml}/.local/launchd-error.log</string>
 </dict>
 </plist>
 EOF
@@ -41,7 +50,13 @@ EOF
 
 case "${1:-}" in
   install)
-    write_plist
+    # launchd does not inherit the Terminal's Homebrew or version-manager PATH.
+    NODE_BIN=$(command -v node)
+    if [ "${NODE_BIN#/}" = "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
+      echo "Put a Node.js executable on PATH before installing the LaunchAgent." >&2
+      exit 1
+    fi
+    write_plist "$NODE_BIN"
     launchctl bootout "gui/$(id -u)/${LABEL}" 2>/dev/null || true
     launchctl bootstrap "gui/$(id -u)" "$PLIST"
     launchctl enable "gui/$(id -u)/${LABEL}"

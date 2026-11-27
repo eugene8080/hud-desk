@@ -1,6 +1,10 @@
 # macOS setup (Orca Glass bridge)
 
-Updated: 2026-11-10
+Updated: 2026-11-27
+
+For one-command setup and pairing over Tailscale, see
+[Self-host HUD Desk on macOS](self-host-macos.md). The rest of this page covers
+manual setup and platform paths.
 
 Eugene does not have a Mac; paths below follow upstream Orca, Hermes and whisper.cpp
 sources. GitHub Actions `macos-latest` jobs run `npm test`, the app build and a
@@ -11,7 +15,7 @@ sources. GitHub Actions `macos-latest` jobs run `npm test`, the app build and a
 - macOS 12+ (Apple silicon or Intel)
 - Node.js 20+
 - [Orca](https://github.com/stablyai/orca) with the CLI installed (`/usr/local/bin/orca` or `Orca.app` resources)
-- Tailscale and `cloudflared` on PATH (same tunnel model as Windows)
+- Tailscale (CLI on PATH or the macOS app)
 - Optional: Homebrew `whisper-cpp` for voice, or `scripts/setup-voice.sh`
 
 ## Paths (sources in `bridge/platform.mjs`)
