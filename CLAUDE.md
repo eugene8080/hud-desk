@@ -56,6 +56,11 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 bridge restarted with Eugene's approval for 1.0.73 (old supervisor 6768/server 62660/
+whisper 62444/tunnel watcher 56512/cloudflared 11712; new supervisor 3012, server 57676, whisper
+61824 --vad; no tunnel or cloudflared process). Local and tailnet healthz ok; capabilities over the
+tailnet: modules coding+email+chat, voice true, chatFeatures transcribe true, translate true.
+
 2026-11-27 beta 1.0.73: Tailscale only (Eugene). Removed tunnel/watch.mjs, tunnel/quick.yml and the
 tunnel from scripts/start.mjs; app/src/pairing.ts no longer polls ntfy.sh (hmac.ts deleted);
 app/app.json whitelist is the tailnet origin only; doctor checks Tailscale instead of cloudflared;
