@@ -58,6 +58,11 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 Even Hub status (read-only portal check): public v1.0.36 live; v1.0.91 submitted
+Nov 27 1:29 PM, "In review / Awaiting review". Advice given: leave 1.0.91 in review (listing matches
+it); submit the next public build after the self-host setup ships in a beta, one outside user has
+self-hosted, and the description drops "self-service setup ... not offered yet".
+
 2026-11-27 Eugene chose: destroy the relay droplet (done: hud-relay deleted in DigitalOcean, only
 sg-exit remains; host key removed from ~/.ssh/known_hosts; the SSH key 'hud-desk-relay' stays in his
 DO account and ~/.ssh for a future relay) and start one-command self-host setup for Windows and Mac.
