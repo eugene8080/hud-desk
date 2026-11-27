@@ -237,7 +237,8 @@ function readerLayout(s: TextScreen) {
   if (s.pageText === s.text && s.pages && s.pagesFine === s.fine) return s.pages;
   s.pagesFine = s.fine;
   const chatScreen = s.reader instanceof ChatReader;
-  const transform = s.fine && !chatScreen ? alignMarkdownTables : (text: string) => text;
+  const font = s.fine;
+  const transform = font && !chatScreen ? (text: string) => alignMarkdownTables(text, font) : (text: string) => text;
   let paginate: (text: string, startLine?: number) => ReaderPage[];
   if (s.fine) {
     // Monospace small text wraps by cells, with no native byte limit.
@@ -2994,7 +2995,7 @@ async function connect() {
   if (!pairing) {
     diag(tr('notPairedDiag'));
     phone?.connection({ state: 'unpaired' });
-    return show({ kind: 'text', title: 'Orca Glass', text: tr('notPaired') });
+    return show({ kind: 'text', title: 'HUD Desk', text: tr('notPaired') });
   }
   phone?.connection({ state: 'connecting' });
   try {

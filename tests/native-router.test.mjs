@@ -41,7 +41,7 @@ test('native voice does not type ordinary speech into a numbered approval prompt
   const f = fixture();
   await f.respond('list sessions'); await f.respond('select session 1');
   f.setSnapshot({ text: '', menu: { question: 'Allow?', options: [{ value: '1', label: 'Yes' }, { value: '2', label: 'No' }] } });
-  assert.match(await f.respond('Yes'), /Use Orca Glass or the desktop/);
+  assert.match(await f.respond('Yes'), /Use HUD Desk or the desktop/);
   assert.equal(f.sent.length, 0);
 });
 

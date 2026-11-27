@@ -271,8 +271,10 @@ function run(ffmpeg, args, bytes, limit) {
 const INPUT = ['-loglevel', 'error', '-protocol_whitelist', 'pipe', '-format_whitelist', FORMATS, '-i', 'pipe:0', '-frames:v', '1'];
 const decode = (ffmpeg, bytes) => run(ffmpeg, [...INPUT, '-vf', DECODE_FILTER, '-f', 'image2pipe', '-c:v', 'pgm', 'pipe:1'], bytes, MAX_SIDE * MAX_SIDE + 64)
   .then(parsePgm);
-// The model reads JPEG and PNG; anything else (WebP, HEIC, GIF) goes as a PNG of at most 1600 px.
-const forModel = (ffmpeg, bytes) => /^\xff\xd8|^\x89PNG/.test(bytes.subarray(0, 4).toString('latin1')) ? Promise.resolve(bytes)
+// A PNG goes to the model as it is; anything else (JPEG, WebP, HEIC, GIF) goes as a PNG of at most
+// 1600 px. JPEG is converted too: Ollama's loader refused a progressive JPEG with 400 'Failed to load
+// image or audio file' (2026-11-27, a product photo from a chat).
+const forModel = (ffmpeg, bytes) => /^\x89PNG/.test(bytes.subarray(0, 4).toString('latin1')) ? Promise.resolve(bytes)
   : run(ffmpeg, [...INPUT, '-vf', "scale='min(1600,iw)':'min(1600,ih)':force_original_aspect_ratio=decrease", '-f', 'image2pipe', '-c:v', 'png', 'pipe:1'], bytes, MAX_IMAGE_BYTES);
 
 // ffmpeg from PATH, else the configured path; `model` the Ollama vision model for the Read view.

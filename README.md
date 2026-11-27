@@ -1,28 +1,46 @@
-# Orca Glass
+# HUD Desk
 
-**Read your Orca sessions. Speak your next step.**
+**Read your agent sessions, email and chats on G2. Talk, type on a Bluetooth keyboard, open pictures.**
 
-Orca Glass connects Even Realities G2 glasses to Orca on your PC (Windows today; macOS supported in source with CI smoke tests). Browse connected sessions, read a conversation, check agent activity, and review a spoken instruction before sending it back to your computer.
+HUD Desk (formerly Orca Glass, renamed 2026-11-27) connects Even Realities G2 glasses to the agents running in Orca on your Windows PC, to Gmail and to Beeper chats. The top row on the glasses switches between Coding, Email and Chat. Agents, mail, chats, voice transcription and the picture reader all run on your PC; the phone and the glasses only display and send.
 
-This is Eugene's Windows/Android fork of [2ero20ne's Orca Glass](https://github.com/2ero20ne/orca-glass), licensed under MIT. It is developed and tested with the Even Realities app on Android; the Even Hub app has no Android-specific code, but it has not been tried on an iPhone.
+This is Eugene's Windows/Android fork of [2ero20ne's Orca Glass](https://github.com/2ero20ne/orca-glass), licensed under MIT. It is developed and tested with the Even Realities app on Android; the Even Hub app has no Android-specific code, but it has not been tried on an iPhone. The plugin ID stays `com.eugene8080.orcaglass`.
 
 ## Availability
 
-As of 2026-11-06, the Even Hub **public build is 1.0.36** and the **latest beta is 1.0.48** (English / Japanese chosen in the phone app, Japanese pixel font Shinonome 6x12; hanging indents for wrapped lines; six small-text fonts incl. Departure 7x11 with a font list menu, aligned tables, Cursor/OpenCode 2/Pi conversations, models for every agent). The newer controls described below require the beta. The installed build connects to a specific PC over Tailscale; it is not yet a self-service installation for arbitrary PCs. Orca and the companion bridge must remain running. The phone and glasses do not run the coding agent.
+As of 2026-11-27 the Even Hub **public build is 1.0.36** (Coding only) and the **beta is 1.0.90**. Email, Chat, pictures and the keyboard need the beta. The installed build connects to one configured PC over Tailscale; self-service setup for any PC is not offered yet. Orca and the companion bridge must keep running on the PC.
 
-The active app is the custom Orca Glass bridge. Earlier native Even Terminal experiments are historical. See [current work](TODOS.md) and [beta setup/release history](docs/beta-install.md).
+See [current work](TODOS.md), [beta setup and release history](docs/beta-install.md) and the [feature list](store/features.md).
 
-## Features and controls
+## Features
 
-- **Sessions:** filter by agent and by one or more Orca workspaces. Rows show `[workspace/Agent]`, for example `[porttracker/Claude]`. Swipe past the last/first row to change pages; there are no paging buttons in the sessions or workspace menus.
-- **Conversation:** read nine rows of native text in whole-page swipes with `/` user / `>` assistant markers. One status row shows the state, the model, the input hint and the page, e.g. `/Waiting Opus5.5 [Tap&Hold for Input] Pg77/78`. Codex and Claude use verified saved history when available. Claude keeps previous chat visible during long runs and shows a short public activity summary. Opening a session shows the page that starts the latest response. Browsing freezes the page snapshot; swipe down on the last page to refresh and resume live updates at the latest page. Sending a voice message also resumes live updates.
-- **Voice:** hold to open a full-screen voice page that is already listening; release to review the scrollable transcript; click to send, double-click to cancel. Both return to the newest chat page. Whisper transcribes on the PC.
-- **Numbered prompts:** Click opens choices only when the terminal is showing a recognized interactive prompt. Review the option and click to confirm, or hold to speak a number and review before sending. The bridge rejects stale questions. Select `Type something` first for a custom response. Outside prompts, voice remains the default and Click does nothing in a session.
-- **Usage:** view available Codex, Claude and Cursor allowances. Click the top Reset selector to cycle Computer time, Phone time and Absolute time (remaining duration, e.g. `2d5h12m`). The choice is remembered; missing reset timestamps are reported rather than guessed.
-- **App menu:** Refresh sessions, New Session and Usage are available from the session-list contextual menu alongside the G2 system controls.
-- **New session:** choose an existing Orca workspace and start Codex.
+**Coding (Orca and Hermes agents)**
+- Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent sessions with model and status. Orca chat sessions are listed read-only (the Orca CLI cannot send to a chat).
+- Filter by Agent and by one or more Orca workspaces; rows show `[workspace/Agent]`. Usage for Codex, Claude and Cursor with reset times.
+- Book-style reader: whole-page swipes, `/` your turns, `>` replies, one status row with model, activity animation, timer and page.
+- Hold to talk: local Whisper on the PC, review, then click to send. Numbered prompts open as choices.
 
-Other agents may appear in the session list and filters, but discovery does not guarantee full reader support. Tool output, internal reasoning and terminal chrome are filtered; public assistant progress commentary can still appear. New-session creation remains Codex-only.
+**Email (Gmail)**
+- One mailbox at a time (work or personal), Filter by Label with voice or typed search. Opening a thread marks it read.
+- With a Bluetooth keyboard: compose, reply, reply all, forward, archive, delete, star and undo with Gmail's keys. Drafts show on the glasses; review, then send.
+- Pictures in mail, including newsletter images fetched over HTTPS when you open them (ad and tracking images skipped).
+
+**Chat (Beeper Desktop: WhatsApp, Signal, Telegram and more)**
+- Rows show the day and the app, e.g. `[27Nov/Signal]`; Filter by Network. Chat formatting (lists, quotes, line breaks) shown as plain text.
+- Voice notes transcribed on the PC (FunASR, tuned for Cantonese). Translate puts English on the row under each foreign line, through a local Ollama model.
+- Photos open on the glasses.
+
+**Pictures**
+- Original Picture tuned for the G2's 16 green levels (flat tones for charts and screenshots, thin edges and dithering for photos), Zoom in sections, Outline, and AI Readout: a local Ollama vision model describes the picture as text.
+
+**Keyboard**
+- Gmail-style keys everywhere; VS Code-style `Ctrl+P`, `Ctrl+Shift+P`, `Ctrl+Tab`, `Ctrl+F`, `Ctrl+,`; `?` shows every key on the glasses.
+
+**Reader**
+- Native text or pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica 5x11 at 114 columns) with Hong Kong Chinese and Japanese glyphs; aligned Markdown tables; backgrounds for your turns (lines, dots, Tube scanlines, 1px frame, left bar, underline, dim replies); App Brightness. Choose fonts and backgrounds on their comparison pages.
+- Interface in English and Japanese (chosen in the phone app).
+
+Other agents may appear in the session list and filters, but discovery does not guarantee full reader support. Tool output, internal reasoning and terminal chrome are filtered. New-session creation remains Codex-only.
 
 ### Hermes support (beta 1.0.28)
 
@@ -36,21 +54,25 @@ still need verification. See [implementation](docs/hermes-bridge.md).
 
 ## Screenshots
 
-Native 576 × 288 simulator captures of beta 1.0.49 with fictional sample data (see the [gallery](store/gallery.html)).
+Native 576 × 288 simulator captures of beta 1.0.90 with fictional sample data (see the [gallery](store/gallery.html)). The kettle is a product photo; the keys page is rendered by the app's own code.
 
-| Sessions | Conversation | Small pixel font |
+| **Coding** | **Reader, Scientifica + Tube** | **Reader, native text** |
 | --- | --- | --- |
-| ![Sessions](store/screenshots/1-threads.png) | ![Conversation](store/screenshots/2-answer.png) | ![Small text](store/screenshots/10-small-text.png) |
-| **Compare fonts** | **Voice review** | **Choices** |
-| ![Compare fonts](store/screenshots/11-compare-fonts.png) | ![Voice review](store/screenshots/3-reply.png) | ![Choices](store/screenshots/12-choices.png) |
-| **Usage** | **Workspace filter** | **Japanese** |
-| ![Usage](store/screenshots/4-usage.png) | ![Workspace filter](store/screenshots/5-workspaces.png) | ![Japanese](store/screenshots/13-japanese.png) |
+| ![Coding](store/screenshots/01-coding.png) | ![Reader, Scientifica + Tube](store/screenshots/02-coding-dense.png) | ![Reader, native text](store/screenshots/03-coding-native.png) |
+| **Voice review** | **Email** | **Email with pictures** |
+| ![Voice review](store/screenshots/04-voice.png) | ![Email](store/screenshots/05-email.png) | ![Email with pictures](store/screenshots/06-email-pictures.png) |
+| **Original Picture** | **Outline** | **AI Readout** |
+| ![Original Picture](store/screenshots/07-picture.png) | ![Outline](store/screenshots/08-outline.png) | ![AI Readout](store/screenshots/09-ai-readout.png) |
+| **Chat** | **Filter by Network** | **Chat translation** |
+| ![Chat](store/screenshots/10-chat.png) | ![Filter by Network](store/screenshots/11-chat-networks.png) | ![Chat translation](store/screenshots/12-chat-translate.png) |
+| **Keyboard keys** | **Compare backgrounds** | **Compare fonts** |
+| ![Keyboard keys](store/screenshots/13-keys.png) | ![Compare backgrounds](store/screenshots/14-backgrounds.png) | ![Compare fonts](store/screenshots/15-compare-fonts.png) |
 
-The simulator omits OS contextual entries. See [store profile/capture instructions](store/listing.md) for raw exports, the local gallery and remaining public-release preparation.
+The simulator omits OS contextual entries. See [store listing notes](store/listing.md).
 
 ## Development
 
-Requirements: Node.js 20+, installed/running Orca, and local Whisper for voice. Windows is the primary verified environment; macOS setup is documented separately. The installed beta and earlier Quick Tunnel prototype use different network routes.
+Requirements: Node.js 20+, installed/running Orca, and local Whisper for voice. Email needs a Gmail OAuth client ([docs/email.md](docs/email.md)); Chat needs Beeper Desktop with its API on ([docs/chat.md](docs/chat.md)); pictures and voice notes need ffmpeg; Translate and AI Readout need Ollama with a vision-capable model. Windows is the primary verified environment; macOS setup is documented separately. The installed beta and earlier Quick Tunnel prototype use different network routes.
 
 **Windows**
 

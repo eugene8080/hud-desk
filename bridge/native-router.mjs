@@ -30,7 +30,7 @@ export function createNativeRouter(io) {
 
   function output(snapshot) {
     return snapshot.menu
-      ? `Codex is asking: ${snapshot.menu.question}\n${snapshot.menu.options.map(o => `${o.value}: ${o.label}`).join('\n')}\nUse Orca Glass or the desktop to choose.`
+      ? `Codex is asking: ${snapshot.menu.question}\n${snapshot.menu.options.map(o => `${o.value}: ${o.label}`).join('\n')}\nUse HUD Desk or the desktop to choose.`
       : snapshot.text;
   }
 

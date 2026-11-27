@@ -10,8 +10,8 @@ const clipboard = clipboardCommand();
 try {
   if (!clipboard) throw new Error('clipboard unavailable');
   execFileSync(clipboard, { input: code, windowsHide: true });
-  console.log('Pairing code copied. Paste it into Orca Glass in the Even Realities app on your phone.');
+  console.log('Pairing code copied. Paste it into HUD Desk in the Even Realities app on your phone.');
 } catch {
-  console.log('Pairing code (paste into Orca Glass on your phone):');
+  console.log('Pairing code (paste into HUD Desk on your phone):');
   console.log(code);
 }

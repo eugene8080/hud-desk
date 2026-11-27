@@ -431,7 +431,7 @@ test('Chat shares Coding voice review, sends once per click, and cancels with no
 
 test('row zero fits the centered longest release title, module labels and counts', () => {
   const { glassWidth, moduleHeading, nativeRight, MENU_HEAD, MENU_COUNT } = listExports;
-  const heading = 'Orca-glass 1.0.59';
+  const heading = 'HUD Desk 1.0.59';
   for (const [label, count] of [['Coding', '9999 sessions'], ['Email', '99999 unread'], ['コーディング', 'セッション9999件'], ['メール', '未読99999件']]) {
     const row = moduleHeading(label, heading);
     const centre = MENU_HEAD.xPosition + glassWidth(row.slice(0, -heading.length));
@@ -448,7 +448,7 @@ test('row zero fits the centered longest release title, module labels and counts
 test('row zero debounces module loads, wraps over offered modules, and restores each position', async () => {
   const { fixture, requests } = mailFixture();
   const h = await moduleHarness({ capabilities: { modules: ['coding', 'future', 'email', 'email'] }, mail: fixture });
-  assert.match(container(h, 'head').content, /^\[Coding\]\s+Orca-glass/);
+  assert.match(container(h, 'head').content, /^\[Coding\]\s+HUD Desk/);
   for (let i = 0; i < 10; i++) await h.scroll('down');
   const codingPage = container(h, 'body').content;
   assert.match(codingPage, /Session 7/);
@@ -456,7 +456,7 @@ test('row zero debounces module loads, wraps over offered modules, and restores 
   await h.scroll('up');
   assert.match(h.upgrades.at(-1).content.split('\n')[0], /^>/);
   await h.tap();
-  assert.match(h.upgrades.at(-1).content, /^\[Email\]\s+Orca-glass/);
+  assert.match(h.upgrades.at(-1).content, /^\[Email\]\s+HUD Desk/);
   assert.equal([...h.timeouts.values()][0].delay, 400);
   assert.equal(requests.length, 0);
   await h.tap(); await h.debounce();
@@ -614,7 +614,7 @@ test('Email rows mark unread with / and read with -, and both fit the cursor gut
 test('row zero brackets the module name so it reads as a button', () => {
   const { moduleHeading, moduleButton } = listExports;
   assert.equal(moduleButton('Email'), '[Email]');
-  assert.match(moduleHeading('Coding', 'Orca-glass 1.0.62'), /^\[Coding\]\s+Orca-glass 1\.0\.62$/);
+  assert.match(moduleHeading('Coding', 'HUD Desk 1.0.62'), /^\[Coding\]\s+HUD Desk 1\.0\.62$/);
 });
 
 const twoMailboxes = fixture => {
@@ -3088,6 +3088,24 @@ test('Japanese draws from the shared CJK table in every small font', () => {
     assert.ok(lit - blank > 40, `${font}: ${lit - blank} glyph pixels`);
   }
   assert.equal(fineExports.fineCells('日本語abc'), 9);
+});
+
+// 2026-11-27: in Scientifica 5x11 two cells are 10 px, narrower than the 12 px CJK glyph, so a
+// wide character takes three cells there; wrapping, table padding and drawing agree.
+test('Scientifica gives CJK three cells so the glyphs do not overlap', () => {
+  assert.equal(fineExports.fineCells('日本語abc', 'scientifica'), 12);
+  assert.equal(fineExports.fineCells('日本語abc', 'terminus'), 9);
+  assert.equal(fineExports.fineMeasure('scientifica')('呢個'), 30);
+  const nl = String.fromCharCode(10);
+  const table = fineExports.alignMarkdownTables(['  | 名 | x |', '  |---|---|', '  | 呢個 | y |'].join(nl), 'scientifica').split(nl);
+  // Header cell '名' (3 cells) is padded to the width of '呢個' (6 cells).
+  assert.equal(table[0], '  | 名    | x   |');
+  const lit = tiles => tiles.reduce((n, tile) => n + tile.filter(v => v > 0).length, 0);
+  const status = { left: '', right: '' };
+  // Two characters drawn side by side light the sum of each alone: no stroke lands on the other.
+  const both = lit(renderFineText('呢個', 'scientifica', status)), blank = lit(renderFineText('', 'scientifica', status));
+  const one = lit(renderFineText('呢', 'scientifica', status)) - blank, two = lit(renderFineText('個', 'scientifica', status)) - blank;
+  assert.equal(both - blank, one + two);
 });
 
 test('Cantonese uses the shared CJK table and 㩒 draws the same glyph as 撳', () => {

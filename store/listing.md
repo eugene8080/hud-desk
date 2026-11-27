@@ -1,5 +1,5 @@
 # Even Hub listing — Orca Glass
-Updated: 2026-11-05
+Updated: 2026-11-27
 
 ## Current status
 
@@ -135,7 +135,51 @@ Name, tagline and description saved through the authenticated Even Hub CLI on 20
 
 The description and README credit the original author and link the upstream project. Root `LICENSE` retains `Copyright (c) 2026 2ero20ne` and the full MIT text. `app/vite.config.ts` now emits `LICENSE.txt` and `ATTRIBUTION.txt` in production builds; the built license was checked byte-for-byte against the original. This packaging change is not yet in beta1.0.21; include it in the next release candidate.
 
-## Listing refresh, 2026-11-10 (beta 1.0.49)
+## Listing refresh, 2026-11-27 (beta 1.0.90, renamed HUD Desk)
+
+Agent: Claude Opus 5.5. Eugene: "update the listing with new description. this was a big
+update we did. make sure you cover everything. take new screenshots for it"; then, while it ran:
+a chat menu with WhatsApp/Signal/Telegram, a new name (he chose **HUD Desk**), the Opus 5.5 reader
+in Scientifica with the thinking animation and a table, the Tube background, Japanese and Chinese
+with translations, the kettle photo instead of the bar chart, the full scanner tail and the Braille
+spinner on its L frame, and the GitHub README.
+
+- Name: HUD Desk (app.json, glasses title row, phone page, pairing text, README, store files).
+  Plugin ID unchanged. Kept the old name: historical docs, the `Orca Glass Bridge` scheduled task,
+  `store/Orca-Glass-Privacy-and-Terms.pdf` and `store/privacy-and-terms.md`.
+- Description: `store/description.txt` = the block in `store/features.md`.
+- Japanese `store/description.ja.txt` NOT updated (still 1.0.62, old name).
+- Found while capturing, fixed in 1.0.90: CJK overlapped in Scientifica 5x11 (12 px glyph in
+  10 px); now three cells. AI Readout refused progressive JPEG (Ollama 400); the bridge now converts
+  JPEG to PNG (live after a bridge restart).
+- Upload PNGs (576x288, opaque, `store/screenshots/`; transparent originals in `native/`):
+
+| File | Shows |
+| --- | --- |
+| `01-coding.png` | Coding sessions: Top row switches Coding, Email and Chat; ten fictional sessions with [workspace/agent]; working ones marked. |
+| `02-coding-dense.png` | Reader: Scientifica 5x11 on Tube: Opus 5.5 working (scanner sweep), an aligned table, Japanese and Cantonese lines with English: 23 text rows, up to 114 columns. |
+| `03-coding-native.png` | Reader: native text: Composer 2.5 working, Braille spinner on its L frame, timer and page. |
+| `04-voice.png` | Voice review: Fictional transcript; tap to send, double-tap to cancel. |
+| `05-email.png` | Email: One mailbox, Filter by Label, read marks and times. |
+| `06-email-pictures.png` | Email with pictures: A fictional newsletter; [Image] rows open the picture. |
+| `07-picture.png` | Original Picture: A kettle product photo converted for the G2's 16 green levels. |
+| `08-outline.png` | Outline: The same photo as thin edges. |
+| `09-ai-readout.png` | AI Readout: The local vision model's description of the photo (its real answer). |
+| `10-chat.png` | Chat: Beeper chats with [day/app]: WhatsApp, Signal, Telegram. |
+| `11-chat-networks.png` | Filter by Network: Choose which chat apps show. |
+| `12-chat-translate.png` | Chat translation: A Cantonese list keeps its bullets; English under each line. |
+| `13-keys.png` | Keyboard keys: The ? page: Gmail and IDE keys. Rendered by the app's keys-page code, because the simulator has no keyboard. |
+| `14-backgrounds.png` | Compare backgrounds: Every background for your turns; choose in place. |
+| `15-compare-fonts.png` | Compare fonts: Native text and the pixel fonts, large to small; choose in place. |
+
+- Kettle: `.local/store-assets/kettle.jpg` (gitignored), a COSORI product photo Eugene chose from a
+  chat; the AI Readout text is the local model's answer, cached in `.local/store-assets/kettle-readout.txt`.
+- Capture: `node scripts/store-preview.mjs` (8792) and the simulator started with
+  `node app/node_modules/@evenrealities/evenhub-simulator/bin/index.js 'http://127.0.0.1:8792/?code=demo&lang=en' --automation-port 9899`
+  (not the `.cmd` shim: cmd cuts the URL at `&` and drops the automation port), both in named
+  Orca tabs. Animated frames: grab several captures and keep the one that shows the frame.
+
+## Listing refresh, 2026-11-10 (beta 1.0.49) — superseded; its files were removed 2026-11-27
 
 Agent: Claude Sonnet 5.5, continuing a stopped Cursor agent's uncommitted work (brief:
 `docs/store-listing-task.md`). Eugene pastes the description and uploads the images in the
@@ -182,7 +226,7 @@ portal himself; no agent opened the portal or a browser.
   transparent capture means the app exited (two double-clicks from the session list), not
   that the capture tool is broken. Restart the simulator.
 
-## Screenshots — 1.0.36 (superseded by the refresh above)
+## Screenshots — 1.0.36 (superseded; files removed, in git history)
 
 Eight current upload files, using the real native app renderer and fictional data.
 No real chats, account usage, credentials or microphone audio. Not G2 photographs.

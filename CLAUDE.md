@@ -56,6 +56,18 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.90, renamed **HUD Desk** (Eugene chose it; plugin ID unchanged) and listing refresh
+(Eugene: new description covering everything, new screenshots). Name changed in app.json, glasses
+title row, phone page, pairing text, native-router reply, README, store files; kept in historical
+docs, the 'Orca Glass Bridge' task, the privacy PDF/markdown. Fixes found while capturing: CJK in
+Scientifica 5x11 overlapped (12 px glyph in 10 px) -> wideCells 3 there (fineCells/fineMeasure/
+alignMarkdownTables take the font); AI Readout: Ollama 400 on a progressive JPEG -> bridge forModel
+converts everything but PNG (live after an approved bridge restart, NOT restarted). 281 tests,
+build pass. Store: 15 screenshots in store/screenshots (fixture scripts/store-preview.mjs; kettle
+photo in gitignored .local/store-assets), store/description.txt 1,959 chars, README rewritten.
+Portal (Even Hub, Chrome Profile 5, IP matched route.json): Basic info name, description and
+screenshots not yet saved at the time of this note; see store/listing.md. Japanese description not updated.
+
 2026-11-27 beta 1.0.89 (Eugene: the translated 'WINDOW MECHANISM REPAIR' list 'lost all its
 formatting'; wants the translation on the next row). Bridge /api/chat/translate: message text is split
 into lines; only lines with non-ASCII characters go to the model, without their bullet/number (one

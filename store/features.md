@@ -1,6 +1,8 @@
-# Orca Glass features (paste source for Even Hub)
+# HUD Desk features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.89**. Public: **1.0.36**.
+Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
+
+Updated: 2026-11-27. Current beta: **1.0.90**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -22,7 +24,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 ### All modules
 
 - Row 0 of the home screen selects the module: [Coding], or [Email] when the bridge offers it (the
-  brackets mark it as a button). Click cycles; the title "Orca-glass <version>" sits in the centre and the module's count on the right.
+  brackets mark it as a button). Click cycles; the title "HUD Desk <version>" sits in the centre and the module's count on the right.
   The app reopens in the last module. A module opened before shows its last rows at once and
   refreshes in place.
 - Phone page (in the Even app): the same module switch, linked both ways with row 0.
@@ -106,7 +108,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 - Voice reply as in Coding: hold, release to review, click to send, double-click to cancel. A send
   is never repeated automatically. Opening an unread chat marks it read in Beeper.
 
-### Bluetooth keyboard (paired with the phone, while Orca Glass is open in the Even app)
+### Bluetooth keyboard (paired with the phone, while HUD Desk is open in the Even app)
 
 - Gmail's PC shortcuts in every module: j/k or Up/Down move (in a reader j/k open the next or
   previous row of its list and Up/Down turn pages), o or Enter opens, u or Esc goes back (never closes
@@ -136,24 +138,31 @@ Rule for every agent: each beta release updates this file in the release commit:
 ## Paste: store description
 
 <!-- description:start -->
-Read your agent sessions, email and chats on G2. Speak your next step.
+Read your agent sessions, email and chats on G2. Talk, type on a Bluetooth keyboard, open pictures.
 
-Orca Glass connects Even Realities G2 glasses to agents running in Orca on your Windows PC, and to Hermes Agent. Row 0 switches between Coding, Email and Chat.
+HUD Desk connects G2 to agents in Orca on your Windows PC, to Gmail and to Beeper chats. The top row switches Coding, Email and Chat.
 
 Coding:
-- Agents: Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent, with the model name and working or waiting status.
-- Filter by Agent and Filter by Workspace on the glasses and the phone page. Usage for Codex, Claude and Cursor with reset times.
-- Voice: hold for a full-screen voice page with local Whisper on your PC. Release to review, click to send, double-click to cancel. Answer numbered choices and Hermes clarify questions.
+- Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent sessions with model and status; Orca chat sessions read-only.
+- Filter by Agent and Workspace. Usage for Codex, Claude and Cursor.
+- Hold to talk: local Whisper on your PC, review, then send. Answer numbered choices.
 
-Email (Gmail, when your bridge is set up for it):
-- Bluetooth keyboard with Gmail shortcuts: compose, reply, forward, archive, delete, undo; drafts show on the glasses.
-- One or more Gmail accounts, one at a time (click the address to switch). Filter by Label on the glasses or the phone, with voice search on the glasses. Threads open at the newest message with quoted history removed and plain text reflowed.
+Email (Gmail):
+- One mailbox at a time, Filter by Label with voice or typed search. Opening a thread marks it read.
+- With a keyboard: compose, reply, reply all, forward, archive, delete, star and undo with Gmail's keys. Drafts show on the glasses; review, then send.
+- Pictures in mail, newsletter images included.
 
-Chat (Beeper Desktop, when set up): Filter by Network, voice replies, voice notes transcribed on click (Cantonese tuned), English translation.
+Chat (Beeper: WhatsApp, Signal, Telegram and more):
+- Rows show the day and the app; Filter by Network; formatting kept.
+- Voice notes transcribed (Cantonese tuned). English under each line. Photos open on the glasses.
 
-Reader for all: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica), backgrounds for your turns, App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
+Pictures: Original Picture (tuned for G2), Zoom in sections, Outline, and AI Readout: a local vision model describes the picture.
 
-Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge. The packaged connection targets a configured private PC over Tailscale; self-service setup for any PC is not offered yet. Agents and mail access run on your PC, not the glasses. Try the demo without a PC.
+Keyboard: Gmail-style keys everywhere, VS Code-style Ctrl+P, Ctrl+Shift+P, Ctrl+Tab, Ctrl+F; ? shows every key.
+
+Reader: book-style pages in Native text or pixel fonts, down to Scientifica 5x11 (114 columns), with Chinese and Japanese; backgrounds (lines, dots, Tube scanlines, left bar, underline); App Brightness. English and Japanese.
+
+Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge on your PC over Tailscale; self-service setup for any PC is not offered yet. Agents, mail, chats, voice and AI run on your PC. Try the demo without a PC.
 
 Source/setup: https://github.com/eugene8080/orca-glass/tree/windows-android-codex
 Independent fork of 2ero20ne's Orca Glass under MIT.
@@ -163,5 +172,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.89: Chat translation keeps the message's shape: each Chinese (or other non-English) line gets its English on the row below, in brackets and indented under its bullet, so translated lists and notes stay readable. English lines are left as they are.
+1.0.90: The app is now HUD Desk (formerly Orca Glass): Coding, Email and Chat on G2. In the Scientifica 5x11 font, Chinese and Japanese characters take three cells so they no longer overlap. AI Readout now reads progressive JPEG photos. New store description and 15 screenshots.
 <!-- whatsnew:end -->

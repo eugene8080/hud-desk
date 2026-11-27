@@ -91,3 +91,32 @@ test('mail with linked pictures is read from its HTML so they sit in place; ad a
   const textOnly = { ...payload, parts: [payload.parts[0], { ...payload.parts[1], body: { data: Buffer.from('<p>Only text</p>').toString('base64url') } }] };
   assert.match(messageWithPictures(textOnly, 'Subject').text, /^A long plain version/);
 });
+
+// AI Readout input (2026-11-27): Ollama refused a progressive JPEG ("Failed to load image or audio
+// file"), so only a PNG goes to the model as it is; a JPEG is converted to PNG first. Needs ffmpeg.
+test('AI Readout sends a JPEG to the model as a PNG', async (t) => {
+  const { execFileSync } = await import('node:child_process');
+  const { readFileSync } = await import('node:fs');
+  const { createImaging } = await import('../bridge/image.mjs');
+  let ffmpeg;
+  try { ffmpeg = JSON.parse(readFileSync(new URL('../bridge/config.local.json', import.meta.url), 'utf8')); } catch { ffmpeg = {}; }
+  ffmpeg = ffmpeg.ffmpegPath ?? ffmpeg.beeper?.ffmpegPath ?? 'ffmpeg';
+  let jpeg;
+  try {
+    jpeg = execFileSync(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=64x48:duration=1', '-frames:v', '1',
+      '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1'], { stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch { t.skip('ffmpeg not available'); return; }
+  assert.equal(jpeg.subarray(0, 2).toString('hex'), 'ffd8');
+  const sent = [];
+  const transport = async (url, init) => {
+    const body = JSON.parse(init.body);
+    if (url.endsWith('/api/show')) return new Response(JSON.stringify({ capabilities: ['completion', 'vision'] }));
+    sent.push(Buffer.from(body.messages[0].images[0], 'base64'));
+    return new Response(JSON.stringify({ message: { content: 'A test pattern.' } }));
+  };
+  const imaging = createImaging({ ffmpeg, model: 'fixture-vision', transport });
+  const answer = await imaging.render('jpeg', async () => jpeg, { view: 'read' });
+  assert.equal(answer.text, 'A test pattern.');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].subarray(0, 4).toString('latin1'), '\x89PNG');
+});

@@ -1,21 +1,28 @@
-Read your agent sessions, email and chats on G2. Speak your next step.
+Read your agent sessions, email and chats on G2. Talk, type on a Bluetooth keyboard, open pictures.
 
-Orca Glass connects Even Realities G2 glasses to agents running in Orca on your Windows PC, and to Hermes Agent. Row 0 switches between Coding, Email and Chat.
+HUD Desk connects G2 to agents in Orca on your Windows PC, to Gmail and to Beeper chats. The top row switches Coding, Email and Chat.
 
 Coding:
-- Agents: Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent, with the model name and working or waiting status.
-- Filter by Agent and Filter by Workspace on the glasses and the phone page. Usage for Codex, Claude and Cursor with reset times.
-- Voice: hold for a full-screen voice page with local Whisper on your PC. Release to review, click to send, double-click to cancel. Answer numbered choices and Hermes clarify questions.
+- Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent sessions with model and status; Orca chat sessions read-only.
+- Filter by Agent and Workspace. Usage for Codex, Claude and Cursor.
+- Hold to talk: local Whisper on your PC, review, then send. Answer numbered choices.
 
-Email (Gmail, when your bridge is set up for it):
-- Bluetooth keyboard with Gmail shortcuts: compose, reply, forward, archive, delete, undo; drafts show on the glasses.
-- One or more Gmail accounts, one at a time (click the address to switch). Filter by Label on the glasses or the phone, with voice search on the glasses. Threads open at the newest message with quoted history removed and plain text reflowed.
+Email (Gmail):
+- One mailbox at a time, Filter by Label with voice or typed search. Opening a thread marks it read.
+- With a keyboard: compose, reply, reply all, forward, archive, delete, star and undo with Gmail's keys. Drafts show on the glasses; review, then send.
+- Pictures in mail, newsletter images included.
 
-Chat (Beeper Desktop, when set up): Filter by Network, voice replies, voice notes transcribed on click (Cantonese tuned), English translation.
+Chat (Beeper: WhatsApp, Signal, Telegram and more):
+- Rows show the day and the app; Filter by Network; formatting kept.
+- Voice notes transcribed (Cantonese tuned). English under each line. Photos open on the glasses.
 
-Reader for all: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Departure, Misc Fixed, Terminus, GohuFont, Scientifica), backgrounds for your turns, App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
+Pictures: Original Picture (tuned for G2), Zoom in sections, Outline, and AI Readout: a local vision model describes the picture.
 
-Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge. The packaged connection targets a configured private PC over Tailscale; self-service setup for any PC is not offered yet. Agents and mail access run on your PC, not the glasses. Try the demo without a PC.
+Keyboard: Gmail-style keys everywhere, VS Code-style Ctrl+P, Ctrl+Shift+P, Ctrl+Tab, Ctrl+F; ? shows every key.
+
+Reader: book-style pages in Native text or pixel fonts, down to Scientifica 5x11 (114 columns), with Chinese and Japanese; backgrounds (lines, dots, Tube scanlines, left bar, underline); App Brightness. English and Japanese.
+
+Requires G2, the Even Realities app (iPhone untested), Orca and the companion bridge on your PC over Tailscale; self-service setup for any PC is not offered yet. Agents, mail, chats, voice and AI run on your PC. Try the demo without a PC.
 
 Source/setup: https://github.com/eugene8080/orca-glass/tree/windows-android-codex
 Independent fork of 2ero20ne's Orca Glass under MIT.

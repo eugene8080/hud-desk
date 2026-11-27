@@ -1,8 +1,8 @@
 {
   "package_id": "com.eugene8080.orcaglass",
   "edition": "202601",
-  "name": "Orca Glass",
-  "version": "1.0.89",
+  "name": "HUD Desk",
+  "version": "1.0.90",
   "min_app_version": "2.2.10",
   "min_sdk_version": "0.0.16",
   "entrypoint": "index.html",
@@ -16,7 +16,7 @@
     },
     {
       "name": "g2-microphone",
-      "desc": "Records a voice reply after you choose it (click to stop); audio is transcribed on your own PC."
+      "desc": "Records a voice reply while you hold (release to review, click to send); audio is transcribed on your own PC."
     }
   ],
   "supported_languages": [

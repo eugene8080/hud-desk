@@ -2,7 +2,7 @@ import { clipBytes, glassTextWidth } from './text';
 import { t } from './i18n';
 declare const __APP_VERSION__: string;
 export const agentLabel = (id: string) => ({ hermes: 'Hermes', codex: 'Codex', claude: 'Claude', pi: 'Pi', cursor: 'Cursor', opencode: 'OpenCode', gemini: 'Gemini' }[id] || id);
-export const sessionListTitle = (count: number) => `Orca-glass ${__APP_VERSION__} · ${t('sessionCount', count)}`;
+export const sessionListTitle = (count: number) => `HUD Desk ${__APP_VERSION__} · ${t('sessionCount', count)}`;
 
 // Preserve the handle/provider suffix inside the native 48-byte compact text-row budget.
 export function sessionRow(title: string, handle: string, agent: string, state: string, workspace = ''): string {
@@ -13,7 +13,7 @@ export function sessionRow(title: string, handle: string, agent: string, state: 
 }
 
 export type SessionColumns = { marker: string; title: string; right: string; busy?: boolean; handle?: string; preserveSuffix?: boolean };
-export const sessionHeading = () => `Orca-glass ${__APP_VERSION__}`;
+export const sessionHeading = () => `HUD Desk ${__APP_VERSION__}`;
 export type GlassModule = 'coding' | 'email' | 'chat';
 export type ModulePosition = { page: number; cursor: number };
 export function offeredModules(modules?: string[]): GlassModule[] {

@@ -199,7 +199,10 @@ function wideGlyph(code: number): number[] | undefined {
 }
 
 // Two cells for East Asian wide/fullwidth characters and emoji; zero for
-// combining marks and joiners; one otherwise.
+// combining marks and joiners; one otherwise. In a font whose two cells are narrower than the
+// 12 px CJK glyph (Scientifica 5x11: 10 px), a wide character takes three cells, else its strokes
+// run into the next character (seen on the 2026-11-27 store screenshot).
+const wideCells = (font?: FineFont) => (font && 2 * TABLES[font].width < WIDE.width ? 3 : 2);
 // Light, heavy, double and rounded box drawing share one single-pixel line style.
 const BOX: Record<string, string> = {};
 for (const [chars, arms] of [
@@ -208,17 +211,19 @@ for (const [chars, arms] of [
   ['┼╋╬┽┾┿╀╁╂╃╄╅╆╇╈╉╊╪╫', 'udlr'], ['╴', 'l'], ['╶', 'r'], ['╵', 'u'], ['╷', 'd'], ['▶►', 'lr>'],
 ] as const) for (const c of chars) BOX[c] = arms;
 
-export function cellWidth(ch: string): number {
+export function cellWidth(ch: string, font?: FineFont): number {
   const c = ch.codePointAt(0) || 0;
   if (/\p{Mn}|\p{Me}|‍|️/u.test(ch)) return 0;
   if ((c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) ||
       (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe4f) || (c >= 0xff00 && c <= 0xff60) ||
-      (c >= 0xffe0 && c <= 0xffe6) || (c >= 0x1f300 && c <= 0x1faff) || (c >= 0x20000 && c <= 0x3fffd)) return 2;
+      (c >= 0xffe0 && c <= 0xffe6) || (c >= 0x1f300 && c <= 0x1faff) || (c >= 0x20000 && c <= 0x3fffd)) return wideCells(font);
   return 1;
 }
-export const fineCells = (text: string) => { let n = 0; for (const ch of text) n += cellWidth(ch); return n; };
+// Without a font, wide characters count two cells (labels and status rows); pass the font where
+// text is drawn in it so wrapping and table padding match what text() draws.
+export const fineCells = (text: string, font?: FineFont) => { let n = 0; for (const ch of text) n += cellWidth(ch, font); return n; };
 // Width in pixels for the reader's word wrap (readerPages measures in pixels).
-export const fineMeasure = (font: FineFont) => (text: string) => fineCells(text) * TABLES[font].width;
+export const fineMeasure = (font: FineFont) => (text: string) => fineCells(text, font) * TABLES[font].width;
 
 class Surface {
   readonly pixels = new Uint8ClampedArray(SCREEN.width * SCREEN.height);
@@ -267,18 +272,18 @@ class Surface {
     const { width: cw, height: ch } = TABLES[this.font];
     let col = 0;
     for (const c of text) {
-      const cells = cellWidth(c);
+      const cells = cellWidth(c, this.font);
       if (cells === 0) continue;
       if (col + cells > maxCells) break;
       const px = x + col * cw, code = c.codePointAt(0) || 0;
       const bitmap = glyph(this.font, code);
-      const wide = !bitmap && cells === 2 ? wideGlyph(code) : undefined;
+      const wide = !bitmap && cells >= 2 ? wideGlyph(code) : undefined;
       if (bitmap) {
         const high = cw > 8 ? 0x8000 : 0x80;
         for (let gy = 0; gy < bitmap.length; gy++) for (let gx = 0; gx < cw; gx++) if (bitmap[gy] & (high >> gx)) this.set(px + gx, y + gy, level);
       } else if (wide) {
-        // Baseline-aligned to this font; centred in the two-cell box (11 used columns).
-        const dy = TABLES[this.font].ascent - WIDE.ascent, dx = Math.max(0, (2 * cw - 11) >> 1);
+        // Baseline-aligned to this font; centred in its two- or three-cell box (11 used columns).
+        const dy = TABLES[this.font].ascent - WIDE.ascent, dx = Math.max(0, (cells * cw - 11) >> 1);
         for (let gy = 0; gy < wide.length; gy++) for (let gx = 0; gx < 16; gx++) if (wide[gy] & (0x8000 >> gx)) this.set(px + dx + gx, y + dy + gy);
       } else if (BOX[c]) {
         this.box(BOX[c], px, y, cw, ch);
@@ -602,7 +607,7 @@ export function renderBackgroundComparison(font: FineFont, level = INK_MAX, halo
 // A table is a run of '| ... |' rows whose second row is the '|---|:--:|' rule;
 // that rule's colons set each column's alignment. Role prefixes ('> ', '/ ',
 // two-space continuation) are kept. Anything else passes through unchanged.
-export function alignMarkdownTables(text: string): string {
+export function alignMarkdownTables(text: string, font?: FineFont): string {
   const lines = text.split('\n');
   const prefix = (line: string) => /^(?:[/>] | {2})/.exec(line)?.[0] ?? '';
   const body = (line: string) => line.slice(prefix(line).length).trim();
@@ -621,9 +626,9 @@ export function alignMarkdownTables(text: string): string {
       return rule.endsWith(':') ? (rule.startsWith(':') ? 'center' : 'right') : 'left';
     });
     const widths = Array.from({ length: count }, (_, c) =>
-      Math.max(3, ...cells.filter((_, r) => r !== 1).map(row => fineCells(row[c] ?? ''))));
+      Math.max(3, ...cells.filter((_, r) => r !== 1).map(row => fineCells(row[c] ?? '', font))));
     const pad = (cell: string, width: number, how: string) => {
-      const gap = width - fineCells(cell);
+      const gap = width - fineCells(cell, font);
       return how === 'right' ? ' '.repeat(gap) + cell : how === 'center'
         ? ' '.repeat(gap >> 1) + cell + ' '.repeat(gap - (gap >> 1)) : cell + ' '.repeat(gap);
     };
