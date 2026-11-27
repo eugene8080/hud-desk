@@ -64,7 +64,8 @@ DO account and ~/.ssh for a future relay) and start one-command self-host setup 
 Run run_79e62279f8cf, Codex workers in child worktrees: setup-win (ctx_f4a43715e810: eho3 pairing
 code carrying publicOrigin, app parse + precedence, scripts/setup-windows.ps1, docs/self-host.md,
 README) and setup-mac (ctx_3ed426c1ad58: scripts/setup-macos.sh, docs/self-host-macos.md). Both
-dry-run only on PSCAP11 (live bridge). Eugene's phone still uses the :8444 test address.
+dry-run only on PSCAP11 (live bridge). Eugene cleared the phone's Bridge address; `tailscale serve
+--https=8444 off` done 2026-11-27 (only :8443 remains; healthz ok).
 
 2026-11-27 whitelist test PASSED (Eugene, G2/Android, beta 1.0.93): Bridge address
 https://pscap11.tailf91bf7.ts.net:8444 (not whitelisted) connected. Only the port differed; other
