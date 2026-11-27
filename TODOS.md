@@ -11,7 +11,9 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 - [ ] **Super app: Coding, Email, Chat, Reader in one app -- Chat live since the 2026-11-27 reboot:**
   2026-11-27 beta 1.0.67: mailbox toggle + no blank chat rows; G2 check pending. Eugene confirmed
   the Email loading screen and Chat. Next: Chat voice messages (show, click to transcribe, optional
-  translation to English 'original (English)'), local Whisper multilingual + Ollama.
+  translation to English 'original (English)'), local Whisper multilingual + Ollama. Dispatched
+  2026-11-27 to Codex worker ctx_137af82cfd06 (task_5245b1c8f2ee, worktree chat-voice, run
+  run_5b2c33f58055); no real message transcribed by agents; production bridge not restarted.
   2026-11-27 reboot restarted the bridge: Chat offered and read live (counts only). Bridge fix for the
   over-eager mail loading flag (unread scan excluded) needs an approved restart. G2 checks pending:
   Chat list/reader and the first real voice reply (Eugene's own), Email loading dot.
