@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.81**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.82**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.81,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.82,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.81)
+## Feature list (beta 1.0.82)
 
 ### All modules
 
@@ -31,13 +31,13 @@ Rule for every agent: each beta release updates this file in the release commit:
   Misc Fixed 6x13, Terminus 6x12, GohuFont 6x11, Scientifica 5x11; Compare fonts screen), App
   Brightness 15 down to 1. Both lists wrap at the ends.
 - With a pixel font, the user's turns sit on a dim background so they stand out. The reader's
-  long-press menu has a Background menu: Compare backgrounds, Halo On/Off, None, Ink 5/8, 1/2 and
+  long-press menu's Background row opens Compare backgrounds, where you choose: Halo On/Off, None, Ink 5/8, 1/2 and
   1/4, Lines 1/3 (default) and 1/4, Dots 1/3, 1/4 and 1/8, Tube 1/2 and 1/4, Tube, 1px frame,
   and three terminal-style marks that light nothing behind the letters: Left bar (a quote bar in
   place of the '/'), Underline, and Dim replies (the other side's text dimmer; Email shows None).
-  Halo keeps the background dark next to every letter. Compare fonts and Compare backgrounds choose
-  directly: swipe moves the '>' mark, click uses it, double-click goes back unchanged. Compare
-  fonts starts with Native text, drawn by the glasses in their own font.
+  Halo keeps the background dark next to every letter. Font and Background open their comparison
+  pages directly: swipe moves the '>' mark, click uses it (on the Halo row: toggles it), double-click
+  goes back unchanged. Compare fonts lists Native text first, then the pixel fonts large to small.
 - Images: [Photo N] in Chat, [Image N] under a mail's text and [Image N] where a picture was pasted
   into a Claude or Codex session. A click on the page opens its first picture full screen (fitted
   to 576x288, dithered to the 16 panel levels on the PC with ffmpeg); swipe for the next or previous
@@ -113,6 +113,11 @@ Rule for every agent: each beta release updates this file in the release commit:
   Shift+Enter is a new line. Enter on the review sends once; Esc edits; Esc while typing closes and
   keeps the draft.
 - Typing in the Email label picker searches labels. Voice stays on the glasses' tap-and-hold.
+- IDE keys (VS Code style): Ctrl+, the long-press menu's actions, Ctrl+P quick open (type to filter
+  sessions, chats or mail), Ctrl+Shift+P command palette, Ctrl+Tab recent conversations (release
+  Ctrl to open), Ctrl+F find in the conversation (Enter or F3 next), Ctrl+1/2/3 modules,
+  Ctrl+Home/End first and last page, Ctrl+R refresh, Ctrl+N new session or mail, Alt+Left/Right
+  back and forward.
 
 ### Not yet built
 
@@ -149,5 +154,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.81: Images on the glasses: click a page with [Photo N] in Chat, [Image N] in a mail or a screenshot pasted into a Claude or Codex session; swipe between pictures, click for negative. Compare fonts now includes Native text. Thicker Left bar; Tube 1/8 removed. Up/Down arrows fixed and turn reader pages; the ? keys page lists actions with their keys on the right.
+1.0.82: VS Code-style keys: Ctrl+, menu, Ctrl+P quick open, Ctrl+Shift+P commands, Ctrl+Tab recent, Ctrl+F find, Ctrl+1/2/3 modules, Ctrl+Home/End, Ctrl+R, Ctrl+N, Alt+Left/Right. Font and Background open their comparison pages directly; Native text no longer moves there and fonts run large to small. The keyboard takes focus without switching modules first.
 <!-- whatsnew:end -->

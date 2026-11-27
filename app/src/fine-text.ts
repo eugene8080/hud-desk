@@ -469,12 +469,14 @@ export const FONT_SAMPLE_JA = 'あいうえお アイウエオ 日本語の表�
 export const NATIVE_COMPARE_ROW = 30;
 // The sample sentence every row of Compare fonts shows.
 export const fontSample = () => getLang() === 'ja' ? FONT_SAMPLE_JA : FONT_SAMPLE;
+// Largest first, as Compare fonts lists them under Native text (Eugene, 2026-11-27).
+export const FONTS_BY_SIZE: FineFont[] = [...FINE_FONTS].reverse();
 export function renderFontComparison(level = INK_MAX, selected = -1, nativeRow = false): number[][] {
   const s = new Surface(FINE_FONTS[0], inkByte(level));
   s.frame();
   const nameCells = Math.max(...FINE_FONTS.map(font => fineLabel(font).length)) + 2;
   let y = TOP + (nativeRow ? NATIVE_COMPARE_ROW : 0);
-  for (const [i, font] of FINE_FONTS.entries()) {
+  for (const [i, font] of FONTS_BY_SIZE.entries()) {
     s.font = font;
     const layout = fineLayout(font);
     const sample = getLang() === 'ja' ? FONT_SAMPLE_JA : FONT_SAMPLE;
@@ -494,14 +496,16 @@ export function renderFontComparison(level = INK_MAX, selected = -1, nativeRow =
 export const BACKGROUND_GAP = 2;
 export function backgroundGap(font: FineFont): number {
   const { height: line } = TABLES[font];
-  const room = SCREEN.height - 1 - TOP - TURN_BACKGROUNDS.length * line - 8 - line;
-  return Math.max(0, Math.min(BACKGROUND_GAP, Math.floor(room / TURN_BACKGROUNDS.length)));
+  const count = TURN_BACKGROUNDS.length + 1; // the Halo row, then every option
+  const room = SCREEN.height - 1 - TOP - count * line - 8 - line;
+  return Math.max(0, Math.min(BACKGROUND_GAP, Math.floor(room / count)));
 }
 export function backgroundComparisonLayout(font: FineFont) {
   const { width: cell } = TABLES[font];
   const { columns, textX, textWidth } = fineLayout(font);
   // One cell for the '>' of the selected row, the label, one cell of space.
   const labelCells = Math.max(...TURN_BACKGROUNDS.map(option => fineCells(turnBackgroundLabel(option)))) + 2;
+  // The Halo row's label runs across the sample column; only the option labels set the width.
   return { labelCells, sample: { textX: textX + labelCells * cell, textWidth: textWidth - labelCells * cell, columns: columns - labelCells } };
 }
 export function renderBackgroundComparison(font: FineFont, level = INK_MAX, halo = false, selected = -1): number[][] {
@@ -516,8 +520,11 @@ export function renderBackgroundComparison(font: FineFont, level = INK_MAX, halo
   const gap = backgroundGap(font);
   s.frame();
   let y = TOP;
+  // Row 0: the Halo switch (a click toggles it on this page); rows 1.. the options.
+  s.text(`${selected === 0 ? '>' : ' '}${t('backgroundHalo', t(halo ? 'backgroundHaloOn' : 'backgroundHaloOff'))}`, textX, y, columns);
+  y += line + gap;
   for (const [i, option] of TURN_BACKGROUNDS.entries()) {
-    s.text(`${i === selected ? '>' : ' '}${turnBackgroundLabel(option)}`, textX, y, labelCells);
+    s.text(`${i + 1 === selected ? '>' : ' '}${turnBackgroundLabel(option)}`, textX, y, labelCells);
     drawTurnRows(s, option === 'dimreplies' ? reply : sample, y, option, region, halo);
     if (option === 'tube') s.scanlines(region.textX, y, region.textWidth, line);
     y += line + gap;

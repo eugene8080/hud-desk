@@ -25,7 +25,7 @@ import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
+import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { Mail, mailColumns, imageNumbers, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, ChatReader, chatColumns, CHAT_NETWORKS_KEY, CHAT_TRANSLATE_KEY } from './chat';
@@ -57,6 +57,7 @@ const VOICE_DIVIDER = { ...DIVIDER, containerID: 4, containerName: 'voice-divide
 // over one blank, full-screen text container (ID 1) that receives swipes.
 const FINE_CAPTURE = { containerID: 1, containerName: 'fine-input', xPosition: 0, yPosition: 0, width: 576, height: 288 };
 const FINE_TILE_IDS = FINE_TILES.map((tile, i) => ({ ...tile, containerID: 2 + i, containerName: `fine-${i}` }));
+const FINE_NATIVE_ROW = { containerID: 6, containerName: 'fine-native', xPosition: 4, yPosition: 2, width: 568, height: 28 };
 const USAGE_RESET = { containerID: 3, containerName: 'usage-reset', xPosition: 0, yPosition: 28, width: 576, height: 28 };
 const LIST_ITEM_BYTES = 63;
 const LIST_MAX = 20;
@@ -446,10 +447,12 @@ async function show(s: Screen, reloadText = false) {
             ] : [])],
           ...(s.reader ? { imageObject: [new ImageContainerProperty({ ...STATUS_ICON, xPosition: statusIconX(s.model), zOrderIndex: 4 })] } : {}),
         };
-  if (fine) page = { containerTotalNum: 5, ...menu,
-    // Compare fonts: the Native text row is this container's text, above the tiles (zOrder 5).
-    textObject: [new TextContainerProperty({ ...FINE_CAPTURE, content: s.kind === 'text' && s.comparison === 'fonts' ? nativeCompareRow(s) : ' ',
-      textColor: textBrightness(), isEventCapture: 1, paddingLength: 0, zOrderIndex: s.kind === 'text' && s.comparison === 'fonts' ? 5 : 0 })],
+  if (fine) page = { containerTotalNum: s.kind === 'text' && s.comparison === 'fonts' ? 6 : 5, ...menu,
+    textObject: [new TextContainerProperty({ ...FINE_CAPTURE, content: ' ', isEventCapture: 1, paddingLength: 0, zOrderIndex: 0 }),
+      // Compare fonts: Native text in its own container above the tiles. Not the swipe-capturing
+      // container: the glasses scroll that one's text on every swipe (G2, 1.0.81).
+      ...(s.kind === 'text' && s.comparison === 'fonts' ? [new TextContainerProperty({ ...FINE_NATIVE_ROW, content: nativeCompareRow(s),
+        textColor: textBrightness(), isEventCapture: 0, paddingLength: 0, zOrderIndex: 5 })] : [])],
     imageObject: FINE_TILE_IDS.map((tile, i) => new ImageContainerProperty({ ...tile, zOrderIndex: i + 1 })),
   } as unknown as typeof page;
   if (s.kind === 'text' && s.voice) page = voicePage(s, content) as typeof page;
@@ -565,8 +568,9 @@ function requestFineStatus(s: TextScreen) {
 function readerMenu(screen: TextScreen) {
   const name = readerText === 'native' ? tr('nativeText') : fineLabel(readerText);
   return [
-    { id: 1101, label: tr('usingFont', name), run: () => showFonts() },
-    { id: 1109, label: tr('background', turnBackgroundLabel(turnBackground)), run: () => showBackgrounds(screen) },
+    // Straight into the comparison pages, where the choice is made (Eugene, 2026-11-27).
+    { id: 1101, label: tr('usingFont', name), run: () => openComparison(screen, 'fonts') },
+    { id: 1109, label: tr('background', turnBackgroundLabel(turnBackground)), run: () => openComparison(screen, 'backgrounds') },
     { id: 1107, label: tr('brightness', inkLevel), run: () => showBrightness() },
     ...(screen.reader instanceof ChatReader && chatFeatures.translate
       ? [{ id: 1108, label: tr(chatTranslate ? 'chatTranslateEnglish' : 'chatTranslateOff'), run: () => setChatTranslation(!chatTranslate) }]
@@ -596,56 +600,6 @@ function showTextPicker(reader: TextScreen, labels: string[], selected: number, 
   return open(Math.floor(at / TEXT_PICKER_ROWS), at % TEXT_PICKER_ROWS);
 }
 
-// Native, every small font largest first, then the font comparison.
-function showFonts() {
-  const reader = current;
-  if (reader?.kind !== 'text' || !reader.reader) return;
-  const fonts = [...FINE_FONTS].reverse();
-  const rows = [
-    { label: tr('nativeText'), run: () => setReaderText('native', reader) },
-    ...fonts.map(font => ({ label: fineLabel(font), run: () => setReaderText(font, reader) })),
-    { label: tr('compareFonts'), run: () => openComparison(reader, 'fonts') },
-  ];
-  const currentIndex = readerText === 'native' ? 0 : fonts.indexOf(readerText) + 1;
-  return showTextPicker(reader, rows.map((row, i) => i === currentIndex ? `${row.label} ✓` : row.label), currentIndex, i => {
-    void rows[i]?.run().catch(e => diag((e as Error).message));
-  }, true);
-}
-
-// Backgrounds menu (Eugene, 2026-11-27): its own row in the reader's long-press menu. Compare
-// backgrounds first, then every option.
-function showBackgrounds(reader: TextScreen) {
-  const selected = TURN_BACKGROUNDS.indexOf(turnBackground);
-  const labels = [tr('compareBackgrounds'), tr('backgroundHalo', tr(turnHalo ? 'backgroundHaloOn' : 'backgroundHaloOff')),
-    ...TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : ''))];
-  let saving = false;
-  return showTextPicker(reader, labels, selected + 2, async i => {
-    if (i === 0) { await openComparison(reader, 'backgrounds').catch(e => diag((e as Error).message)); return; }
-    if (i === 1) {
-      if (saving) return;
-      const picker = current;
-      saving = true;
-      try {
-        if (!await bridge.setLocalStorage('reader-turn-halo', turnHalo ? 'off' : 'on')) throw new Error(tr('backgroundSaveFailed'));
-        turnHalo = !turnHalo;
-        if (current === picker) await show(reader);
-      } catch (e) { diag((e as Error).message); }
-      finally { saving = false; }
-      return;
-    }
-    const option = TURN_BACKGROUNDS[i - 2];
-    if (saving || !option) return;
-    const picker = current;
-    saving = true;
-    try {
-      if (!await bridge.setLocalStorage('reader-turn-bg', option)) throw new Error(tr('backgroundSaveFailed'));
-      turnBackground = option;
-      if (current === picker) await show(reader);
-    } catch (e) { diag((e as Error).message); }
-    finally { saving = false; }
-  }, true);
-}
-
 // Steps 15 down to 1, ten per page. A swipe past either end wraps to the other.
 // Click one and the reader comes back at that ink.
 function showBrightness() {
@@ -667,30 +621,32 @@ function showBrightness() {
 function openComparison(reader: TextScreen, comparison: Comparison) {
   const back = () => { void show(reader).catch(e => diag((e as Error).message)); };
   const fonts = comparison === 'fonts';
-  // Compare fonts: row 0 is Native text, then the pixel fonts.
-  const compareSelected = fonts ? (readerText === 'native' ? 0 : FINE_FONTS.indexOf(readerText) + 1)
-    : Math.max(0, TURN_BACKGROUNDS.indexOf(turnBackground));
+  // Compare fonts: row 0 is Native text, then the pixel fonts largest first. Compare backgrounds:
+  // row 0 is the Halo switch, then the options.
+  const compareSelected = fonts ? (readerText === 'native' ? 0 : FONTS_BY_SIZE.indexOf(readerText) + 1)
+    : Math.max(0, TURN_BACKGROUNDS.indexOf(turnBackground)) + 1;
   const screen: TextScreen = { kind: 'text', title: ' ', text: '', fine: reader.fine ?? smallFont, comparison, compareSelected, onBack: back };
   let choosing = false;
   screen.onClick = () => {
     if (choosing || current !== screen) return;
     choosing = true;
     const i = screen.compareSelected ?? 0;
-    const pick = fonts ? setReaderText(i === 0 ? 'native' : FINE_FONTS[i - 1], reader) : chooseBackground(TURN_BACKGROUNDS[i], reader);
+    const pick = fonts ? setReaderText(i === 0 ? 'native' : FONTS_BY_SIZE[i - 1], reader)
+      : i === 0 ? toggleHalo(screen) : chooseBackground(TURN_BACKGROUNDS[i - 1], reader);
     void pick.catch(e => diag((e as Error).message)).finally(() => { choosing = false; });
   };
   return show(screen);
 }
 
 function moveComparison(s: TextScreen, step: number) {
-  const count = s.comparison === 'fonts' ? FINE_FONTS.length + 1 : TURN_BACKGROUNDS.length;
+  const count = (s.comparison === 'fonts' ? FINE_FONTS.length : TURN_BACKGROUNDS.length) + 1;
   const before = s.compareSelected ?? 0;
   s.compareSelected = (before + step + count) % count;
   // Only the tiles whose rows changed are sent again; the Native row's '>' is in its text container.
   readerWrites = readerWrites.then(async () => {
     if (current !== s) return;
     if (s.comparison === 'fonts' && (before === 0) !== (s.compareSelected === 0)) {
-      await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: FINE_CAPTURE.containerID, containerName: FINE_CAPTURE.containerName, content: nativeCompareRow(s) }));
+      await bridge.textContainerUpgrade(new TextContainerUpgrade({ containerID: FINE_NATIVE_ROW.containerID, containerName: FINE_NATIVE_ROW.containerName, content: nativeCompareRow(s) }));
     }
     await paintFine(s, 0);
   }).catch(e => diag((e as Error).message));
@@ -774,6 +730,13 @@ function moveImage(s: TextScreen, step: number) {
   view.image = undefined;
   view.note = tr('imageLoading', view.numbers.indexOf(view.n) + 1, view.count);
   void repaintImage(s).then(() => { view.note = ''; return loadImage(s); });
+}
+
+// The Halo row of Compare backgrounds: toggles, saves and redraws the page (it stays open).
+async function toggleHalo(s: TextScreen) {
+  if (!await bridge.setLocalStorage('reader-turn-halo', turnHalo ? 'off' : 'on')) throw new Error(tr('backgroundSaveFailed'));
+  turnHalo = !turnHalo;
+  await repaintImage(s);
 }
 
 async function chooseBackground(option: TurnBackground, reader: TextScreen) {
@@ -1018,6 +981,7 @@ async function showModuleList(module: GlassModule, page: number, selected: numbe
   const list: SessionMenuScreen = { ...screen, kind: 'list', title: sessionHeading(), module, items, selected: cursor, paintedSelection: cursor,
     onPick: (i) => { if (i === 0) cycleModule(list); else if (!modulePending) screen.onPick(i - 1); } };
   positions[module] = { page, cursor };
+  if (!mounted) visit({ key: `list:${module}`, label: moduleLabel(module), module, open: () => showModule() }, false);
   if (screen.count !== undefined) moduleCache.set(module, { page, content: screen });
   if (mounted) { await refreshModuleRows(mounted, list, screen.onPick); return mounted; }
   await show(list);
@@ -1500,6 +1464,7 @@ function workspaceOptions(page = 0, selected = 0) {
 }
 
 function thread(t: Thread, note = '') {
+  visit({ key: `coding:${t.handle}`, label: t.title, module: 'coding', open: () => thread(t) }, true);
   selectThread(t);
   const load = async () => {
     const snapshot = await api.thread(t.handle);
@@ -1546,6 +1511,7 @@ async function openReader<T extends ReaderContent>(source: ReaderSource<T> & { c
 }
 
 async function openMail(thread: MailThread) {
+  visit({ key: `mail:${thread.account}:${thread.id}`, label: `${thread.from} - ${thread.subject}`.replace(/\s+/g, ' '), module: 'email', open: () => openMail(thread) }, true);
   const owner = current;
   const revision = moduleRevision;
   const back = () => mailHome();
@@ -1560,6 +1526,7 @@ async function openMail(thread: MailThread) {
 }
 
 async function openChat(item: ChatItem) {
+  visit({ key: `chat:${item.id}`, label: item.title, module: 'chat', open: () => openChat(item) }, true);
   const owner = current;
   const revision = moduleRevision;
   const back = () => chatHome();
@@ -1914,6 +1881,268 @@ function openNeighbor(delta: number) {
   if (i < (cached.content.firstItem ?? 0) || i >= cached.content.items.length) return;
   positions[activeModule].cursor = i + 1;
   cached.content.onPick(i);
+}
+
+const glassEvent = (eventType: OsEventTypeList) => onEvent({ sysEvent: { eventType } } as unknown as EvenHubEvent);
+
+// ---- IDE keys (Eugene, 2026-11-27: "similar to typical IDEs like VS Code"; all eight chosen) ----
+// Ctrl+P quick open, Ctrl+Shift+P command palette, Ctrl+Tab recent (hold Ctrl, Tab moves, release
+// opens), Ctrl+F find in the conversation (Enter/F3 next, Shift+Enter/Shift+F3 previous), Ctrl+1/2/3
+// modules, Ctrl+Home/End first/last page, Ctrl+R refresh, Ctrl+N new session or mail, Alt+Left/Right
+// back and forward through visited lists and conversations.
+type Place = { key: string; label: string; module: GlassModule; open: () => unknown };
+const recentPlaces: Place[] = [];
+const visited: Place[] = [];
+let visitedAt = -1;
+let restoringPlace = false;
+const MODULE_TAG = { coding: 'Coding', email: 'Email', chat: 'Chat' } as const;
+
+// Conversations go to the recent list; conversations and module lists go to the history.
+function visit(place: Place, conversation: boolean) {
+  if (conversation) {
+    const at = recentPlaces.findIndex(p => p.key === place.key);
+    if (at >= 0) recentPlaces.splice(at, 1);
+    recentPlaces.unshift(place);
+    recentPlaces.length = Math.min(recentPlaces.length, 10);
+  }
+  if (restoringPlace || visited[visitedAt]?.key === place.key) return;
+  visited.splice(visitedAt + 1);
+  visited.push(place);
+  if (visited.length > 50) visited.shift();
+  visitedAt = visited.length - 1;
+}
+
+// Open a place of any module: the module switches quietly first (its list shows on Back).
+function enterModule(module: GlassModule) {
+  if (activeModule === module || !modules.includes(module)) return;
+  selectModule(module);
+  modulePending = false;
+}
+function goPlace(place: Place) {
+  restoringPlace = true;
+  try { enterModule(place.module); void Promise.resolve(place.open()).catch(e => diag((e as Error).message)); }
+  finally { restoringPlace = false; }
+}
+function historyStep(step: number) {
+  const at = visitedAt + step;
+  if (!visited[at] || composing) return;
+  visitedAt = at;
+  goPlace(visited[at]);
+}
+
+// A list on the glasses that narrows as you type (Ctrl+P, Ctrl+Shift+P): row 0 shows the query,
+// then up to nine matches (every typed word must appear). Enter opens, Esc returns.
+type FinderItem = { label: string; run: () => unknown };
+type Finder = { title: string; query: string; items: FinderItem[] | null; back: () => unknown; screen?: Screen; timer?: ReturnType<typeof setTimeout> };
+let finder: Finder | null = null;
+function finderMatches(f: Finder) {
+  const words = f.query.toLowerCase().split(/\s+/).filter(Boolean);
+  return (f.items ?? []).filter(item => words.every(word => item.label.toLowerCase().includes(word))).slice(0, 9);
+}
+function showFinder(f: Finder) {
+  const hits = finderMatches(f);
+  const rows = [`${f.title}: ${f.query}|`, ...(f.items === null ? [tr('loadingShort')] : hits.length ? hits.map(hit => hit.label) : [tr('finderNoMatch')])];
+  const screen: Screen = {
+    kind: 'list', textPicker: true, title: ' ', items: rows, headings: hits.length ? [0] : [0, 1], selected: hits.length ? 1 : 0, paintedSelection: hits.length ? 1 : 0,
+    onPick: i => {
+      const hit = hits[i - 1];
+      if (!hit || finder !== f) return;
+      finder = null;
+      void Promise.resolve(hit.run()).catch(e => diag((e as Error).message));
+    },
+    onBack: () => { if (finder === f) finder = null; void Promise.resolve(f.back()).catch(e => diag((e as Error).message)); },
+  };
+  f.screen = screen;
+  return show(screen);
+}
+function finderType(f: Finder, key: string): boolean {
+  if (key === 'Backspace') f.query = f.query.slice(0, -1);
+  else if (key.length === 1) f.query += key;
+  else return false;
+  clearTimeout(f.timer);
+  f.timer = setTimeout(() => { if (finder === f && current === f.screen) void showFinder(f); }, 150);
+  return true;
+}
+function backTo(origin: Screen) {
+  return () => origin.kind === 'list' && origin.module ? showModule() : show(origin);
+}
+function openFinder(title: string, items: FinderItem[] | Promise<FinderItem[]>, origin: Screen) {
+  if (composing) return;
+  if (origin.kind === 'text') origin.reading = true;
+  const f: Finder = { title, query: '', items: Array.isArray(items) ? items : null, back: backTo(origin) };
+  finder = f;
+  void showFinder(f);
+  if (!Array.isArray(items)) void items.then(list => { f.items = list; if (finder === f && current === f.screen) void showFinder(f); })
+    .catch(() => { f.items = []; if (finder === f && current === f.screen) void showFinder(f); });
+}
+
+// Ctrl+P: the sessions, chats or mail threads of the module on screen.
+async function quickOpenItems(): Promise<FinderItem[]> {
+  if (activeModule === 'email') {
+    const pages = await Promise.all([0, 1, 2].map(page => mail.list(page).catch(() => null)));
+    return pages.flatMap(page => page?.items ?? []).map(item => ({ label: `${item.from} - ${item.subject}`.replace(/\s+/g, ' '), run: () => openMail(item) }));
+  }
+  if (activeModule === 'chat') {
+    const pages = await Promise.all([0, 1, 2, 3, 4].map(page => chat.list(page).catch(() => null)));
+    return pages.flatMap(page => page?.items ?? []).map(item => ({ label: item.title, run: () => openChat(item) }));
+  }
+  return (await api.threads()).map(t => ({ label: `${t.title} [${sessionAgentLabel(t.workspaceName || '', t.agent).replace(/^\[|\]$/g, '')}]`, run: () => thread(t) }));
+}
+
+// Ctrl+Shift+P: every action that makes sense from here.
+function commandItems(origin: Screen): FinderItem[] {
+  const back = backTo(origin);
+  const after = (run: () => unknown) => () => Promise.resolve(back()).then(run);
+  const reader = origin.kind === 'text' && origin.reader && !origin.voice ? origin : null;
+  const items: FinderItem[] = modules.map(m => ({ label: tr('commandGoTo', moduleLabel(m)), run: () => choosePhoneModule(m) }));
+  items.push({ label: tr('commandQuickOpen'), run: () => openFinder(tr('commandQuickOpenTitle'), quickOpenItems(), origin) });
+  items.push({ label: tr('commandRecent'), run: () => { void Promise.resolve(back()).then(() => showRecent(1)); } });
+  for (const action of origin.menuActions ?? []) items.push({ label: action.label, run: after(action.run) });
+  if (activeModule === 'coding') items.push(
+    { label: tr('menuNewSession'), run: () => newSession() },
+    { label: tr('menuUsage'), run: () => usage() },
+    { label: tr('filterAgent'), run: () => viewOptions() },
+    { label: tr('filterWorkspace'), run: () => workspaceOptions() });
+  if (activeModule === 'email') items.push(
+    { label: tr('commandCompose'), run: after(() => startMailDraft('new')) },
+    { label: tr('mailFilter'), run: () => mailLabels(0, 0, true) });
+  if (activeModule === 'chat') items.push({ label: tr('mailFilter'), run: () => chatNetworks() });
+  if (reader) items.push({ label: tr('commandFind'), run: after(() => startFind()) });
+  items.push({ label: tr('keysTitle'), run: after(() => showKeys()) });
+  return items;
+}
+
+// Ctrl+Tab: recent conversations, newest first, the cursor on the one before this one.
+let switcher: Screen | null = null;
+function showRecent(start: number) {
+  if (!recentPlaces.length || composing) return;
+  const places = [...recentPlaces];
+  const origin = current;
+  const at = Math.min(start, places.length - 1);
+  const screen: Screen = {
+    kind: 'list', textPicker: true, title: ' ', items: places.map(p => `[${MODULE_TAG[p.module]}] ${p.label}`), selected: at, paintedSelection: at,
+    // A Ctrl+Tab choice is a new visit (history and recent list), unlike Alt+Left/Right.
+    onPick: i => {
+      switcher = null;
+      const place = places[i];
+      if (!place) return;
+      enterModule(place.module);
+      void Promise.resolve(place.open()).catch(e => diag((e as Error).message));
+    },
+    onBack: () => { switcher = null; if (origin) void Promise.resolve(backTo(origin)()).catch(e => diag((e as Error).message)); },
+  };
+  switcher = screen;
+  return show(screen);
+}
+
+// Ctrl+F: the query shows in the status row while you type; Enter finds the next page with it.
+let finding: { screen: TextScreen; query: string } | null = null;
+let lastFind = '';
+function startFind() {
+  const s = current;
+  if (s?.kind !== 'text' || !s.reader || s.voice || composing) return;
+  finding = { screen: s, query: '' };
+  void writePanel(tr('findPrompt', '|'), () => current === s);
+}
+function findType(ev: KeyboardEvent): boolean {
+  const f = finding!;
+  if (ev.key === 'Escape') { finding = null; void writePanel(f.screen.activityLabel ?? ' ', () => current === f.screen); return true; }
+  if (ev.key === 'Enter') { findNext(f.screen, f.query, ev.shiftKey ? -1 : 1); return true; }
+  if (ev.key === 'Backspace') f.query = f.query.slice(0, -1);
+  else if (ev.key.length === 1) f.query += ev.key;
+  else return false;
+  void writePanel(tr('findPrompt', `${f.query}|`), () => current === f.screen);
+  return true;
+}
+function findNext(s: TextScreen, query: string, step: number) {
+  const q = query.trim().toLowerCase();
+  if (!q) return;
+  lastFind = q;
+  const pages = readerLayout(s);
+  const offset = s.pageTarget ?? s.offset ?? 0;
+  for (let k = 1; k <= pages.length; k++) {
+    const i = ((offset + step * k) % pages.length + pages.length) % pages.length;
+    if (pages[i].text.toLowerCase().includes(q)) {
+      if (i !== offset) flipReader(s, i - offset);
+      void writePanel(tr('findFound', query.trim(), i + 1, pages.length), () => current === s);
+      return;
+    }
+  }
+  void writePanel(tr('findNone', query.trim()), () => current === s);
+}
+
+// Keys with Ctrl or Alt. Returns true when used.
+function ideKey(ev: KeyboardEvent): boolean {
+  const key = keyName(ev);
+  const ctrl = ev.ctrlKey || ev.metaKey;
+  const s = current;
+  if (!s) return false;
+  if (key === 'F3' && !ctrl && !ev.altKey) {
+    if (s.kind === 'text' && s.reader && (finding?.query || lastFind)) findNext(s, finding?.query || lastFind, ev.shiftKey ? -1 : 1);
+    return true;
+  }
+  if (ev.altKey && !ctrl) {
+    if (key === 'ArrowLeft') { historyStep(-1); return true; }
+    if (key === 'ArrowRight') { historyStep(1); return true; }
+    return false;
+  }
+  if (!ctrl || ev.altKey) return false;
+  const reader = s.kind === 'text' && s.reader && !s.voice && !s.comparison ? s : null;
+  switch (key.length === 1 ? key.toLowerCase() : key) {
+    case ',': void showActionMenu(); return true;
+    case 'p': openFinder(ev.shiftKey ? tr('commandPaletteTitle') : tr('commandQuickOpenTitle'), ev.shiftKey ? commandItems(s) : quickOpenItems(), s); return true;
+    case 'Tab':
+      if (switcher && current === switcher) glassEvent(ev.shiftKey ? OsEventTypeList.SCROLL_TOP_EVENT : OsEventTypeList.SCROLL_BOTTOM_EVENT);
+      else void showRecent(ev.shiftKey ? recentPlaces.length - 1 : 1);
+      return true;
+    case 'f': startFind(); return true;
+    case '1': case '2': case '3': {
+      const module = (['coding', 'email', 'chat'] as const)[Number(key) - 1];
+      if (modules.includes(module)) void choosePhoneModule(module);
+      return true;
+    }
+    case 'Home': case 'End':
+      if (reader) {
+        const offset = reader.pageTarget ?? reader.offset ?? 0;
+        const delta = key === 'Home' ? -offset : readerLayout(reader).length - 1 - offset;
+        if (delta) flipReader(reader, delta);
+      }
+      return true;
+    case 'r':
+      if (reader) void refreshReader(reader);
+      else if (s.kind === 'list' && s.module) s.menuActions?.find(action => action.id === 1001)?.run();
+      return true;
+    case 'n':
+      if (activeModule === 'coding') void newSession();
+      else if (activeModule === 'email') void startMailDraft('new');
+      return true;
+  }
+  return false;
+}
+
+// Ctrl+, (Eugene, 2026-11-27: "so it's similar to typical IDEs like VS Code"): the actions of the
+// glasses' long-press menu for this screen (reader: Font, Background, App Brightness; home lists:
+// Refresh, New Session, Usage) as a list on the glasses. The firmware popup itself cannot be opened
+// by an app (SDK 0.0.16), and its system rows (Display off, Brightness, Close) are not listed here.
+// A pick returns to the screen first, then runs the action there; Esc/double-click returns.
+function showActionMenu() {
+  const s = current;
+  if (!s || composing || (s.kind === 'list' && s.textPicker) || (s.kind === 'text' && s.voice)) return;
+  const actions = s.menuActions ?? [];
+  if (!actions.length) return;
+  const back = () => s.kind === 'list' && s.module ? showModule() : show(s);
+  if (s.kind === 'text') s.reading = true;
+  let picked = false;
+  return show({
+    kind: 'list', textPicker: true, title: ' ', items: actions.map(action => action.label), selected: 0, paintedSelection: 0,
+    onPick: i => {
+      if (picked || !actions[i]) return;
+      picked = true;
+      if (s.kind === 'text') s.reading = false;
+      void Promise.resolve(back()).then(() => actions[i].run()).catch(e => diag((e as Error).message));
+    },
+    onBack: () => { if (s.kind === 'text') s.reading = false; void back(); },
+  });
 }
 
 // The keys page rows (Eugene, 2026-11-27): the action on the left, its keys right-aligned, padded
@@ -2460,7 +2689,22 @@ function confirm(w: Workspace, p: Provider, model: string, prompt: number, label
 
 // ---- 入力 ----
 
+// Keys reach this page only while its WebView has keyboard focus. Eugene, 2026-11-27: the keyboard
+// "does not work right away", only after switching modules on the phone. The page takes the focus
+// itself at start, when it is shown again, and on every glasses gesture, unless a text box has it.
+function ensureKeyFocus() {
+  const active = document.activeElement as HTMLElement | null;
+  if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return;
+  try {
+    const body = document.body as HTMLElement | null;
+    if (body && body.tabIndex < 0 && !body.hasAttribute?.('tabindex')) body.setAttribute('tabindex', '-1');
+    window.focus?.();
+    body?.focus?.({ preventScroll: true });
+  } catch { /* A host without focus control: keys still arrive once the user taps the page. */ }
+}
+
 function onEvent(e: EvenHubEvent) {
+  if (!e.audioEvent) ensureKeyFocus();
   if (e.menuItemClickEvent) {
     const screen = current;
     if (screen?.kind === 'list' && screen.module && !modulePending) {
@@ -2764,7 +3008,6 @@ async function main() {
   // open on the glasses takes Enter/Ctrl+Enter/Esc; the label picker takes letters as a search.
   // In the phone's reply box tapped by hand (no draft on the glasses), Enter reviews then sends
   // as before. Space pages like Gmail now; voice stays on the glasses' tap-and-hold.
-  const glassEvent = (eventType: OsEventTypeList) => onEvent({ sysEvent: { eventType } } as unknown as EvenHubEvent);
   // Every box of a draft redraws the glasses as it changes, including cursor moves.
   for (const id of [...Object.values(COMPOSE_IDS), 'reply-text']) {
     const el = document.getElementById(id);
@@ -2785,6 +3028,7 @@ async function main() {
   const arrowsDown = new Set<string>();
   window.addEventListener('keyup', (ev: KeyboardEvent) => {
     const key = keyName(ev);
+    if ((key === 'Control' || key === 'Meta') && switcher && current === switcher) { glassEvent(OsEventTypeList.CLICK_EVENT); return; }
     if (!ARROWS.has(key)) return;
     if (arrowsDown.delete(key)) return;
     diag(`Key up only: ${key} (${ev.code || '-'}/${ev.keyCode ?? '-'})`);
@@ -2829,9 +3073,14 @@ async function main() {
       } else if (ev.key === 'Escape') { ev.preventDefault(); target!.blur?.(); }
       return;
     }
+    if (ideKey(ev)) { ev.preventDefault(); return; }
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const s = current;
     if (!s) return;
+    // Typing into a quick-open or command list, or a Ctrl+F query, before any other key use.
+    if (finder && current === finder.screen && finderType(finder, ev.key)) { ev.preventDefault(); return; }
+    if (finding && (current !== finding.screen)) finding = null;
+    if (finding && findType(ev)) { ev.preventDefault(); return; }
     if (s.kind === 'list' && s.mailPicker && typeLabelSearch(ev.key, s.mailPicker.search)) { ev.preventDefault(); return; }
     if (gmailKey(ev, s, glassEvent)) ev.preventDefault();
   });
@@ -2849,6 +3098,10 @@ async function main() {
     await connect();
   });
   bridge.onEvenHubEvent(onEvent);
+  ensureKeyFocus();
+  window.addEventListener('pageshow', ensureKeyFocus);
+  window.addEventListener('focus', ensureKeyFocus);
+  document.addEventListener?.('visibilitychange', () => { if (document.visibilityState === 'visible') ensureKeyFocus(); });
   // Screen off delivers pagehide while this installed page stays alive, the same
   // way Workout Glass's countdown keeps ticking. Clearing the polls here made
   // chats stop until the phone was opened again. A real exit still stops them.

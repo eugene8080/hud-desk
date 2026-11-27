@@ -56,6 +56,18 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.82. IDE keys (Eugene chose all eight + Ctrl+,): ideKey() in app/src/main.ts;
+Ctrl+, lists the screen's menuActions (the firmware popup cannot be opened by an app); finder list
+(Ctrl+P per-module items, Ctrl+Shift+P commands); Ctrl+Tab recent (keyup Control opens); Ctrl+F
+find (status row, Enter/F3); Ctrl+1/2/3, Ctrl+Home/End, Ctrl+R, Ctrl+N; Alt+Left/Right history of
+lists and conversations. Font/Background rows open Compare pages directly (lists removed); Native
+row in its own container fine-native (G2 1.0.81: it scrolled inside the swipe container); fonts
+large to small; Halo is row 0 of Compare backgrounds. Keyboard focus taken at start, pageshow,
+visibility and on every glasses gesture (Eugene: keys dead until a module toggle; unverified on
+G2). [Read-only] question answered: Orca 1.4.277 CLI has no send-to-chat (only chat rename;
+terminal send exists), so Orca chats stay read-only; terminal sessions take input any time and the
+agent CLI queues it. 266 tests, build pass. App-only; no bridge restart.
+
 2026-11-27 beta 1.0.81. Images (Eugene chose Chat photos, Email images, Coding screenshots):
 bridge/image.mjs decodes with ffmpeg (stdin only, image demuxers, one frame, 25 MB, 20 s), fits
 576x288, Floyd-Steinberg to 16 levels, packs 2 px/byte; routes POST /api/chat/image (Beeper asset

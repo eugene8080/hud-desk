@@ -1212,6 +1212,84 @@ test('Gmail j in a mail reader opens the next thread of the list', async () => {
   assert.deepEqual(opened, ['page0-0', 'page0-1', 'page0-0']);
 });
 
+test('Ctrl+, lists the long-press menu actions on the glasses; a pick runs one, Esc returns', async () => {
+  const h = await harness(2);
+  await h.key(',', { ctrlKey: true });
+  assert.deepEqual(menuItems(h), ['Refresh sessions', 'New Session', 'Usage']);
+  await h.key('Escape');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'menu-cursor'), 'back on the home list');
+  // In a reader: Font, Background and App Brightness; Font opens Compare fonts.
+  await h.pick(2);
+  await h.key(',', { ctrlKey: true });
+  assert.match(menuItems(h)[0], /^Font: /);
+  assert.match(menuItems(h)[1], /^Background: /);
+  await h.key('Enter');
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'fine-native'), 'Compare fonts');
+  assert.equal(h.exited(), 0);
+});
+
+const type = async (h, text) => { for (const ch of text) await h.key(ch); await h.debounce(); };
+const readerOpen = h => h.pages.at(-1).textObject.some(c => c.containerName === 'hint');
+
+test('IDE keys: Ctrl+P quick-opens a session by typed words; Ctrl+Shift+P runs a command', async () => {
+  const h = await harness(12);
+  await h.key('p', { ctrlKey: true });
+  assert.match(menuItems(h)[0], /^Open: \|/);
+  await type(h, 'sion 11');
+  assert.deepEqual(menuItems(h).slice(0, 2), ['Open: sion 11|', 'Session 11 [Codex]']);
+  await h.key('Enter');
+  assert.ok(readerOpen(h));
+  assert.match(container(h, 'body').content, /Content terminal-11/);
+  // Command palette from the reader: "usa" finds Usage among the actions.
+  await h.key('P', { ctrlKey: true, shiftKey: true });
+  await type(h, 'usa');
+  assert.equal(menuItems(h)[1], 'Usage');
+  await h.key('Escape');
+  assert.ok(readerOpen(h), 'Esc returns to the reader');
+});
+
+test('IDE keys: Ctrl+Tab lists recent conversations and releasing Ctrl opens the marked one; Alt+Left/Right walk the history', async () => {
+  const h = await harness(3);
+  await h.pick(2);           // Session 0
+  await h.key('u');
+  await h.pick(3);           // Session 1
+  await h.key('Tab', { ctrlKey: true });
+  assert.deepEqual(menuItems(h), ['[Coding] Session 1', '[Coding] Session 0']);
+  await h.keyup('Control');
+  assert.match(container(h, 'body').content, /Content terminal-0/);
+  // History: list, Session 0, list, Session 1, Session 0 (the Ctrl+Tab choice is a visit too).
+  await h.key('ArrowLeft', { altKey: true });
+  assert.match(container(h, 'body').content, /Content terminal-1/);
+  await h.key('ArrowRight', { altKey: true });
+  assert.match(container(h, 'body').content, /Content terminal-0/);
+});
+
+test('IDE keys: Ctrl+F finds the next page with a word; Ctrl+Home/End; Ctrl+R; Ctrl+N; Ctrl+1/2 switch modules', async () => {
+  const { fixture } = mailFixture();
+  const h = await emailHarness(fixture);
+  await h.key('1', { ctrlKey: true });
+  assert.match(h.pages.at(-1).textObject.find(c => c.containerName === 'menu-head')?.content ?? container(h, 'head').content, /Coding/);
+  h.api.thread = async () => ({ text: Array.from({ length: 40 }, (_, i) => `> Line ${i + 1}${i === 3 ? ' needle' : ''}`).join('\n') });
+  await h.pick(2);
+  const last = container(h, 'body').content;
+  await h.key('f', { ctrlKey: true });
+  await type(h, 'needle');
+  await h.key('Enter');
+  assert.match(container(h, 'body').content, /Line 4 needle/);
+  await h.key('Escape');
+  await h.key('End', { ctrlKey: true });
+  assert.equal(container(h, 'body').content, last);
+  await h.key('Home', { ctrlKey: true });
+  assert.match(container(h, 'body').content, /^> Line 1$/m);
+  await h.key('u');
+  // Ctrl+N in Coding opens New Session's workspace choice; Ctrl+2 goes to Email.
+  await h.key('n', { ctrlKey: true });
+  assert.ok(h.pages.length > 0);
+  await h.key('2', { ctrlKey: true });
+  await h.flush();
+  assert.match(JSON.stringify(h.pages.at(-1)), /Email/);
+});
+
 test('? shows the keyboard page and any back returns', async () => {
   const h = await harness(2);
   await h.key('?');
@@ -2318,17 +2396,21 @@ test('small text draws the whole screen, status row included, as four tiles and 
   const saved = [];
   h.bridge.setLocalStorage = async (key, value) => { saved.push([key, value]); };
   await h.pick(2);
-  // Fonts, the background and both comparisons fit in one list. Terminus 6x12 is the third small face.
+  // Font opens Compare fonts directly (no list): Native text first, in its own container above the
+  // tiles that takes no swipes, then the pixel fonts largest first; the '>' starts on the face in use.
   await h.menu(1101);
-  assert.deepEqual(menuItems(h), ['Native text ✓', 'Departure 7x14', 'Misc Fixed 6x13', 'Terminus 6x12',
-    'GohuFont 6x11', 'Scientifica 5x11', 'Compare fonts']);
+  const compare = h.pages.at(-1);
+  assert.equal(compare.containerTotalNum, 6);
+  const nativeRow = compare.textObject.find(c => c.containerName === 'fine-native');
+  assert.match(nativeRow.content, /^>Native text {2}/);
+  assert.deepEqual([nativeRow.isEventCapture, nativeRow.zOrderIndex], [0, 5]);
+  assert.equal(compare.textObject.find(c => c.containerName === 'fine-input').content, ' ', 'the swipe container has no text to scroll');
+  assert.deepEqual([...fineExports.FONTS_BY_SIZE], ['departure', 'fixed', 'terminus', 'gohu', 'scientifica']);
   assert.deepEqual(Object.keys(glyphExports), ['DEPARTURE_MONO', 'TERMINUS', 'GOHU', 'SCIENTIFICA', 'FIXED', 'CJK_12']);
-  const fontCursor = () => h.pages.at(-1).textObject.find(c => c.containerName === 'body').content.split('\n').findIndex(row => row.startsWith('>'));
-  await h.scroll('up');
-  assert.equal(fontCursor(), 6); // wraps to the last row, Compare fonts
-  await h.scroll('down');
-  assert.equal(fontCursor(), 0);
-  await h.pick(3);
+  await h.scroll('up'); // wraps to the last row (Scientifica)
+  await h.scroll('down'); // back to Native
+  for (let i = 0; i < 3; i++) await h.scroll('down'); // Departure, Misc Fixed, Terminus
+  await h.tap();
   const page = h.pages.at(-1);
   assert.deepEqual(saved.slice(-2), [['reader-text', 'terminus'], ['reader-font', 'terminus']]);
   assert.equal(page.containerTotalNum, 5);
@@ -2369,9 +2451,11 @@ test('small text draws the whole screen, status row included, as four tiles and 
     assert.equal(tile[y * 288 + gohu.textX + gohu.cell], 0);
   }
   assert.ok(ink > 8);
-  // Picking a font from the list switches to it. Leaving the list keeps the current face.
+  // Choosing on the page switches to it. Leaving the page keeps the current face.
   await h.menu(1101);
-  await h.pick(1);
+  await h.scroll('up');
+  await h.scroll('up');
+  await h.tap();
   assert.deepEqual(saved.slice(-2), [['reader-text', 'departure'], ['reader-font', 'departure']]);
   assert.equal(h.pages.at(-1).menuObject.menuItems[0].itemName, 'Font: Departure 7x14');
   const pagesBefore = h.pages.length;
@@ -2380,7 +2464,9 @@ test('small text draws the whole screen, status row included, as four tiles and 
   assert.equal(h.pages.length, pagesBefore + 2);
   assert.equal(h.pages.at(-1).menuObject.menuItems[0].itemName, 'Font: Departure 7x14');
   await h.menu(1101);
-  await h.pick(3);
+  await h.scroll('down');
+  await h.scroll('down');
+  await h.tap();
   assert.deepEqual(saved.at(-1), ['reader-font', 'terminus']);
   // 50 lines at 22 rows: three pages, opening on the newest. The tiles sent are
   // exactly the rendered screen with the status row drawn in.
@@ -2399,9 +2485,9 @@ test('small text draws the whole screen, status row included, as four tiles and 
   for (const tile of turned) assert.equal(JSON.stringify(tile.imageData), JSON.stringify(want[Number(tile.containerName.slice(5))]));
   assert.ok(!h.upgrades.some(u => ['body', 'voice', 'hint'].includes(u.containerName)));
   // The display test replaces the tiles; the next swipe restores the page.
-  await h.menu(1101); await h.pick(6); await h.flush();
+  await h.menu(1101); await h.flush();
   // The comparison opens with '>' on the font in use; a swipe moves it; a double-click returns.
-  const terminus = fineExports.FINE_FONTS.indexOf('terminus');
+  const terminus = fineExports.FONTS_BY_SIZE.indexOf('terminus');
   assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison(15, terminus, true)));
   await h.scroll('down'); await h.flush();
   const moved = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
@@ -2436,7 +2522,8 @@ test('small text draws the whole screen, status row included, as four tiles and 
   for (const tile of dimmed) assert.equal(JSON.stringify(tile.imageData), JSON.stringify(dim[Number(tile.containerName.slice(5))]));
   // Back to native text on the page holding the same first line, at the chosen ink.
   await h.menu(1101);
-  await h.pick(0);
+  for (let i = 0; i < 3; i++) await h.scroll('up');
+  await h.tap();
   assert.deepEqual(saved.at(-1), ['reader-text', 'native']);
   assert.equal(h.pages.at(-1).containerTotalNum, 7);
   const native = h.pages.at(-1);
@@ -2460,9 +2547,8 @@ test('saved removed reader modes and the saved comparison font fall back to Term
   await h.pick(2);
   const native = container(h, 'body').content;
   await h.menu(1109);
-  await h.pick(0);
   assert.equal(JSON.stringify(sentFineTiles(h)), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, false,
-    fineExports.TURN_BACKGROUNDS.indexOf('lines3'))));
+    fineExports.TURN_BACKGROUNDS.indexOf('lines3') + 1)));
   await h.back();
   assert.equal(h.pages.at(-1).containerTotalNum, 7);
   assert.equal(container(h, 'body').content, native);
@@ -2520,12 +2606,10 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
   h.api.thread = async () => ({ text });
   await h.pick(2);
   for (const y of [3, 4, 5, 6]) assert.equal(tilePixel(sentFineTiles(h), right, y), y >= 4 && y % 3 === 0 ? 17 : 0);
+  // Background opens Compare backgrounds directly: row 0 the Halo switch, then one row per option.
   await h.menu(1109);
-  assert.deepEqual(menuItems(h), ['Compare backgrounds', 'Halo: Off', 'None', 'Ink 5/8', 'Ink 1/2', 'Ink 1/4', 'Lines 1/3 ✓',
-    'Lines 1/4', 'Dots 1/3', 'Dots 1/4']);
-  await h.pick(0);
   const comparison = sentFineTiles(h);
-  const row = i => 4 + i * (line + fineExports.backgroundGap('terminus'));
+  const row = i => 4 + (i + 1) * (line + fineExports.backgroundGap('terminus'));
   const lit = (i, test) => Array.from({ length: line }, (_, r) => row(i) + r)
     .every(y => [right - 3, right - 2, right - 1, right].every(x => tilePixel(comparison, x, y) === (test(x, y) ? 17 : 0)));
   const scan = (pitch, fill) => (x, y) => y % pitch !== pitch - 1 && ditherLit(fill)(x, y);
@@ -2544,17 +2628,17 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
   const frameRow = fineExports.TURN_BACKGROUNDS.indexOf('frame');
   assert.ok(Array.from({ length: line }, (_, r) => tilePixel(comparison, right, row(frameRow) + r) === 34).every(Boolean), '1px frame');
   assert.equal(tilePixel(comparison, right - 1, row(frameRow) + 1), 0);
-  const count = fineExports.TURN_BACKGROUNDS.length;
+  const count = fineExports.TURN_BACKGROUNDS.length + 1;
   for (const font of fineExports.FINE_FONTS) {
     const { line: fontLine } = fineExports.fineLayout(font);
     assert.ok(4 + count * (fontLine + fineExports.backgroundGap(font)) + 8 + fontLine <= 287, font);
   }
   await h.back();
-  // Page two: Dots 1/8, the Tube options, 1px frame and the terminal-style options; pick Tube.
+  // Choose Tube on the page: from Lines 1/3 down to Tube, then click.
   await h.menu(1109);
-  for (let i = 0; i < 5; i++) await h.scroll('down');
-  assert.deepEqual(menuItems(h), ['Dots 1/8', 'Tube 1/2', 'Tube 1/4', 'Tube', '1px frame', 'Left bar', 'Underline', 'Dim replies']);
-  await h.pick(3);
+  const options = fineExports.TURN_BACKGROUNDS;
+  for (let i = options.indexOf('lines3'); i < options.indexOf('tube'); i++) await h.scroll('down');
+  await h.tap();
   assert.equal(h.storage.get('reader-turn-bg'), 'tube');
   const tube = sentFineTiles(h);
   assert.equal(tilePixel(tube, right, 4), 17);
@@ -2598,31 +2682,28 @@ test('the comparison pages choose directly: swipe moves the mark, click uses it,
   h.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
   await h.pick(2);
   await h.menu(1109);
-  await h.pick(0);
   const options = fineExports.TURN_BACKGROUNDS;
-  // Opens on Lines 1/3 (the default); up twice wraps past None to Underline... then one down.
+  // Rows: 0 Halo, then the options. Opens on Lines 1/3; up three times, down once: two rows up.
   await h.scroll('up');
   await h.scroll('up');
   await h.scroll('up');
   await h.scroll('down');
-  const expected = (options.indexOf('lines3') - 2 + options.length) % options.length;
+  const expected = options.indexOf('lines3') + 1 - 2;
   // Only changed tiles are sent again: the newest copy of each tile is what the glasses show.
   const shown = [0, 1, 2, 3].map(i => h.images.findLast(image => image.containerName === `fine-${i}`).imageData);
   assert.equal(JSON.stringify(shown), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, false, expected)));
   await h.tap();
-  assert.equal(h.storage.get('reader-turn-bg'), options[expected]);
+  assert.equal(h.storage.get('reader-turn-bg'), options[expected - 1]);
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'fine-input'), 'back in the reader');
   // Fonts: a click uses the marked font; a double-click changes nothing.
   await h.menu(1101);
-  await h.pick(6);
   await h.scroll('down');
   await h.back();
   assert.equal(h.storage.get('reader-text'), 'terminus');
   await h.menu(1101);
-  await h.pick(6);
   await h.scroll('down');
   await h.tap();
-  assert.equal(h.storage.get('reader-text'), fineExports.FINE_FONTS[fineExports.FINE_FONTS.indexOf('terminus') + 1]);
+  assert.equal(h.storage.get('reader-text'), fineExports.FONTS_BY_SIZE[fineExports.FONTS_BY_SIZE.indexOf('terminus') + 1]);
 });
 
 test('Halo keeps the background dark next to every letter, and is a saved toggle in the Background menu', async () => {
@@ -2644,11 +2725,14 @@ test('Halo keeps the background dark next to every letter, and is a saved toggle
   const h = await moduleHarness({ storage: { 'reader-text': 'terminus' } });
   h.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
   await h.pick(2);
+  // Row 0 of Compare backgrounds: a click toggles Halo, saves it and redraws the page in place.
   await h.menu(1109);
-  await h.pick(1);
+  for (let i = 0; i < fineExports.TURN_BACKGROUNDS.indexOf('lines3') + 1; i++) await h.scroll('up');
+  await h.tap();
   assert.equal(h.storage.get('reader-turn-halo'), 'on');
-  await h.menu(1109);
-  assert.equal(menuItems(h)[1], 'Halo: On');
+  const shown = [0, 1, 2, 3].map(i => h.images.findLast(image => image.containerName === `fine-${i}`).imageData);
+  assert.equal(JSON.stringify(shown), JSON.stringify(fineExports.renderBackgroundComparison('terminus', 15, true, 0)));
+  assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'fine-input'), 'still on the page');
 });
 
 test('every Background label fits the glasses menu, and Tube dim scans only your turns', () => {
@@ -2935,12 +3019,13 @@ test('Compare fonts has Native text as its first row, drawn by the glasses above
   h.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
   await h.pick(2);
   await h.menu(1101);
-  await h.pick(6);
-  const capture = h.pages.at(-1).textObject.find(c => c.containerName === 'fine-input');
-  assert.match(capture.content, /^>Native text {2}/);
-  assert.equal(capture.zOrderIndex, 5);
+  const row = h.pages.at(-1).textObject.find(c => c.containerName === 'fine-native');
+  assert.match(row.content, /^>Native text {2}/);
+  assert.equal(row.zOrderIndex, 5);
   await h.scroll('down');
-  assert.match(h.upgrades.findLast(u => u.containerName === 'fine-input').content, /^ Native text/);
+  assert.match(h.upgrades.findLast(u => u.containerName === 'fine-native').content, /^ Native text/);
+  // The swipe container never gets text, so nothing on the page scrolls with a swipe.
+  assert.ok(!h.upgrades.some(u => u.containerName === 'fine-input'));
   await h.scroll('up');
   await h.tap();
   assert.equal(h.storage.get('reader-text'), 'native');
