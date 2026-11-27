@@ -147,7 +147,7 @@ test('Mail unions and pages labels in newest-first order, fetches visible header
   const get = await serve(t, config, example);
   assert.deepEqual((await get('/api/capabilities')).data.modules, ['coding', 'email']);
   const accounts = await get('/api/mail/accounts');
-  assert.deepEqual(accounts.data, [{ id: 'work', short: 'W', ok: true }]);
+  assert.deepEqual(accounts.data, [{ id: 'work', short: 'W', address, ok: true }]);
   assert.equal(accounts.headers['cache-control'], 'no-store');
   assert.deepEqual((await get('/api/mail/labels?account=work')).data, [
     { id: 'INBOX', name: 'Inbox', unread: 1 },

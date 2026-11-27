@@ -42,7 +42,50 @@ export function mailReaderText(conversation: MailConversation): ReaderContent {
 function singleLine(text: string): string { return text.replace(/\s+/g, ' ').trim(); }
 
 export type AccountLabels = { account: MailAccount; labels: MailLabel[] };
-export type LabelPickerRow = { text: string; key?: string; heading?: true };
+// A row is a heading (not selectable), a label toggle (key) or an account toggle (account).
+export type LabelPickerRow = { text: string; key?: string; account?: string; heading?: true };
+
+// The mailbox address names an account on the glasses and the phone; an older bridge
+// sends only the short letter.
+export const accountName = (account: MailAccount) => singleLine(account.address || account.short);
+const accountOf = (key: string) => key.slice(0, key.indexOf(':'));
+
+// Filter by email address: the accounts switched off, and the accounts already seen.
+// An account seen for the first time starts with its Inbox picked, so a newly added
+// mailbox shows up without a visit to the label picker.
+export type AccountPrefs = { off: Set<string>; known: Set<string> | null };
+export function parseAccountPrefs(stored: string): AccountPrefs {
+  try {
+    const value: unknown = JSON.parse(stored);
+    if (value && typeof value === 'object') {
+      const { off, known } = value as { off?: unknown; known?: unknown };
+      const strings = (list: unknown) => Array.isArray(list) && list.every(item => typeof item === 'string') ? list as string[] : null;
+      const knownList = strings(known);
+      return { off: new Set(strings(off) ?? []), known: knownList ? new Set(knownList) : null };
+    }
+  } catch { /* A missing or invalid preference shows every account. */ }
+  return { off: new Set(), known: null };
+}
+
+// Adds Inbox for each account not seen before; returns true when the picks changed.
+// Before this preference existed, an account that already has a picked label counts as seen,
+// so the first run after an update keeps the labels the user chose.
+export function adoptNewAccounts(accounts: MailAccount[], selected: Set<string>, prefs: AccountPrefs): boolean {
+  const known = prefs.known ?? new Set([...selected].map(accountOf));
+  let changed = prefs.known === null;
+  for (const account of accounts) {
+    if (known.has(account.id)) continue;
+    known.add(account.id);
+    selected.add(`${account.id}:INBOX`);
+    changed = true;
+  }
+  prefs.known = known;
+  return changed;
+}
+
+// The label keys the thread list asks for: picks of the accounts that are switched on.
+export const effectiveLabels = (selected: ReadonlySet<string>, off: ReadonlySet<string>) =>
+  [...selected].filter(key => !off.has(accountOf(key)));
 
 const numberWords = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven',
   'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
@@ -61,12 +104,20 @@ export function matchesMailLabel(label: string, query: string): boolean {
   return labelTokens(query).every(word => /^\d+$/.test(word) ? tokens.includes(word) : joined.includes(word));
 }
 
-export function labelPickerPages(accounts: AccountLabels[], selected: Set<string>, search = ''): LabelPickerRow[][] {
+export function labelPickerPages(accounts: AccountLabels[], selected: Set<string>, search = '', off: ReadonlySet<string> = new Set()): LabelPickerRow[][] {
   const flat: LabelPickerRow[] = [];
+  // With two or more mailboxes the address row is a checkbox (Filter by email address);
+  // with one it stays a heading, because switching the only mailbox off empties the list.
+  const toggles = accounts.length > 1;
   for (const { account, labels } of accounts) {
+    const on = !off.has(account.id);
+    if (search && !on) continue;
     const visible = search ? labels.filter(label => matchesMailLabel(label.name, search)) : labels;
     if (search && !visible.length) continue;
-    flat.push({ text: singleLine(account.short), heading: true });
+    flat.push(toggles && !search
+      ? { text: `[${on ? 'x' : ' '}] ${accountName(account)}`, account: account.id }
+      : { text: accountName(account), heading: true });
+    if (!on) continue;
     if (!account.ok) flat.push({ text: t('mailUnavailable'), heading: true });
     for (const label of visible) {
       const key = `${account.id}:${label.id}`;
@@ -74,7 +125,8 @@ export function labelPickerPages(accounts: AccountLabels[], selected: Set<string
     }
   }
   const known = new Set(flat.map(row => row.key));
-  const missing = [...selected].filter(key => !known.has(key));
+  // Picks of a switched-off mailbox are kept for when it is switched back on, not "unavailable".
+  const missing = [...selected].filter(key => !known.has(key) && !off.has(accountOf(key)));
   if (!search && missing.length) {
     flat.push({ text: t('unavailableSection'), heading: true });
     for (const key of missing) flat.push({ key, text: `[x] ${singleLine(key)}` });
@@ -91,7 +143,8 @@ export function labelPickerPages(accounts: AccountLabels[], selected: Set<string
     if (i + take < flat.length) {
       take--;
       // Keep the account heading with its first label or availability row.
-      if (flat[i + take - 1]?.heading && !flat[i + take - 2]?.heading) take--;
+      const opensGroup = (row?: LabelPickerRow) => !!(row?.heading || row?.account);
+      if (opensGroup(flat[i + take - 1]) && !flat[i + take - 2]?.heading) take--;
     }
     pages.push([...first,
       ...flat.slice(i, i + take), ...(i + take < flat.length ? [{ text: t('moreBelow'), heading: true as const }] : [])]);
@@ -100,8 +153,11 @@ export function labelPickerPages(accounts: AccountLabels[], selected: Set<string
   return pages;
 }
 
-export function mailColumns(thread: MailThread): SessionColumns {
-  return { marker: thread.unread ? '*' : '', title: `${singleLine(thread.from)} - ${singleLine(thread.subject)}`, right: mailDate(thread.date), preserveSuffix: false };
+// With two or more mailboxes on, the right column starts with the account letter: '[W] 14:05'.
+export function mailColumns(thread: MailThread, accountLetter = ''): SessionColumns {
+  const date = mailDate(thread.date);
+  return { marker: thread.unread ? '*' : '', title: `${singleLine(thread.from)} - ${singleLine(thread.subject)}`,
+    right: accountLetter ? `[${accountLetter}] ${date}` : date, preserveSuffix: false };
 }
 
 export function mailFilterColumn(summary: string, extra: number): string {
@@ -110,19 +166,28 @@ export function mailFilterColumn(summary: string, extra: number): string {
   return `[${menuTitle(label, MENU_RIGHT.width - 6 - glassWidth(`[]${suffix}`), false)}${suffix}]`;
 }
 
+export const MAIL_LABELS_KEY = 'mail-labels';
+export const MAIL_ACCOUNTS_KEY = 'mail-accounts';
+
 export class Mail {
   private selected: Set<string> | null;
+  private prefs: AccountPrefs;
   private catalog?: Promise<AccountLabels[]>;
   private names = new Map<string, string>();
+  private letters = new Map<string, string>();
   private marking = new Map<string, Promise<void>>();
 
-  constructor(stored: string) {
+  // save persists a preference the class changes by itself (a new account's Inbox).
+  constructor(stored: string, storedAccounts = '', private save: (key: string, value: string) => void = () => {}) {
     this.selected = null;
     try {
       const labels: unknown = JSON.parse(stored);
       if (Array.isArray(labels) && labels.every((label): label is string => typeof label === 'string')) this.selected = new Set(labels);
     } catch { /* A missing or invalid preference uses Inbox. */ }
+    this.prefs = parseAccountPrefs(storedAccounts);
   }
+
+  private accountsJson() { return JSON.stringify({ off: [...this.prefs.off], known: [...(this.prefs.known ?? [])] }); }
 
   async labelGroups(refresh = false) {
     if (refresh || !this.catalog) {
@@ -136,29 +201,45 @@ export class Mail {
     }
     const catalog = await this.catalog;
     this.selected ??= new Set(catalog.map(({ account }) => `${account.id}:INBOX`));
+    if (adoptNewAccounts(catalog.map(({ account }) => account), this.selected, this.prefs)) {
+      this.save(MAIL_LABELS_KEY, JSON.stringify([...this.selected]));
+      this.save(MAIL_ACCOUNTS_KEY, this.accountsJson());
+    }
     for (const { account, labels } of catalog) {
+      this.letters.set(account.id, singleLine(account.short));
       for (const label of labels) this.names.set(`${account.id}:${label.id}`, singleLine(label.name));
     }
     return catalog;
   }
 
   selectedLabels(): ReadonlySet<string> { return this.selected ?? new Set(); }
+  accountsOff(): ReadonlySet<string> { return this.prefs.off; }
 
   async list(page: number) {
-    await this.labelGroups();
-    const selected = this.selected!;
-    const result = selected.size ? await api.mail.threads([...selected], page) : { items: [], hasMore: false, unread: 0 };
-    return { ...result, items: [...result.items].sort((a, b) => b.date - a.date), filterColumn: mailFilterColumn(mailFilterSummary(selected, this.names), Math.max(0, selected.size - 1)) };
+    const catalog = await this.labelGroups();
+    const picks = effectiveLabels(this.selected!, this.prefs.off);
+    const result = picks.length ? await api.mail.threads(picks, page) : { items: [], hasMore: false, unread: 0 };
+    const shown = catalog.filter(({ account }) => !this.prefs.off.has(account.id)).length;
+    return { ...result, items: [...result.items].sort((a, b) => b.date - a.date),
+      // The letter tells two mailboxes apart; one mailbox needs no letter.
+      letter: (thread: MailThread) => shown > 1 ? this.letters.get(thread.account) ?? '' : '',
+      filterColumn: mailFilterColumn(mailFilterSummary(new Set(picks), this.names), Math.max(0, picks.length - 1)) };
   }
 
   async picker(refresh = false, search = '') {
-    return labelPickerPages(await this.labelGroups(refresh), this.selected!, search);
+    return labelPickerPages(await this.labelGroups(refresh), this.selected!, search, this.prefs.off);
   }
 
   toggle(key: string): string {
     const selected = this.selected!;
     if (!selected.delete(key)) selected.add(key);
     return JSON.stringify([...selected]);
+  }
+
+  // Filter by email address: switch one mailbox's threads and labels off or on.
+  toggleAccount(id: string): string {
+    if (!this.prefs.off.delete(id)) this.prefs.off.add(id);
+    return this.accountsJson();
   }
 
   reader(thread: MailThread): ReaderSource {

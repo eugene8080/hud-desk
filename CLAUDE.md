@@ -56,6 +56,17 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-26 beta 1.0.62 (user on G2 after 1.0.61: "G2 voice chat works"; asked for the address
+instead of W, the personal account plus Filter by email address, and [] around Coding/Email).
+Row 0 reads [Coding]/[Email]. Bridge /api/mail/accounts now returns the configured address (behind
+token + private-host gate). App: account checkboxes on the phone (Filter by email address) and as
+the address rows of the glasses label picker; letters [W]/[H] on thread rows when two mailboxes are
+on; a mailbox seen for the first time gets its Inbox (pref mail-accounts {off, known}). Personal
+account added to the gitignored config (id personal, short P, .local/mail/personal.json); consent by
+Eugene pending; needs a bridge restart (ask). 199 tests, typecheck/build pass. Uncommitted
+Cursor-title files (2026-11-11, origin unrecorded) are loaded by the live bridge, which runs from
+this checkout; decision on keep/drop pending with Eugene.
+
 2026-11-26 beta 1.0.61 (user-requested follow-ups): phone module switch linked with row 0;
 Filter by Label on the phone (search box, shared picks); voice search in the glasses label
 picker (hold, release, all-words match); cached rows on module switch (simulator warm switch

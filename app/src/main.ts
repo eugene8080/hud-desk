@@ -26,8 +26,8 @@ import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usag
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
 import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, inkByte, nativeTextColor, parseInk, type FineFont, type FineStatus } from './fine-text';
-import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
-import { Mail, mailColumns, type ReaderContent, type ReaderSource } from './mail';
+import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
+import { Mail, mailColumns, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 
 // 画面 576x288。上に見出し(テキスト)、下に本文(リスト or テキスト)の2段構成で統一する。
 const HEAD = { containerID: 1, containerName: 'head', xPosition: 0, yPosition: 0, width: 576, height: 36 };
@@ -773,7 +773,7 @@ function cycleModule(screen: SessionMenuScreen) {
 }
 
 async function showModuleList(module: GlassModule, page: number, selected: number, screen: ModuleListContent, mounted?: SessionMenuScreen) {
-  const items = [moduleLabel(module), ...screen.items];
+  const items = [moduleButton(moduleLabel(module)), ...screen.items];
   const index = mounted?.selected ?? selected;
   const cursor = index < 0 ? items.length - 1 : Math.min(index, items.length - 1);
   const list: SessionMenuScreen = { ...screen, kind: 'list', title: sessionHeading(), module, items, selected: cursor, paintedSelection: cursor,
@@ -882,7 +882,7 @@ async function mailHome(page = positions.email.page, selected = positions.email.
     // A changed filter or external mailbox activity can remove the last page.
     while (page > 0 && !result.items.length && !result.hasMore && active()) result = await mail.list(--page);
     if (!active()) return;
-    const columns = [{ marker: '*', title: tr('mailFilter'), right: result.filterColumn }, ...result.items.map(mailColumns)];
+    const columns = [{ marker: '*', title: tr('mailFilter'), right: result.filterColumn }, ...result.items.map(item => mailColumns(item, result.letter(item)))];
     await showModuleList('email', page, selected, { columns, count: tr('mailUnread', result.unread),
       items: columns.map(row => `${row.marker || ' '} ${row.title} ${row.right}`),
       onPreviousPage: page > 0 ? () => mailHome(page - 1, -1) : undefined,
@@ -902,15 +902,27 @@ async function mailHome(page = positions.email.page, selected = positions.email.
   }
 }
 
+function saveMailPref(key: string, value: string) {
+  mailStorageWrites = mailStorageWrites.then(async () => { await bridge.setLocalStorage(key, value); }).catch(e => diag((e as Error).message));
+  return mailStorageWrites;
+}
+
+// Filter by email address: the same refresh path as a label toggle.
+async function toggleMailAccount(id: string, fromPhone = false) {
+  await applyMailFilter(MAIL_ACCOUNTS_KEY, mail.toggleAccount(id), fromPhone);
+}
+
 async function toggleMailLabel(key: string, fromPhone = false) {
-  const stored = mail.toggle(key);
+  await applyMailFilter(MAIL_LABELS_KEY, mail.toggle(key), fromPhone);
+}
+
+async function applyMailFilter(storageKey: string, stored: string, fromPhone: boolean) {
   const revision = ++mailFilterRevision;
   moduleCache.delete('email');
   positions.email.page = 0;
   phone?.render();
   const owner = current;
-  mailStorageWrites = mailStorageWrites.then(async () => { await bridge.setLocalStorage('mail-labels', stored); }).catch(e => diag((e as Error).message));
-  await mailStorageWrites;
+  await saveMailPref(storageKey, stored);
   if (fromPhone && current === owner && revision === mailFilterRevision && activeModule === 'email') {
     if (owner?.kind === 'list' && owner.mailPicker) await mailLabels(owner.mailPicker.page, owner.selected ?? 0, false, owner.mailPicker.search);
     else if (owner?.kind === 'list' && owner.module === 'email') await mailHome(0);
@@ -939,9 +951,10 @@ async function mailLabels(page: number, selected: number, refresh = false, searc
       onPick: async i => {
         const row = rows[i];
         if (i === 0) { await done(); return; }
-        if (!row?.key) return;
+        if (!row?.key && !row?.account) return;
         const picker = current;
-        await toggleMailLabel(row.key);
+        if (row.account) await toggleMailAccount(row.account);
+        else await toggleMailLabel(row.key!);
         if (current === picker) await mailLabels(page, i, false, search);
       }, onBack: search ? () => mailLabels(0, 0) : done,
       onHold: voiceAvailable ? () => { void record({ search: text => mailLabels(0, 0, false, text) }, true); } : undefined,
@@ -1679,7 +1692,7 @@ async function openSavedOrHome(connection: Connection, known?: Thread[]) {
   modules = offeredModules(capabilities?.modules);
   const stored = await bridge.getLocalStorage('module') as GlassModule;
   activeModule = modules.includes(stored) ? stored : 'coding';
-  mail = new Mail(await bridge.getLocalStorage('mail-labels'));
+  mail = new Mail(await bridge.getLocalStorage(MAIL_LABELS_KEY), await bridge.getLocalStorage(MAIL_ACCOUNTS_KEY), saveMailPref);
   phone?.connection(connection);
   if (activeModule === 'email') return mailHome();
   const handle = await bridge.getLocalStorage('open-thread');
@@ -1748,6 +1761,8 @@ async function main() {
     mailLabels: () => mail?.labelGroups(true) ?? Promise.resolve([]),
     selectedMailLabels: () => mail?.selectedLabels() ?? new Set(),
     toggleMailLabel: key => toggleMailLabel(key, true),
+    mailAccountsOff: () => mail?.accountsOff() ?? new Set(),
+    toggleMailAccount: id => toggleMailAccount(id, true),
     filters: () => ({ provider: viewProvider, orca: viewWorkspaces, hermes: viewHermesWorkspaces }),
     setProvider: async id => { await bridge.setLocalStorage('view-provider', id); viewProvider = id; refreshGlasses(); },
     setWorkspaces: async (hermes, value) => {

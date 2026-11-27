@@ -66,7 +66,8 @@ export type Activity = 'working' | 'waiting' | 'attention' | 'unknown';
 export type UsageLimit = { usedPercent: number; resetDescription: string; resetsAt?: number | null; computerResetDescription?: string };
 type Limit = UsageLimit | null;
 export type Usage = Record<string, { provider?: string; status: string; error?: string | null; session?: Limit; weekly?: Limit; monthly?: Limit }>;
-export type MailAccount = { id: string; short: string; ok: boolean; error?: string };
+// address: the mailbox address (bridges before 1.0.62 send only the short letter).
+export type MailAccount = { id: string; short: string; address?: string; ok: boolean; error?: string };
 export type MailLabel = { id: string; name: string; unread: number };
 export type MailThread = { account: string; id: string; from: string; subject: string; date: number; unread: boolean; count: number };
 export type MailPage = { items: MailThread[]; hasMore: boolean; unread: number };

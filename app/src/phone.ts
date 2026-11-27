@@ -6,7 +6,7 @@ import { api, type Thread, type Usage, type UsageLimit, type Workspace } from '.
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary } from './filters';
 import { formatReset, RESET_MODES, type ResetMode } from './usage-reset';
 import { t as tr, type Key } from './i18n';
-import { matchesMailLabel, type AccountLabels } from './mail';
+import { accountName, matchesMailLabel, type AccountLabels } from './mail';
 import { moduleLabel, type GlassModule } from './session-list';
 
 export type Connection =
@@ -22,6 +22,9 @@ export type PhoneDeps = {
   mailLabels(): Promise<AccountLabels[]>;
   selectedMailLabels(): ReadonlySet<string>;
   toggleMailLabel(key: string): Promise<void>;
+  // Filter by email address: mailboxes switched off on both screens.
+  mailAccountsOff(): ReadonlySet<string>;
+  toggleMailAccount(id: string): Promise<void>;
   // The glasses own these values; the phone reads and writes them through main.ts
   // so both screens stay in step (main re-renders the glasses after a phone change).
   filters(): { provider: string; orca: Set<string> | null; hermes: Set<string> | null };
@@ -193,10 +196,17 @@ export function createPhone(deps: PhoneDeps) {
     const list = byId('mail-label-list');
     const query = byId<HTMLInputElement>('mail-label-search').value.trim();
     const chosen = deps.selectedMailLabels();
-    const rows = (mailGroups ?? []).flatMap(({ account, labels }) => {
+    const off = deps.mailAccountsOff();
+    // One mailbox needs no address filter; two or more get a checkbox each.
+    const groups = mailGroups ?? [];
+    const accounts = byId('mail-account-filter');
+    accounts.hidden = groups.length < 2;
+    byId('mail-account-list').replaceChildren(...groups.map(({ account }) =>
+      checkbox(accountName(account), !off.has(account.id), async () => { await deps.toggleMailAccount(account.id); })));
+    const rows = groups.filter(({ account }) => !off.has(account.id)).flatMap(({ account, labels }) => {
       const visible = labels.filter(label => matchesMailLabel(label.name, query));
       if (query && !visible.length) return [];
-      return [el('h5', 'section', account.short), ...(!account.ok ? [el('p', 'muted', tr('mailUnavailable'))] : []),
+      return [el('h5', 'section', accountName(account)), ...(!account.ok ? [el('p', 'muted', tr('mailUnavailable'))] : []),
         ...visible.map(label => {
           const key = `${account.id}:${label.id}`;
           return checkbox(`${label.name} (${label.unread})`, chosen.has(key), async () => { await deps.toggleMailLabel(key); });

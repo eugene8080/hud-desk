@@ -8,11 +8,15 @@ const demoLabels = ['Inbox', 'Bulletins', 'Events', 'Logistics', 'Planning', 'Pr
 const demoSubjects = ['Field notes newsletter', 'Workshop schedule', 'Revised packing list', 'Trail opening', 'Reading list', 'A new meeting room', 'Map corrections', 'April notes', 'Survey draft', 'Volunteer schedule'];
 const marked = new Set<string>();
 const mailDate = (i: number) => Date.now() - (i === 0 ? 21 : i * 480) * 60_000;
-const demoMail = () => demoSubjects.map((subject, i): MailThread & { labels: string[] } => ({
+const homeSubjects = ['Garden club picnic', 'Library card renewal', 'Weekend market list'];
+const demoMail = () => [...demoSubjects.map((subject, i): MailThread & { labels: string[] } => ({
   account: 'work', id: `demo-mail-${i}`, from: ['Field Notes Desk', 'Workshop Desk', 'Trail Team'][i % 3], subject,
   date: mailDate(i), unread: i % 3 !== 2 && !marked.has(`demo-mail-${i}`), count: i === 0 ? 3 : 1,
   labels: [...(i !== 3 ? ['INBOX'] : []), `Label_${i % (demoLabels.length - 1) + 1}`],
-}));
+})), ...homeSubjects.map((subject, i): MailThread & { labels: string[] } => ({
+  account: 'home', id: `demo-home-${i}`, from: ['Garden Club', 'City Library', 'Market Stall'][i], subject,
+  date: mailDate(i) - 90 * 60_000, unread: i !== 2 && !marked.has(`demo-home-${i}`), count: 1, labels: ['INBOX'],
+}))];
 
 function newsletterText(i: number): string {
   const history = i ? '\n\nOn Tuesday the Field Notes Desk wrote:\n> The early route plan is available.\n> Follow the signs to the footbridge.' : '';
@@ -60,11 +64,15 @@ export function demoCall(lang: Lang, method: string, path: string, body: unknown
     case 'GET /api/capabilities':
       return { voice: true, modules: ['coding', 'email'] };
     case 'GET /api/mail/accounts':
-      return [{ id: 'work', short: 'W', ok: true }];
+      return [{ id: 'work', short: 'W', address: 'work@example.com', ok: true },
+        { id: 'home', short: 'H', address: 'home@example.com', ok: true }];
     case 'GET /api/mail/labels':
+      if (searchParams.get('account') === 'home') {
+        return [{ id: 'INBOX', name: 'Inbox', unread: demoMail().filter(row => row.account === 'home' && row.unread).length }];
+      }
       return demoLabels.map((name, i) => {
         const id = i === 0 ? 'INBOX' : `Label_${i}`;
-        return { id, name, unread: demoMail().filter(row => row.unread && row.labels.includes(id)).length };
+        return { id, name, unread: demoMail().filter(row => row.account === 'work' && row.unread && row.labels.includes(id)).length };
       });
     case 'GET /api/mail/threads': {
       const filter = new Set(searchParams.get('filter')?.split(','));
@@ -83,7 +91,7 @@ export function demoCall(lang: Lang, method: string, path: string, body: unknown
       })) };
     }
     case 'POST /api/mail/read':
-      if (b.account !== 'work' || !demoMail().some(row => row.id === b.threadId)) throw new Error('Unknown sample thread');
+      if (!demoMail().some(row => row.account === b.account && row.id === b.threadId)) throw new Error('Unknown sample thread');
       marked.add(String(b.threadId));
       return { ok: true };
     case 'GET /healthz':

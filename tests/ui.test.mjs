@@ -163,7 +163,7 @@ test('row zero fits the centered longest release title, module labels and counts
 test('row zero debounces module loads, wraps over offered modules, and restores each position', async () => {
   const { fixture, requests } = mailFixture();
   const h = await moduleHarness({ capabilities: { modules: ['coding', 'future', 'email', 'email'] }, mail: fixture });
-  assert.match(container(h, 'head').content, /^Coding\s+Orca-glass/);
+  assert.match(container(h, 'head').content, /^\[Coding\]\s+Orca-glass/);
   for (let i = 0; i < 10; i++) await h.scroll('down');
   const codingPage = container(h, 'body').content;
   assert.match(codingPage, /Session 7/);
@@ -171,7 +171,7 @@ test('row zero debounces module loads, wraps over offered modules, and restores 
   await h.scroll('up');
   assert.match(h.upgrades.at(-1).content.split('\n')[0], /^>/);
   await h.tap();
-  assert.match(h.upgrades.at(-1).content, /^Email\s+Orca-glass/);
+  assert.match(h.upgrades.at(-1).content, /^\[Email\]\s+Orca-glass/);
   assert.equal([...h.timeouts.values()][0].delay, 400);
   assert.equal(requests.length, 0);
   await h.tap(); await h.debounce();
@@ -194,7 +194,7 @@ test('row zero debounces module loads, wraps over offered modules, and restores 
 
 test('missing capability modules fall back to Coding even with Email saved', async () => {
   const h = await moduleHarness({ storage: { module: 'email' } });
-  assert.match(container(h, 'head').content, /^Coding\b/);
+  assert.match(container(h, 'head').content, /^\[Coding\]/);
   const page = h.pages.at(-1);
   await h.tap(); await h.debounce();
   assert.equal(h.pages.at(-1), page);
@@ -208,7 +208,7 @@ test('phone and glasses use the same module and label selection in both directio
   assert.deepEqual([...phone.modules().offered], ['coding', 'email']);
   await phone.setModule('email'); await h.flush();
   assert.equal(h.timeouts.size, 0);
-  assert.match(container(h, 'head').content, /^Email/);
+  assert.match(container(h, 'head').content, /^\[Email\]/);
   assert.equal(h.storage.get('module'), 'email');
   assert.equal(phone.selectedMailLabels().has('work:INBOX'), true);
   await phone.toggleMailLabel('work:Label_1');
@@ -224,7 +224,7 @@ test('phone and glasses use the same module and label selection in both directio
   await h.back(); await h.scroll('up'); await h.tap();
   assert.equal(phone.modules().selected, 'coding');
   await h.debounce();
-  assert.match(container(h, 'head').content, /^Coding/);
+  assert.match(container(h, 'head').content, /^\[Coding\]/);
   assert.equal(h.storage.get('module'), 'coding');
 });
 
@@ -236,7 +236,7 @@ test('a cached module paints before its delayed refresh and applies new rows wit
   h.api.threads = () => new Promise(resolve => { complete = resolve; });
   await h.tap(); await h.debounce();
   assert.equal(typeof complete, 'function');
-  assert.match(container(h, 'head').content, /^Coding/);
+  assert.match(container(h, 'head').content, /^\[Coding\]/);
   assert.match(container(h, 'body').content, /Session 0/);
   const page = h.pages.at(-1);
   await h.scroll('down'); await h.scroll('down');
@@ -251,6 +251,77 @@ test('a cached module paints before its delayed refresh and applies new rows wit
   h.api.threads = async () => h.threads;
   await h.tap();
   assert.match(container(h, 'body').content, /All workspaces/);
+});
+
+test('row zero brackets the module name so it reads as a button', () => {
+  const { moduleHeading, moduleButton } = listExports;
+  assert.equal(moduleButton('Email'), '[Email]');
+  assert.match(moduleHeading('Coding', 'Orca-glass 1.0.62'), /^\[Coding\]\s+Orca-glass 1\.0\.62$/);
+});
+
+const twoMailboxes = fixture => {
+  fixture.accounts = async () => [{ id: 'work', short: 'W', address: 'work@example.test', ok: true }, { id: 'home', short: 'H', address: 'home@example.test', ok: true }];
+  const threads = fixture.threads;
+  fixture.threads = async (filter, page) => {
+    const result = await threads(filter, page);
+    return { ...result, items: result.items.map((item, i) => ({ ...item, account: i % 2 && filter.some(key => key.startsWith('home:')) ? 'home' : 'work' })) };
+  };
+  return fixture;
+};
+
+test('a new mailbox starts with its Inbox, and saved picks of a known mailbox stay as chosen', () => {
+  const { adoptNewAccounts, parseAccountPrefs, effectiveLabels } = mailModule({});
+  const accounts = [{ id: 'work', short: 'W', ok: true }, { id: 'home', short: 'H', ok: true }];
+  // First run after the update: work already has a pick, so only home gets its Inbox.
+  const selected = new Set(['work:Label_1']);
+  const prefs = parseAccountPrefs('');
+  assert.equal(adoptNewAccounts(accounts, selected, prefs), true);
+  assert.deepEqual([...selected], ['work:Label_1', 'home:INBOX']);
+  assert.deepEqual([...prefs.known], ['work', 'home']);
+  // A mailbox seen before keeps an empty pick list; nothing is re-added.
+  selected.delete('home:INBOX');
+  assert.equal(adoptNewAccounts(accounts, selected, prefs), false);
+  assert.deepEqual([...selected], ['work:Label_1']);
+  const restored = parseAccountPrefs(JSON.stringify({ off: ['home'], known: ['work', 'home'] }));
+  assert.deepEqual([...restored.off], ['home']);
+  assert.deepEqual([...effectiveLabels(new Set(['work:INBOX', 'home:INBOX']), restored.off)], ['work:INBOX']);
+  assert.deepEqual([...parseAccountPrefs('not json').off], []);
+});
+
+test('Filter by email address: the glasses picker toggles a mailbox, and the list shows account letters', async () => {
+  const { fixture, requests } = mailFixture();
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] }, storage: { module: 'email', 'mail-labels': '["work:INBOX"]' }, mail: twoMailboxes(fixture) });
+  // home is new, so its Inbox joins the request; both letters show in the right column.
+  assert.deepEqual(requests.at(-1).filter, ['work:INBOX', 'home:INBOX']);
+  assert.match(container(h, 'menu-right').content, /\[W\] 14:05|\[W\] 25 Nov/);
+  assert.match(container(h, 'menu-right').content, /\[H\]/);
+  await h.pickRow(1);
+  const picker = container(h, 'body').content.split('\n');
+  assert.equal(picker[1], '  [x] work@example.test');
+  assert.ok(picker.includes('  [x] home@example.test'), picker.join('\n'));
+  // Switch home off from its address row.
+  const homeRow = picker.indexOf('  [x] home@example.test');
+  await h.pickRow(homeRow);
+  assert.match(container(h, 'body').content, /\[ \] home@example\.test/);
+  assert.doesNotMatch(container(h, 'body').content, /Unavailable/);
+  assert.equal(h.storage.get('mail-accounts'), '{"off":["home"],"known":["work","home"]}');
+  await h.pickRow(0);
+  assert.deepEqual(requests.at(-1).filter, ['work:INBOX']);
+  // One mailbox on: no letters.
+  assert.doesNotMatch(container(h, 'menu-right').content, /\[W\]/);
+  // The phone sees the same switch and can turn home back on.
+  const phone = h.phone();
+  assert.deepEqual([...phone.mailAccountsOff()], ['home']);
+  await phone.toggleMailAccount('home');
+  assert.deepEqual(requests.at(-1).filter, ['work:INBOX', 'home:INBOX']);
+});
+
+test('one mailbox keeps its address as a plain heading in the picker', async () => {
+  const { fixture } = mailFixture();
+  fixture.accounts = async () => [{ id: 'work', short: 'W', address: 'work@example.test', ok: true }];
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'] }, storage: { module: 'email' }, mail: fixture });
+  await h.pickRow(1);
+  assert.equal(container(h, 'body').content.split('\n')[1], 'work@example.test');
 });
 
 test('label search ignores case, numbering and punctuation and requires every word', () => {
@@ -284,7 +355,7 @@ test('label picker applies voice search on release, replaces and clears queries,
   await h.back();
   assert.match(container(h, 'body').content, /12\. Field Notes/);
   await h.back();
-  assert.match(container(h, 'head').content, /^Email/);
+  assert.match(container(h, 'head').content, /^\[Email\]/);
   assert.equal(h.sends.length, 0);
   const noVoice = await moduleHarness({ capabilities: { voice: false, modules: ['coding', 'email'] }, storage: { module: 'email' }, mail: fixture });
   await noVoice.pickRow(1); noVoice.press(); noVoice.release(); await noVoice.flush();

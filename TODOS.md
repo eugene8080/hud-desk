@@ -1,14 +1,18 @@
 # Orca Glass TODOs
 Updated: 2026-11-26
 
-Current beta: **1.0.61** (phone module switch and Filter by Label; voice label search). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
+Current beta: **1.0.62** ([Coding]/[Email] row 0; Filter by email address; personal account). Public: **1.0.36**. Phone-off chats confirmed on G2 in 1.0.50. Narrower small fonts (5px and 6px) confirmed wrapping on G2 in 1.0.51; Departure Mono 7px wrap still pending. App brightness and the font list are pending a G2 check.
 Workspace-filter preview approved, released and retired with merged worktree cleanup.
 Future visual changes require preview approval before beta upload.
 Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
-- [ ] **Super app: Coding, Email, Chat, Reader in one app -- 1.0.61 follow-ups; G2 check pending:**
+- [ ] **Super app: Coding, Email, Chat, Reader in one app -- 1.0.62 (E2); consent + restart pending:**
+  2026-11-26 Eugene: voice works on G2 (1.0.61). Beta 1.0.62: [Coding]/[Email] row 0, address
+  headings, Filter by email address (phone + glasses picker), account letters. Personal account in
+  config; waits on Eugene's consent (scripts/mail-auth.mjs --account personal) and a bridge restart
+  (ask). Next: Chat (needs an Orca Glass Beeper token minted by Eugene).
   2026-11-26 beta 1.0.61: phone module switch + Filter by Label, glasses voice label search,
   cached-rows switching (679f1aa, merged a631660). Bridge restarted (supervisor 70236, server
   80148); reflow/history fix live. Pending: Eugene's G2 check of voice search and switch time.

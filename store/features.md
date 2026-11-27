@@ -1,6 +1,6 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-26. Current beta: **1.0.61**. Public: **1.0.36**.
+Updated: 2026-11-26. Current beta: **1.0.62**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -14,12 +14,12 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.61)
+## Feature list (beta 1.0.62)
 
 ### All modules
 
-- Row 0 of the home screen selects the module: Coding, or Email when the bridge offers it. Click
-  cycles; the title "Orca-glass <version>" sits in the centre and the module's count on the right.
+- Row 0 of the home screen selects the module: [Coding], or [Email] when the bridge offers it (the
+  brackets mark it as a button). Click cycles; the title "Orca-glass <version>" sits in the centre and the module's count on the right.
   The app reopens in the last module. A module opened before shows its last rows at once and
   refreshes in place.
 - Phone page (in the Even app): the same module switch, linked both ways with row 0.
@@ -50,8 +50,11 @@ Rule for every agent: each beta release updates this file in the release commit:
 - Read-only: no sending, drafts, archive or label changes. Opening a thread marks it read in Gmail.
 - List of eight threads a page, newest first, sender and subject, time today or date, unread marker,
   unread count on row 0.
-- Filter by Label on the glasses and the phone page (shared picks): one heading per account,
-  labels with unread counts, several at once. The phone has a type-to-narrow box; on the glasses,
+- Several Gmail accounts. Filter by email address on the
+  phone page and in the glasses label picker (the address row is a checkbox); with two mailboxes
+  on, each row shows the account letter (`[W] 14:05`). A newly added mailbox starts with its Inbox.
+- Filter by Label on the glasses and the phone page (shared picks): one heading per mailbox
+  address, labels with unread counts, several at once. The phone has a type-to-narrow box; on the glasses,
   hold to search by voice (labels containing every spoken word; double-click clears).
 - Threads read oldest to newest and open at the top of the newest message; quoted reply history is
   removed and hard-wrapped plain text is reflowed to the glasses' width.
@@ -59,8 +62,8 @@ Rule for every agent: each beta release updates this file in the release commit:
 
 ### Not yet built
 
-- Filter by email address on the phone, personal Gmail account (E2), Chat through Beeper, Reader for
-  documents.
+- Chat through Beeper, Reader for documents. Sign-in for other people's own Google accounts (each
+  user runs the bridge with a mail set-up on their own PC today).
 
 ## Paste: store description
 
@@ -76,7 +79,7 @@ Coding:
 
 Email (Gmail, when your bridge is set up for it):
 - Read only: no sending, drafts or archive. Opening a thread marks it read.
-- Filter by Label on the glasses or the phone, with voice search on the glasses. Eight threads a page, unread markers. Threads open at the newest message with quoted history removed and plain text reflowed.
+- One or more Gmail accounts. Filter by email address and Filter by Label on the glasses or the phone, with voice search on the glasses. Eight threads a page, unread markers. Threads open at the newest message with quoted history removed and plain text reflowed.
 
 Reader for both: book-style pages, swipe to turn, one Font list with Native text and pixel fonts (Misc Fixed, GohuFont, Departure, Shinonome, Terminus, Scientifica), App Brightness 15 to 1. Keeps loading with the phone screen off. English and Japanese.
 
@@ -90,5 +93,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.61: The phone page switches between Coding and Email, linked with row 0 on the glasses. Filter by Label is on the phone too, with a search box, and the glasses picker has voice search: hold, say part of a label name, release. Switching back to a module shows its last rows at once. Email text now uses the full width and drops quoted reply history.
+1.0.62: Row 0 shows the module as a button: [Coding] or [Email]. Email takes more than one Gmail account: Filter by email address on the phone and in the glasses label picker, the mailbox address over each account's labels, and an account letter on each thread row when two mailboxes are on.
 <!-- whatsnew:end -->

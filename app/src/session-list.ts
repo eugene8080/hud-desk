@@ -24,10 +24,14 @@ export const nextModule = (modules: GlassModule[], current: GlassModule) => modu
 export const moduleLabel = (id: GlassModule) => t(id === 'coding' ? 'moduleCoding' : 'moduleEmail');
 export const MENU_HEAD = { xPosition: 28, width: 548, height: 28 };
 export const MENU_COUNT = { containerID: 3, containerName: 'menu-count', xPosition: 300, yPosition: 0, width: 276, height: 28 };
+// Row 0 on the glasses: brackets mark the module name as a button ("[Email]"), because a
+// click there switches module.
+export const moduleButton = (label: string) => `[${label}]`;
 export function moduleHeading(label: string, versionTitle = sessionHeading()): string {
+  const button = moduleButton(label);
   const centre = (576 - glassWidth(versionTitle)) / 2 - MENU_HEAD.xPosition;
-  const spaces = Math.max(1, Math.round((centre - glassWidth(label)) / glassWidth(' ')));
-  return label + ' '.repeat(spaces) + versionTitle;
+  const spaces = Math.max(1, Math.round((centre - glassWidth(button)) / glassWidth(' ')));
+  return button + ' '.repeat(spaces) + versionTitle;
 }
 // Titles span to the right edge and sit under the right-label column; each row's
 // title is fitted to end before its own label, so short labels leave more title.

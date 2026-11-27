@@ -269,7 +269,7 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
     }
 
     return [account.id, {
-      id: account.id, short: account.short, health, labels, labelIndex, order, unread, recentlyRead,
+      id: account.id, short: account.short, address: account.address, health, labels, labelIndex, order, unread, recentlyRead,
       summary, open, mark, sortDate, selections,
     }];
   }));
@@ -379,11 +379,13 @@ export function createMail(config, { gmailOptions, coldWaitMs = 3000 } = {}) {
     'GET /api/mail/accounts': async () => {
       const list = [...accounts.values()];
       await warm(list.map(a => a.health), Date.now() + coldWaitMs);
-      return list.map(({ id, short, health }) => {
+      // The address names the mailbox on the glasses and the phone. This route sits behind the
+      // bearer token and the private-host gate, like the mail itself.
+      return list.map(({ id, short, address, health }) => {
         try {
-          return health.read() ? { id, short, ok: true } : { id, short, ok: false, error: 'network' };
+          return health.read() ? { id, short, address, ok: true } : { id, short, address, ok: false, error: 'network' };
         } catch (error) {
-          return { id, short, ok: false, error: publicError(error) };
+          return { id, short, address, ok: false, error: publicError(error) };
         }
       });
     },
