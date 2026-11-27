@@ -67,7 +67,9 @@ pictures (scratchpad only). (2) Session 6-property-valuations-98 (uncommitted in
 requests 16:40-17:20 UTC, included here at its request): 'Enable BT keyboard' button #key-focus with
 states off/armed/working (replaces the hidden banner); one layer back from Ctrl+, / Ctrl+Shift+P pages
 (Up/enterPage/leavePage); Halo on by default, HALO_RADIUS 2, key reader-halo. 269 tests, build pass.
-Bridge part (picture styles, negative) needs an approved restart.
+Bridge restarted with Eugene's approval (old supervisor 12028/server 56184/whisper 41124; new
+supervisor 31924, server 32568, whisper 72204 --vad); healthz ok; live: his chart = graphic (negative,
+zoom 4 sections), kettle photo = photo; negative=off honoured.
 
 2026-11-27 beta 1.0.83 (Eugene on G2: arrows work; keyboard still needs a tap in the Even app;
 Ctrl+Tab list opens but Tab does not move; Ctrl+F showed 'nd'; Ctrl+, flashed; pictures hard to
