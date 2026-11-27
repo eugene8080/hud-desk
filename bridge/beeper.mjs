@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { before } from './mail.mjs';
 import { readView } from './image.mjs';
+import { chatHtmlToText } from './chat-text.mjs';
 import { createChatSpeech, MAX_ASSET_BYTES } from './chat-voice.mjs';
 import { DEFAULT_TRANSLATION_MODEL, localModelName, translateEnglish, translationAvailable } from './chat-translate.mjs';
 
@@ -147,8 +148,8 @@ function chatMessage(item, transcript) {
   const attachment = audio ? attachments.find(a => isAudio(a) && a.isVoiceNote) ?? attachments.find(isAudio) : undefined;
   const tag = audio ? (item.type === 'VOICE' || attachment?.isVoiceNote ? 'Voice' : 'Audio')
     : Object.hasOwn(media, item.type) ? media[item.type] : undefined;
-  // HTML line breaks in Beeper's text become real ones, so the translator and the app see lines.
-  const caption = text(text(item.text).replace(/<br\s*\/?>/gi, '\n'));
+  // The translator and the app see real lines. The chat app's formatting arrives as HTML (lists, bold, links): plain text for the glasses.
+  const caption = text(chatHtmlToText(text(item.text)));
   if (!tag && !caption) return null;
   const url = assetURL(attachment?.srcURL) || assetURL(attachment?.id);
   const picture = audio ? undefined : attachments.find(isImage);

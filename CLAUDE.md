@@ -56,6 +56,14 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.88 (Eugene: '<ul><li> and others' in a WhatsApp group via Beeper). Beeper's
+message text carries the chat app's formatting as HTML. bridge/chat-text.mjs chatHtmlToText: ul/ol/li
+('• ', 'N. ' with start=, nested indent), p/div/h*/tr/pre/br line breaks, blockquote '> ', mx-reply
+fallback dropped, other tags stripped, entities decoded; used for every chat message's text in
+bridge/beeper.mjs. Read-only scan of 60 recent chats (981 messages, 142 with HTML): tags br li ul ol
+strong em a p code span del, entities amp quot gt lt nbsp; none left after conversion (counts only,
+no text kept). 278 tests, build pass. Bridge part needs an approved restart.
+
 2026-11-27 beta 1.0.87 (Eugene: inline images not showing, e.g. the Bloomberg 'Holiday washout'
 newsletter). Newsletter pictures are <img src=https://...> links, not MIME parts. bridge/mail-text.mjs
 htmlImages + [[img:K]] markers in htmlToText; bridge/mail.mjs messagePictures (cid: -> its part; remote

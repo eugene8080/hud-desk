@@ -1,13 +1,13 @@
 # Orca Glass features (paste source for Even Hub)
 
-Updated: 2026-11-27. Current beta: **1.0.87**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.88**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
 - **Description** (Store listing > Description > Edit): paste the block under "Paste: store
   description". Portal limit 2,000 characters. `store/description.txt` holds the same text; a test
   (`tests/store-features.test.mjs`) fails if the two differ or the block is over the limit.
-- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.87,
+- **Japanese description:** `store/description.ja.txt` (matches the English text of beta 1.0.88,
   updated 2026-11-26). It is the agent's translation; a native review is still pending.
   Update it together with the English block.
 - **Changelog** (the build's release note): paste the block under "Paste: what's new". Limit 500
@@ -17,7 +17,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 "Paste: what's new", and the description block when a listed feature changed. See `CLAUDE.md`,
 "Release policy".
 
-## Feature list (beta 1.0.87)
+## Feature list (beta 1.0.88)
 
 ### All modules
 
@@ -163,5 +163,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.87: Email shows the pictures a newsletter links to, such as Bloomberg's Morning Briefing, as [Image N] rows where they appear in the mail. A picture is fetched from the sender's server only when you open it; tracking pixels, small icons and ad slots are skipped.
+1.0.88: Chat messages show their formatting as plain text: bulleted and numbered lists as • and 1. lines (nested lists indented), paragraphs and line breaks, links as their text, quotes as > lines; bold, italic, code and HTML symbols no longer show as tags.
 <!-- whatsnew:end -->
