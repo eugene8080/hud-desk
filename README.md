@@ -54,19 +54,21 @@ still need verification. See [implementation](docs/hermes-bridge.md).
 
 ## Screenshots
 
-Native 576 × 288 simulator captures of beta 1.0.90 with fictional sample data (see the [gallery](store/gallery.html)). The kettle is a product photo; the keys page is rendered by the app's own code.
+Native 576 × 288 simulator captures of beta 1.0.90 with fictional sample data (see the [gallery](store/gallery.html)). The pictures are a kettle product photo and a Mandelbrot set drawn by ffmpeg; the keys page is rendered by the app's own code.
 
-| **Coding** | **Reader, Scientifica + Tube** | **Reader, native text** |
+| **Reader: Scientifica 5x11 on Tube** | **Architecture map** | **Live coding** |
 | --- | --- | --- |
-| ![Coding](store/screenshots/01-coding.png) | ![Reader, Scientifica + Tube](store/screenshots/02-coding-dense.png) | ![Reader, native text](store/screenshots/03-coding-native.png) |
-| **Voice review** | **Email** | **Email with pictures** |
-| ![Voice review](store/screenshots/04-voice.png) | ![Email](store/screenshots/05-email.png) | ![Email with pictures](store/screenshots/06-email-pictures.png) |
-| **Original Picture** | **Outline** | **AI Readout** |
-| ![Original Picture](store/screenshots/07-picture.png) | ![Outline](store/screenshots/08-outline.png) | ![AI Readout](store/screenshots/09-ai-readout.png) |
+| ![Reader: Scientifica 5x11 on Tube](store/screenshots/01-coding-dense.png) | ![Architecture map](store/screenshots/02-architecture.png) | ![Live coding](store/screenshots/03-live-diff.png) |
+| **Coding sessions** | **Reader: native text** | **Voice review** |
+| ![Coding sessions](store/screenshots/04-coding-list.png) | ![Reader: native text](store/screenshots/05-coding-native.png) | ![Voice review](store/screenshots/06-voice.png) |
+| **Email** | **Email with pictures** | **Original Picture** |
+| ![Email](store/screenshots/07-email.png) | ![Email with pictures](store/screenshots/08-email-pictures.png) | ![Original Picture](store/screenshots/09-picture.png) |
+| **Outline** | **Outline of a Mandelbrot set** | **AI Readout** |
+| ![Outline](store/screenshots/10-outline.png) | ![Outline of a Mandelbrot set](store/screenshots/11-fractal.png) | ![AI Readout](store/screenshots/12-ai-readout.png) |
 | **Chat** | **Filter by Network** | **Chat translation** |
-| ![Chat](store/screenshots/10-chat.png) | ![Filter by Network](store/screenshots/11-chat-networks.png) | ![Chat translation](store/screenshots/12-chat-translate.png) |
+| ![Chat](store/screenshots/13-chat.png) | ![Filter by Network](store/screenshots/14-chat-networks.png) | ![Chat translation](store/screenshots/15-chat-translate.png) |
 | **Keyboard keys** | **Compare backgrounds** | **Compare fonts** |
-| ![Keyboard keys](store/screenshots/13-keys.png) | ![Compare backgrounds](store/screenshots/14-backgrounds.png) | ![Compare fonts](store/screenshots/15-compare-fonts.png) |
+| ![Keyboard keys](store/screenshots/16-keys.png) | ![Compare backgrounds](store/screenshots/17-backgrounds.png) | ![Compare fonts](store/screenshots/18-compare-fonts.png) |
 
 The simulator omits OS contextual entries. See [store listing notes](store/listing.md).
 

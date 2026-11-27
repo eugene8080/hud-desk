@@ -8,9 +8,10 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
-- [ ] **HUD Desk listing (2026-11-27, beta 1.0.90):** portal Basic info name, description and the 15
-  screenshots in store/screenshots; bridge restart for the AI Readout JPEG fix (ask Eugene);
-  store/description.ja.txt and the privacy PDF still say Orca Glass. Public release only on his request.
+- [ ] **HUD Desk listing (2026-11-27, beta 1.0.90):** portal name, tagline, icon, description and 8
+  screenshots saved and verified. Open: bridge restart for the AI Readout JPEG fix (ask Eugene);
+  glasses Usage page bars (Eugene asked; not built); store/description.ja.txt and the privacy PDF still
+  say Orca Glass. Public release only on his request.
 - [ ] **Super app: Coding, Email, Chat, Reader in one app -- Chat live since the 2026-11-27 reboot:**
   2026-11-27 beta 1.0.67: mailbox toggle + no blank chat rows; G2 check pending. Eugene confirmed
   the Email loading screen and Chat. Next: Chat voice messages (show, click to transcribe, optional

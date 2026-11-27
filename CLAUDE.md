@@ -65,8 +65,14 @@ alignMarkdownTables take the font); AI Readout: Ollama 400 on a progressive JPEG
 converts everything but PNG (live after an approved bridge restart, NOT restarted). 281 tests,
 build pass. Store: 15 screenshots in store/screenshots (fixture scripts/store-preview.mjs; kettle
 photo in gitignored .local/store-assets), store/description.txt 1,959 chars, README rewritten.
-Portal (Even Hub, Chrome Profile 5, IP matched route.json): Basic info name, description and
-screenshots not yet saved at the time of this note; see store/listing.md. Japanese description not updated.
+Portal (Even Hub, Chrome Profile 5, browser IP = route.json expectedExitIp) saved and re-read after
+reload: name HUD Desk, tagline 'Agents, inbox, chats. Heads up, hands free.' (Eugene chose), icon
+store/icon/hud-desk-icon.png ([>_], Eugene chose; ink must be #F4F4F4), description with '(renamed from
+Orca Glass)', tags orca claude codex email chat, 8 screenshots (portal maximum) uploaded as the
+TRANSPARENT simulator originals (opaque copies show a black box over the portal's Environment photo).
+Store: 18 screenshots (architecture diagram, live diff, Mandelbrot outline added for a 'techie' look).
+Not done: glasses Usage bars (text page; needs drawing code), Japanese description, privacy PDF name,
+bridge restart for the JPEG fix. No review submitted.
 
 2026-11-27 beta 1.0.89 (Eugene: the translated 'WINDOW MECHANISM REPAIR' list 'lost all its
 formatting'; wants the translation on the next row). Bridge /api/chat/translate: message text is split

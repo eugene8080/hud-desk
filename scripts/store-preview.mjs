@@ -11,8 +11,8 @@ const samples = [
   { handle: 'store-b56d78', title: 'Review project', agent: 'pi', state: 'idle', workspaceId: 'docs', workspaceName: 'docs' },
   { handle: 'store-c90e12', title: 'Release notes', agent: 'claude', state: 'idle', workspaceId: 'glass', workspaceName: 'orca-glass' },
   { handle: 'store-d34f56', title: 'Simplify sign-in', agent: 'codex', state: 'idle', workspaceId: 'app', workspaceName: 'sample-app' },
-  { handle: 'store-e78a90', title: 'Fix flaky tests', agent: 'opencode', state: 'busy', workspaceId: 'app', workspaceName: 'sample-app' },
-  { handle: 'store-f12g34', title: 'Refactor module', agent: 'openclaude', state: 'idle', workspaceId: 'glass', workspaceName: 'orca-glass' },
+  { handle: 'store-e78a90', title: 'Retry the sync', agent: 'opencode', state: 'busy', workspaceId: 'app', workspaceName: 'sample-app' },
+  { handle: 'store-f12g34', title: 'Architecture map', agent: 'openclaude', state: 'idle', workspaceId: 'glass', workspaceName: 'orca-glass' },
   { handle: 'store-g56h78', title: 'API sketch', agent: 'claude', state: 'busy', workspaceId: 'archive', workspaceName: 'archive' },
   { handle: 'hermes:r4f2a1', title: 'Research notes', agent: 'hermes', state: 'idle', workspaceId: 'hermes-bot:research', workspaceName: 'Research bot', hermesGroup: 'bot' },
   { handle: 'hermes:s7d3b9', title: 'Plan next steps', agent: 'hermes', state: 'idle', workspaceId: 'hermes-session:desktop', workspaceName: 'Desktop', hermesGroup: 'session' },
@@ -54,6 +54,8 @@ const denseText = [
   '/ Do 1 and 3 now, then run the tests.',
   '> Working on it: adding the rate limit first, then the error answers.',
 ].join('\n');
+const diagramText = "/ Draw how a voice reply gets from the glasses to the agent.\n> Here is the path, end to end:\n  ┌──────────────┐         ┌──────────────┐         ┌──────────────┐\n  │ G2 glasses   │──BLE───▶│ Even app     │─Tailnet▶│ HUD Desk     │\n  │ 576x288 HUD  │         │ on the phone │  HTTPS  │ bridge on PC │\n  └──────────────┘         └──────────────┘         └───────┬──────┘\n                                                            │\n         ┌───────────────┬───────────────┬───────────────┬──┴────────────┐\n  ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐\n  │ Orca        │ │ Gmail       │ │ Beeper      │ │ Whisper     │ │ Ollama      │\n  │ agents      │ │ API         │ │ Desktop     │ │ voice       │ │ vision, EN  │\n  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘\n  Voice, pictures and translation run on your PC.\n/ What leaves the PC?\n> Only what each service needs:\n  | Part     | Runs on          | Talks to                 |\n  |----------|------------------|--------------------------|\n  | Whisper  | your PC          | nothing outside          |\n  | Ollama   | your PC          | nothing outside          |\n  | Gmail    | Google           | the bridge, with OAuth   |\n  | Beeper   | Beeper Desktop   | your chat networks       |";
+const diffText = "/ The sync job fails when the vendor rate-limits us. Add retry with backoff.\n> Found it: fetchPrices() throws on 429 and the whole run stops. Patching src/sync.ts:\n  ```diff\n  @@ -41,7 +41,12 @@ export async function fetchPrices(region: Region) {\n  -  const res = await fetch(url, { headers });\n  -  if (!res.ok) throw new Error(`HTTP ${res.status}`);\n  +  const res = await retry(() => fetch(url, { headers }), {\n  +    tries: 5, baseMs: 250, factor: 2, jitter: 0.2,\n  +    retryOn: (r) => r.status === 429 || r.status >= 500,\n  +  });\n  +  if (!res.ok) log.warn('prices', region, res.status);\n  ```\n  $ npm test -- sync\n  PASS  tests/sync.test.ts (12 tests)\n  PASS  tests/retry.test.ts (7 tests)\n  FAIL  tests/report.test.ts > totals match the vendor file\n  Tests: 41 passed, 1 failed, 42 total\n> One report test still expects the old error text; updating it now.";
 const choiceMenu = {
   id: 'store-choice-1',
   question: 'How should we ship this UI refresh?',
@@ -68,8 +70,8 @@ const byHandle = Object.fromEntries([
   ['store-b56d78', { text: nativeText, model: 'Qwopus-Pi-128k', menu: null }],
   ['store-c90e12', { text: nativeText, model: 'Opus 5.5', menu: choiceMenu }],
   ['store-d34f56', { text: tableText, model: 'GPT-6.1-Sol low', menu: null }],
-  ['store-e78a90', { text: nativeText, model: 'Qwopus3.8-27B-Coder-Flash', menu: null, progress: 'Running tests' }],
-  ['store-f12g34', { text: nativeText, model: 'GPT-5.6 Sol high', menu: null }],
+  ['store-e78a90', { text: diffText, model: 'Qwopus3.8-27B-Coder-Flash', menu: null, progress: 'Running tests' }],
+  ['store-f12g34', { text: diagramText, model: 'GPT-5.6 Sol high', menu: null }],
   ['store-g56h78', { text: denseText, model: 'Opus 5.5', menu: null, progress: 'Editing files' }],
   ['hermes:r4f2a1', { text: '/ Summarize the competitor notes.\n> Three themes stand out: pricing, onboarding and offline use.', model: 'Hermes Auto', menu: null }],
   ['hermes:s7d3b9', { text: '/ Draft the afternoon plan.\n> Focus on store screenshots, then description.', model: 'Hermes Auto', menu: null }],
@@ -98,6 +100,12 @@ const views = { fit: await imaging.render('kettle', load, { view: 'fit' }),
   outline: await imaging.render('kettle', load, { view: 'outline' }), zoom: [] };
 const firstZoom = await imaging.render('kettle', load, { view: 'zoom', region: 0 });
 for (let region = 0; region < firstZoom.regions; region++) views.zoom.push(await imaging.render('kettle', load, { view: 'zoom', region }));
+const fractalBytes = readFileSync(new URL('../.local/store-assets/fractal.png', import.meta.url));
+const fractalLoad = async () => fractalBytes;
+const fractal = { fit: await imaging.render('fractal', fractalLoad, { view: 'fit' }),
+  outline: await imaging.render('fractal', fractalLoad, { view: 'outline' }), zoom: [] };
+const fractalZoom = await imaging.render('fractal', fractalLoad, { view: 'zoom', region: 0 });
+for (let region = 0; region < fractalZoom.regions; region++) fractal.zoom.push(await imaging.render('fractal', fractalLoad, { view: 'zoom', region }));
 let readout;
 try { readout = readFileSync(readoutFile, 'utf8'); } catch {
   readout = (await imaging.render('kettle', load, { view: 'read' })).text;
@@ -117,6 +125,7 @@ const mailText = {
 const chats = [
   { id: 'site', title: 'Renovation: House B', date: now - 20 * 60000, unread: true, network: 'WhatsApp' },
   { id: 'trail', title: 'Trail work', date: now - 2 * 3600000, unread: true, network: 'Signal' },
+  { id: 'gen', title: 'Generative art', date: now - 3 * 3600000, unread: false, network: 'Telegram' },
   { id: 'reading', title: 'Reading group', date: now - 5 * 3600000, unread: false, network: 'Telegram' },
   { id: 'garden', title: 'Garden planning', date: now - 26 * 3600000, unread: false, network: 'WhatsApp' },
   { id: 'equip', title: 'Equipment', date: now - 50 * 3600000, unread: false, network: 'Signal' },
@@ -129,6 +138,10 @@ const chatMessages = {
     { id: 's2', own: false, from: 'Site team', date: now - 20 * 60000, text: siteList },
     { id: 's3', own: false, from: 'Site team', date: now - 19 * 60000, text: 'Photo of the new kettle for the pantry', media: 'Photo', image: true },
   ],
+  gen: [
+    { id: 'g0', own: false, from: 'Mira', date: now - 3 * 3600000 - 60000, text: 'Rendered the whole set at 1600x800 tonight.' },
+    { id: 'g1', own: false, from: 'Mira', date: now - 3 * 3600000, text: 'Mandelbrot, 1,000 iterations', media: 'Photo', image: true },
+  ],
 };
 const api = `
 const byHandle = ${JSON.stringify(byHandle)};
@@ -136,7 +149,9 @@ const defaultThread = ${JSON.stringify(defaultThread)};
 const working = new Set(${JSON.stringify([...working])});
 export const setDemo=()=>{},setApiLang=()=>{},setConnection=()=>{};
 const views=${JSON.stringify(views)};
+const fractal=${JSON.stringify(fractal)};
 const readout=${JSON.stringify(readout)};
+const pick=(v,request)=>request.view==='zoom'?v.zoom[Math.min(request.region||0,v.zoom.length-1)]:request.view==='outline'?v.outline:request.view==='read'?{text:'A Mandelbrot set: a black cardioid with a round bulb on its left and smaller bulbs around it, on a lighter background.'}:v.fit;
 const view=(request)=>request.view==='read'?{text:readout}:request.view==='zoom'?views.zoom[Math.min(request.region||0,views.zoom.length-1)]:request.view==='outline'?views.outline:views.fit;
 export const currentBase=()=> 'store preview (sample data)';
 export const api={
@@ -164,7 +179,7 @@ export const api={
     messages:async id=>({messages:${JSON.stringify(chatMessages)}[id]||[{id:'x1',own:false,from:'Fixture sender',date:${now},text:'The sample schedule is ready for review.'}]}),
     translate:async(chatId,ids)=>({items:ids.map(id=>id==='s2'?{id,textLines:${JSON.stringify(siteLines)}}:{id,textLines:null})}),
     transcribe:async()=>({text:'',language:''}),
-    image:async(chatId,messageId,request={})=>view(request),
+    image:async(chatId,messageId,request={})=>chatId==='gen'?pick(fractal,request):view(request),
     read:async()=>({ok:true}),
     send:async()=>{throw new Error('Store preview: sending is disabled.');},
   },

@@ -140,7 +140,7 @@ Rule for every agent: each beta release updates this file in the release commit:
 <!-- description:start -->
 Read your agent sessions, email and chats on G2. Talk, type on a Bluetooth keyboard, open pictures.
 
-HUD Desk connects G2 to agents in Orca on your Windows PC, to Gmail and to Beeper chats. The top row switches Coding, Email and Chat.
+HUD Desk (renamed from Orca Glass) connects G2 to agents in Orca on your Windows PC, to Gmail and to Beeper chats. The top row switches Coding, Email and Chat.
 
 Coding:
 - Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent sessions with model and status; Orca chat sessions read-only.

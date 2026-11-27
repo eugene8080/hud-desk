@@ -152,25 +152,36 @@ spinner on its L frame, and the GitHub README.
 - Found while capturing, fixed in 1.0.90: CJK overlapped in Scientifica 5x11 (12 px glyph in
   10 px); now three cells. AI Readout refused progressive JPEG (Ollama 400); the bridge now converts
   JPEG to PNG (live after a bridge restart).
-- Upload PNGs (576x288, opaque, `store/screenshots/`; transparent originals in `native/`):
+- Upload the TRANSPARENT originals in `store/screenshots/native/` (green + alpha, as the simulator's
+  screenshot function writes them; Even Hub's submission docs ask for that function). The portal lays
+  them over its Environment photo; the opaque copies in `store/screenshots/` show as a black box (seen
+  2026-11-27). The portal keeps at most 8. Uploaded 2026-11-27, in this order: 02-architecture,
+  01-coding-dense, 03-live-diff, 11-fractal, 09-picture, 13-chat, 15-chat-translate, 07-email.
+- Portal also updated 2026-11-27: name HUD Desk, tagline 'Agents, inbox, chats. Heads up, hands free.',
+  icon `store/icon/hud-desk-icon.png` (ink must be exactly #F4F4F4), tags orca claude codex email chat.
+- Usage bars (Eugene asked): the glasses Usage page is text only; bars would be new drawing code. Not done.
+- Files:
 
 | File | Shows |
 | --- | --- |
-| `01-coding.png` | Coding sessions: Top row switches Coding, Email and Chat; ten fictional sessions with [workspace/agent]; working ones marked. |
-| `02-coding-dense.png` | Reader: Scientifica 5x11 on Tube: Opus 5.5 working (scanner sweep), an aligned table, Japanese and Cantonese lines with English: 23 text rows, up to 114 columns. |
-| `03-coding-native.png` | Reader: native text: Composer 2.5 working, Braille spinner on its L frame, timer and page. |
-| `04-voice.png` | Voice review: Fictional transcript; tap to send, double-tap to cancel. |
-| `05-email.png` | Email: One mailbox, Filter by Label, read marks and times. |
-| `06-email-pictures.png` | Email with pictures: A fictional newsletter; [Image] rows open the picture. |
-| `07-picture.png` | Original Picture: A kettle product photo converted for the G2's 16 green levels. |
-| `08-outline.png` | Outline: The same photo as thin edges. |
-| `09-ai-readout.png` | AI Readout: The local vision model's description of the photo (its real answer). |
-| `10-chat.png` | Chat: Beeper chats with [day/app]: WhatsApp, Signal, Telegram. |
-| `11-chat-networks.png` | Filter by Network: Choose which chat apps show. |
-| `12-chat-translate.png` | Chat translation: A Cantonese list keeps its bullets; English under each line. |
-| `13-keys.png` | Keyboard keys: The ? page: Gmail and IDE keys. Rendered by the app's keys-page code, because the simulator has no keyboard. |
-| `14-backgrounds.png` | Compare backgrounds: Every background for your turns; choose in place. |
-| `15-compare-fonts.png` | Compare fonts: Native text and the pixel fonts, large to small; choose in place. |
+| `01-coding-dense.png` | Reader: Scientifica 5x11 on Tube: Opus 5.5 working (scanner sweep), an aligned table, Japanese and Cantonese lines with English: 23 text rows, up to 114 columns. |
+| `02-architecture.png` | Architecture map: An agent's box-drawn diagram (G2, phone, bridge, Orca, Gmail, Beeper, Whisper, Ollama) and a table, Terminus 6x12 on Tube. |
+| `03-live-diff.png` | Live coding: A working session mid-run: a diff and test output in Terminus with the Left bar background; scanner sweep. |
+| `04-coding-list.png` | Coding sessions: Top row switches Coding, Email and Chat; ten fictional sessions with [workspace/agent]; working ones marked. |
+| `05-coding-native.png` | Reader: native text: Composer 2.5 working, Braille spinner on its L frame, timer and page. |
+| `06-voice.png` | Voice review: Fictional transcript; tap to send, double-tap to cancel. |
+| `07-email.png` | Email: One mailbox, Filter by Label, read marks and times. |
+| `08-email-pictures.png` | Email with pictures: A fictional newsletter; [Image] rows open the picture. |
+| `09-picture.png` | Original Picture: A kettle product photo converted for the G2's 16 green levels. |
+| `10-outline.png` | Outline: The same photo as thin edges. |
+| `11-fractal.png` | Outline of a Mandelbrot set: A picture made by ffmpeg, sent in a Telegram chat, shown as Outline. |
+| `12-ai-readout.png` | AI Readout: The local vision model's description of the kettle photo (its real answer). |
+| `13-chat.png` | Chat: Beeper chats with [day/app]: WhatsApp, Signal, Telegram. |
+| `14-chat-networks.png` | Filter by Network: Choose which chat apps show. |
+| `15-chat-translate.png` | Chat translation: A Cantonese list keeps its bullets; English under each line. |
+| `16-keys.png` | Keyboard keys: The ? page: Gmail and IDE keys. Rendered by the app's keys-page code, because the simulator has no keyboard. |
+| `17-backgrounds.png` | Compare backgrounds: Every background for your turns; choose in place. |
+| `18-compare-fonts.png` | Compare fonts: Native text and the pixel fonts, large to small; choose in place. |
 
 - Kettle: `.local/store-assets/kettle.jpg` (gitignored), a COSORI product photo Eugene chose from a
   chat; the AI Readout text is the local model's answer, cached in `.local/store-assets/kettle-readout.txt`.
