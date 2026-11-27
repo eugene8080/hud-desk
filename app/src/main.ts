@@ -582,7 +582,7 @@ function showFonts() {
 }
 
 // Backgrounds menu (Eugene, 2026-11-27): its own row in the reader's long-press menu. Compare
-// backgrounds first (always on the first page of the 16 rows), then every option.
+// backgrounds first, then every option.
 function showBackgrounds(reader: TextScreen) {
   const selected = TURN_BACKGROUNDS.indexOf(turnBackground);
   const labels = [tr('compareBackgrounds'), ...TURN_BACKGROUNDS.map((option, i) => turnBackgroundLabel(option) + (i === selected ? ' ✓' : ''))];

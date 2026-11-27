@@ -56,6 +56,17 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.71 (Eugene, second pass on backgrounds): Ink 5/8, Ink 1/2, Ink 1/4 (solid Ink 1,
+7/8, 3/4 removed; Ink 1/2 and 1/4 are pixel-identical to the old Dots 1/2 and 1/4, so a saved
+dots2/dots4 maps to ink12/ink14 and those Dots entries are gone; Dots 1/3 stays); Lines 1/3
+(default), 1/4, 1/8 (1/2 removed); Tube dim and Tube (Tube turns and Tube wide removed); 1px frame
+joins consecutive user messages, across blank rows between them, into one frame. 231 tests, build
+pass. Cleanup: D:/dev/messenger-glass deleted (nothing unpushed; INTERNAL.md not needed per Eugene),
+its scheduled tasks unregistered, its Orca project hidden (the CLI cannot remove a project; remove
+it in Orca's sidebar). Public Tailscale Funnel on 443 (marine-traffic-app, 127.0.0.1:8600) turned
+off at Eugene's request; :8443 tailnet-only Orca Glass entry kept and healthy. Eugene: g2new revoked,
+GazeChat uninstalled from the phone, builtproper/gazechat PR #1 closed.
+
 2026-11-27 beta 1.0.70 (Eugene: three dimmer Ink 1 options, Tube turns with more space and dim,
 Dots 1/3 and 1/4). Fills come from one 4x4 Bayer dither in absolute coordinates: Ink 1 7/8 (14/16),
 3/4 (12/16), 5/8 (10/16), Dots 1/2 (8/16, the checker as before), 1/3 (5/16), 1/4 (4/16). Tube

@@ -2195,38 +2195,40 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
   const { line, textX, textWidth } = fineExports.fineLayout('terminus');
   const right = textX + textWidth - 1;
   const text = '/ Check this.\n> Checked.';
-  // A value saved by a removed option (Ink 3) falls back to Lines 1/3.
+  // A value saved by a removed option (Ink 3) falls back to Lines 1/3; the old Dots 1/2 is Ink 1/2.
+  assert.equal(fineExports.parseTurnBackground('dots2'), 'ink12');
+  assert.equal(fineExports.parseTurnBackground('dots4'), 'ink14');
+  for (const old of ['1', '3', 'ink78', 'lines2', 'tubeturns', 'tubewide']) assert.equal(fineExports.parseTurnBackground(old), 'lines3');
   const h = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-turn-bg': '3' } });
   h.api.thread = async () => ({ text });
   await h.pick(2);
   for (const y of [3, 4, 5, 6]) assert.equal(tilePixel(sentFineTiles(h), right, y), y >= 4 && y % 3 === 0 ? 17 : 0);
   await h.menu(1109);
-  assert.deepEqual(menuItems(h), ['Compare backgrounds', 'None', 'Ink 1', 'Ink 1 · 7/8', 'Ink 1 · 3/4', 'Ink 1 · 5/8',
-    'Lines 1/2', 'Lines 1/3 ✓', 'Dots 1/2', 'Dots 1/3']);
+  assert.deepEqual(menuItems(h), ['Compare backgrounds', 'None', 'Ink 5/8', 'Ink 1/2', 'Ink 1/4', 'Lines 1/3 ✓',
+    'Lines 1/4', 'Lines 1/8', 'Dots 1/3', 'Tube dim']);
   await h.pick(0);
   const comparison = sentFineTiles(h);
   const row = i => 4 + i * (line + fineExports.BACKGROUND_GAP);
   const lit = (i, test) => Array.from({ length: line }, (_, r) => row(i) + r)
     .every(y => [right - 3, right - 2, right - 1, right].every(x => tilePixel(comparison, x, y) === (test(x, y) ? 17 : 0)));
   const scan = (pitch, fill) => (x, y) => y % pitch !== pitch - 1 && ditherLit(fill)(x, y);
-  const expected = [() => false, () => true, ditherLit(14), ditherLit(12), ditherLit(10), (_x, y) => y % 2 === 0,
-    (_x, y) => y % 3 === 0, ditherLit(8), ditherLit(5), ditherLit(4), scan(3, 16), scan(4, 16), scan(3, 8), scan(3, 16)];
-  const names = ['None', 'Ink 1', 'Ink 7/8', 'Ink 3/4', 'Ink 5/8', 'Lines 1/2', 'Lines 1/3', 'Dots 1/2', 'Dots 1/3',
-    'Dots 1/4', 'Tube turns', 'Tube wide', 'Tube dim', 'Tube'];
+  const expected = [() => false, ditherLit(10), ditherLit(8), ditherLit(4), (_x, y) => y % 3 === 0, (_x, y) => y % 4 === 0,
+    (_x, y) => y % 8 === 0, ditherLit(5), scan(3, 8), scan(3, 16)];
+  const names = ['None', 'Ink 5/8', 'Ink 1/2', 'Ink 1/4', 'Lines 1/3', 'Lines 1/4', 'Lines 1/8', 'Dots 1/3', 'Tube dim', 'Tube'];
   expected.forEach((test, i) => assert.ok(lit(i, test), names[i]));
   // 1px frame at Ink 2: the right edge lit on every row of the turn, inside empty.
-  assert.ok(Array.from({ length: line }, (_, r) => tilePixel(comparison, right, row(14) + r) === 34).every(Boolean), '1px frame');
-  assert.equal(tilePixel(comparison, right - 1, row(14) + 1), 0);
+  assert.ok(Array.from({ length: line }, (_, r) => tilePixel(comparison, right, row(10) + r) === 34).every(Boolean), '1px frame');
+  assert.equal(tilePixel(comparison, right - 1, row(10) + 1), 0);
   for (const font of fineExports.FINE_FONTS) {
     const { line: fontLine } = fineExports.fineLayout(font);
-    assert.ok(4 + 15 * (fontLine + fineExports.BACKGROUND_GAP) + 8 + fontLine <= 287, font);
+    assert.ok(4 + 11 * (fontLine + fineExports.BACKGROUND_GAP) + 8 + fontLine <= 287, font);
   }
   await h.scroll('down');
-  // Page two: swipe past Dots 1/3 to Dots 1/4 ... 1px frame, then pick Tube.
+  // Page two: swipe past Tube dim to Tube and 1px frame, then pick Tube.
   await h.menu(1109);
-  for (let i = 0; i < 3; i++) await h.scroll('down');
-  assert.deepEqual(menuItems(h), ['Dots 1/4', 'Tube turns', 'Tube wide', 'Tube dim', 'Tube', '1px frame']);
-  await h.pick(4);
+  for (let i = 0; i < 5; i++) await h.scroll('down');
+  assert.deepEqual(menuItems(h), ['Tube', '1px frame']);
+  await h.pick(0);
   assert.equal(h.storage.get('reader-turn-bg'), 'tube');
   const tube = sentFineTiles(h);
   assert.equal(tilePixel(tube, right, 4), 17);
@@ -2234,13 +2236,13 @@ test('Backgrounds menu: Compare first, Lines 1/3 by default, page-two options sa
   assert.equal(tilePixel(tube, 0, 5), 153); // the whole screen is scanned: frame at step 9 on y = 5
   assert.equal(tilePixel(tube, 0, 4), 255);
   // At App Brightness 1 no background is drawn: no step below Ink 1 text.
-  const dim = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-ink': '1', 'reader-turn-bg': 'ink34' } });
+  const dim = await moduleHarness({ storage: { 'reader-text': 'terminus', 'reader-ink': '1', 'reader-turn-bg': 'ink58' } });
   dim.api.thread = async () => ({ text });
   await dim.pick(2);
   for (const y of [4, 5]) assert.equal(tilePixel(sentFineTiles(dim), right, y), 0);
 });
 
-test('every Background label fits the glasses menu, and tube variants scan their own pitch', () => {
+test('every Background label fits the glasses menu, and Tube dim scans only your turns', () => {
   for (const option of fineExports.TURN_BACKGROUNDS) {
     const label = `Background: ${fineExports.turnBackgroundLabel(option)}`;
     assert.ok(listExports.glassWidth(label) <= 210, label);
@@ -2249,20 +2251,42 @@ test('every Background label fits the glasses menu, and tube variants scan their
   const status = { left: '', right: '' };
   const { textX, line } = fineExports.fineLayout('terminus');
   const plain = fineExports.renderFineScreen(page, 'terminus', status, 15, 'none');
-  for (const [option, pitch] of [['tubeturns', 3], ['tubewide', 4], ['tubedim', 3]]) {
-    const tiles = fineExports.renderFineScreen(page, 'terminus', status, 15, option);
-    for (let y = 4; y < 4 + line; y++) for (let x = textX; x < textX + 36; x++) {
-      if (tilePixel(plain, x, y) === 255) assert.equal(tilePixel(tiles, x, y), y % pitch === pitch - 1 ? 153 : 255, `${option} ${x},${y}`);
-    }
-    assert.equal(tilePixel(tiles, 0, 5), 255, `${option} leaves the screen frame alone`);
+  const tiles = fineExports.renderFineScreen(page, 'terminus', status, 15, 'tubedim');
+  for (let y = 4; y < 4 + line; y++) for (let x = textX; x < textX + 36; x++) {
+    if (tilePixel(plain, x, y) === 255) assert.equal(tilePixel(tiles, x, y), y % 3 === 2 ? 153 : 255, `${x},${y}`);
   }
+  assert.equal(tilePixel(tiles, 0, 5), 255, 'Tube dim leaves the screen frame alone');
+});
+
+test('1px frame joins consecutive messages of yours, across blank rows, into one frame', () => {
+  const { line, textX, textWidth } = fineExports.fineLayout('terminus');
+  const right = textX + textWidth - 1, x = right - 3;
+  const status = { left: '', right: '' };
+  const edges = (page, rows) => {
+    const tiles = fineExports.renderFineScreen(page, 'terminus', status, 15, 'frame');
+    return Array.from({ length: rows }, (_, r) => ({
+      side: tilePixel(tiles, right, 4 + r * line + 1) === 34,
+      top: tilePixel(tiles, x, 4 + r * line) === 34,
+      bottom: tilePixel(tiles, x, 4 + r * line + line - 1) === 34,
+    }));
+  };
+  // Chat: two messages of yours in a row, then a reply.
+  const chat = edges({ text: '/ One.\n/ Two.\n> Reply.', userTurns: [1, 2, 0] }, 3);
+  assert.deepEqual(chat, [{ side: true, top: true, bottom: false }, { side: true, top: false, bottom: true },
+    { side: false, top: false, bottom: false }]);
+  // Coding: a blank row between two of your messages stays inside the frame; a blank row before the
+  // reply does not.
+  const coding = edges({ text: '/ One.\n\n/ Two.\n\n> Reply.', userTurns: [1, 0, 2, 0, 0] }, 5);
+  assert.deepEqual(coding.map(r => r.side), [true, true, true, false, false]);
+  assert.deepEqual(coding.map(r => r.top), [true, false, false, false, false]);
+  assert.deepEqual(coding.map(r => r.bottom), [false, false, true, false, false]);
 });
 
 test('scanlines dim lit text pixels on every third row and never drop them below Ink 1', () => {
   const page = { text: '/ MMMM', userTurns: [1] };
   const status = { left: '', right: '' };
   const plain = fineExports.renderFineScreen(page, 'terminus', status, 15, 'none');
-  const turns = fineExports.renderFineScreen(page, 'terminus', status, 15, 'tubeturns');
+  const turns = fineExports.renderFineScreen(page, 'terminus', status, 15, 'tubedim');
   const { textX, line } = fineExports.fineLayout('terminus');
   let dimmed = 0;
   for (let y = 4; y < 4 + line; y++) {

@@ -32,20 +32,24 @@ const NAMES: Record<FineFont, string> = {
 export const fineLabel = (font: FineFont) => `${NAMES[font]} ${TABLES[font].width}x${TABLES[font].height}`;
 // User-turn backgrounds. Ink 1 is the panel's lowest step, so every dimmer option lights only part
 // of the band at Ink 1. Fill fractions come from one 4x4 ordered (Bayer) dither in absolute screen
-// coordinates, so they read as an even, finer grey: Ink 1 at 7/8, 3/4 and 5/8 (2026-11-27: "3 more
-// dimmer options than ink 1"), then Dots 1/2 (the 1px checker), Dots 1/3 (5/16 lit) and Dots 1/4
-// (one pixel in each 2x2). Lines light every 2nd or 3rd pixel row. G2 note (2026-11-09): 1px line
-// gratings looked even, a 1px checker blotchy.
+// coordinates, so they read as an even, finer grey. Eugene, 2026-11-27 (second pass): Ink 5/8, Ink
+// 1/2 and Ink 1/4 only (solid Ink 1, 7/8 and 3/4 removed). Ink 1/2 and 1/4 are pixel-for-pixel the
+// former Dots 1/2 (1px checker) and Dots 1/4 (one pixel in each 2x2), so a saved 'dots2'/'dots4'
+// carries over; Dots 1/3 (5/16 lit) stays. Lines light every 3rd, 4th or 8th pixel row (Lines 1/2
+// removed). G2 note (2026-11-09): 1px line gratings looked even, a 1px checker blotchy.
 // Tube (2026-11-27, "a tube TV look like my terminal watch face", claude-usage-widget
 // garmin/faces/terminal): a CRT scanline on every third pixel row (rows y % 3 == 2, the face's
 // SCAN_PITCH and phase), dark in the lit band and dimming any text it crosses by 38 % (the face's
 // "on text" 38 %). Tube turns scans your turns only; Tube scans the whole screen, as the face does.
-// Tube wide puts the scanline on every fourth row (more space between lines); Tube dim keeps every
-// third row with a half-lit (checker) band (2026-11-27: "for tube turns, more space, dim options").
-// 1px frame: a thin outline around each of your turns at Ink 2 (back by request, 2026-11-27).
+// Tube dim scans your turns only: every third row dark, a half-lit (checker) band. Tube turns and
+// Tube wide were removed in the second pass (2026-11-27).
+// 1px frame: a thin outline at Ink 2 around your turns; consecutive messages of yours share one
+// frame, including blank rows between them (Eugene, 2026-11-27).
 // Default Lines 1/3 (Eugene, 2026-11-27). Ink 2/3 were dropped; a saved one falls back to the default.
-export const TURN_BACKGROUNDS = ['none', '1', 'ink78', 'ink34', 'ink58', 'lines2', 'lines3', 'dots2', 'dots3', 'dots4',
-  'tubeturns', 'tubewide', 'tubedim', 'tube', 'frame'] as const;
+export const TURN_BACKGROUNDS = ['none', 'ink58', 'ink12', 'ink14', 'lines3', 'lines4', 'lines8', 'dots3',
+  'tubedim', 'tube', 'frame'] as const;
+// Saved values from earlier betas that map onto an option that still exists.
+const RENAMED: Record<string, TurnBackground> = { dots2: 'ink12', dots4: 'ink14' };
 export type TurnBackground = typeof TURN_BACKGROUNDS[number];
 export const DEFAULT_TURN_BACKGROUND: TurnBackground = 'lines3';
 export const SCAN_PITCH = 3;
@@ -56,23 +60,20 @@ const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 const dither = (k: number) => (x: number, y: number) => BAYER4[y & 3][x & 3] < k;
 // Tube variants: scanline pitch and the lit fraction of the band's other rows (16 = solid).
 const TUBES: Partial<Record<TurnBackground, { pitch: number; fill: number }>> = {
-  tubeturns: { pitch: 3, fill: 16 }, tubewide: { pitch: 4, fill: 16 }, tubedim: { pitch: 3, fill: 8 }, tube: { pitch: 3, fill: 16 },
+  tubedim: { pitch: 3, fill: 8 }, tube: { pitch: 3, fill: 16 },
 };
 export function parseTurnBackground(value: string | null | undefined): TurnBackground {
-  return TURN_BACKGROUNDS.find(option => option === value) ?? DEFAULT_TURN_BACKGROUND;
+  return TURN_BACKGROUNDS.find(option => option === value) ?? (value ? RENAMED[value] : undefined) ?? DEFAULT_TURN_BACKGROUND;
 }
 export function turnBackgroundLabel(option: TurnBackground): string {
   if (option === 'none') return t('backgroundNone');
-  if (option === 'lines2') return t('backgroundLines', '1/2');
+  if (option === 'ink58') return t('backgroundInk', '5/8');
+  if (option === 'ink12') return t('backgroundInk', '1/2');
+  if (option === 'ink14') return t('backgroundInk', '1/4');
   if (option === 'lines3') return t('backgroundLines', '1/3');
-  if (option === 'ink78') return t('backgroundInk', '1 · 7/8');
-  if (option === 'ink34') return t('backgroundInk', '1 · 3/4');
-  if (option === 'ink58') return t('backgroundInk', '1 · 5/8');
-  if (option === 'dots2') return t('backgroundDots', '1/2');
+  if (option === 'lines4') return t('backgroundLines', '1/4');
+  if (option === 'lines8') return t('backgroundLines', '1/8');
   if (option === 'dots3') return t('backgroundDots', '1/3');
-  if (option === 'dots4') return t('backgroundDots', '1/4');
-  if (option === 'tubeturns') return t('backgroundTubeTurns');
-  if (option === 'tubewide') return t('backgroundTubeWide');
   if (option === 'tubedim') return t('backgroundTubeDim');
   if (option === 'tube') return t('backgroundTube');
   if (option === 'frame') return t('backgroundFrame');
@@ -83,17 +84,13 @@ const tubeLit = ({ pitch, fill }: { pitch: number; fill: number }) => (x: number
 // Which pixels of a band a background lights, in absolute screen coordinates so the pattern
 // stays continuous across rows and fonts with odd line heights.
 const TURN_PATTERNS: Record<Exclude<TurnBackground, 'none' | 'frame'>, (x: number, y: number) => boolean> = {
-  '1': () => true,
-  ink78: dither(14),
-  ink34: dither(12),
   ink58: dither(10),
-  lines2: (_x, y) => y % 2 === 0,
+  ink12: dither(8),
+  ink14: dither(4),
   lines3: (_x, y) => y % 3 === 0,
-  dots2: dither(8),
+  lines4: (_x, y) => y % 4 === 0,
+  lines8: (_x, y) => y % 8 === 0,
   dots3: dither(5),
-  dots4: dither(4),
-  tubeturns: tubeLit(TUBES.tubeturns!),
-  tubewide: tubeLit(TUBES.tubewide!),
   tubedim: tubeLit(TUBES.tubedim!),
   tube: tubeLit(TUBES.tube!),
 };
@@ -334,22 +331,35 @@ function drawTurnRows(s: Surface, page: ReaderPage, top: number, background: Tur
   const lines = page.text.split('\n').slice(0, rows);
   // Keep at least one ink step between the letters and the background at low brightness.
   const ink = Math.max(0, Math.min(inkByte(background === 'frame' ? 2 : 1), s.ink - inkByte(1)));
-  if (background !== 'none' && ink > 0) {
-    lines.forEach((_, r) => {
-      const turn = page.userTurns[r];
-      if (!turn) return;
+  if (background === 'frame' && ink > 0) {
+    // One outline per run of your messages: a row is inside when it is yours, or blank between two
+    // rows of yours. Sides on every inside row, top where the run starts, bottom where it ends.
+    const user = (r: number) => !!page.userTurns[r];
+    const blank = (r: number) => !lines[r]?.trim();
+    const framed = lines.map((_, r) => {
+      if (user(r)) return true;
+      if (!blank(r)) return false;
+      let above = r - 1, below = r + 1;
+      while (above >= 0 && blank(above) && !user(above)) above--;
+      while (below < lines.length && blank(below) && !user(below)) below++;
+      return above >= 0 && below < lines.length && user(above) && user(below);
+    });
+    framed.forEach((inside, r) => {
+      if (!inside) return;
       const y = top + r * line;
-      if (background !== 'frame') { s.pattern(textX, y, textWidth, line, ink, TURN_PATTERNS[background]); return; }
-      // One outline per turn: sides on every row, top on its first row, bottom on its last.
       s.rect(textX, y, 1, line, ink);
       s.rect(textX + textWidth - 1, y, 1, line, ink);
-      if (page.userTurns[r - 1] !== turn) s.rect(textX, y, textWidth, 1, ink);
-      if (r === lines.length - 1 || page.userTurns[r + 1] !== turn) s.rect(textX, y + line - 1, textWidth, 1, ink);
+      if (!framed[r - 1]) s.rect(textX, y, textWidth, 1, ink);
+      if (r === lines.length - 1 || !framed[r + 1]) s.rect(textX, y + line - 1, textWidth, 1, ink);
+    });
+  } else if (background !== 'none' && ink > 0) {
+    lines.forEach((_, r) => {
+      if (page.userTurns[r]) s.pattern(textX, top + r * line, textWidth, line, ink, TURN_PATTERNS[background as Exclude<TurnBackground, 'none' | 'frame'>]);
     });
   }
   lines.forEach((row, r) => s.text(row, textX, top + r * line, columns));
-  // Tube turns, wide and dim: the scanlines cross the letters of your turns too. (Tube scans the
-  // whole screen afterwards, in renderFineScreen and the comparison.)
+  // Tube dim: the scanlines cross the letters of your turns too. (Tube scans the whole screen
+  // afterwards, in renderFineScreen and the comparison.)
   const tube = TUBES[background];
   if (tube && background !== 'tube') {
     lines.forEach((_, r) => { if (page.userTurns[r]) s.scanlines(textX, top + r * line, textWidth, line, tube.pitch); });
@@ -405,8 +415,8 @@ export function renderFontComparison(level = INK_MAX): number[][] {
   return s.tiles();
 }
 
-// One row per option: its label on the left and the sample turn to the right, so all fifteen
-// options fit the screen in every font (Departure 7x14 included).
+// One row per option: its label on the left and the sample turn to the right, so every option
+// fits the screen in every font (Departure 7x14 included).
 export const BACKGROUND_GAP = 2;
 export function backgroundComparisonLayout(font: FineFont) {
   const { width: cell } = TABLES[font];
