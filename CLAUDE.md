@@ -58,6 +58,18 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 beta 1.0.99: worker chart-labels follow-ups merged (77e4361, fast-forward; dispatch
+ctx_2411c2acaf2f). Measured (3 runs per chart, image new, real bridge path; report private at
+.local/chart-test/report-shared-reading.md): labels as the 2nd turn of the readout conversation with
+centre points 2.8-3.9 s vs 4.4-5.8 s, same accuracy, readout unchanged; one-call V5/V6 lost values (not
+used); no-position V2 misplaced values (not used). Built: order Original, Zoom, AI Readout, AI Labels;
+background reading from opening a chart (one model call at a time, stopped on leaving via POST
+/api/image/idle); at 3 s per view both AI views wait ~0 s; GPU ~5 s per chart opened. 329 tests pass
+here, build pass; beta 1.0.99 CLI verified 253,069 bytes; prototype build restored. Store description
+and Japanese line reordered (1,987 chars); store fixture got imageIdle. NOT done: bridge restart (the
+new call and background reading need it; ask Eugene), G2 check. Open: Chat translation shares the GPU
+outside the image queue.
+
 2026-11-28 beta 1.0.98 (Eugene: the chat 'defaults to showing just one message on the last page', sometimes
 the second last too, then a full page; his chats with Ewan MacDougal and Roger Kuo). Cause: readerLayout cut
 Chat/Email at the newest message (openingOffset) and paged the earlier part forward, so the newest message

@@ -186,6 +186,7 @@ export const api={
   health:async()=>({ok:true}),
   capabilities:async()=>({voice:true,images:true,imageRead:true,imageLabels:true,modules:['coding','email','chat'],chatFeatures:{transcribe:true,translate:true}}),
   historyImage:async(handle,n,request={})=>view(request),
+  imageIdle:async()=>({ok:true}), // 1.0.99: the viewer tells the bridge it closed (stops background reading)
   mail:{
     accounts:async()=>[{id:'work',short:'W',address:'me@example.com',ok:true}],
     labels:async()=>[{id:'INBOX',name:'Inbox',unread:3},{id:'Label_1',name:'Newsletters',unread:1},{id:'Label_2',name:'Projects',unread:1}],

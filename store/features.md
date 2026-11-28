@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.98**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.99**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -168,7 +168,7 @@ Chat (Beeper: WhatsApp, Signal, Telegram and more):
 - Rows show the day and the app; Filter by Network; formatting kept.
 - Voice notes transcribed (Cantonese tuned). English under each line. Photos open on the glasses.
 
-Pictures: Original Picture (tuned for G2), AI Labels (chart text redrawn sharp), Zoom in sections, and AI Readout: a local vision model describes the picture.
+Pictures: Original Picture (tuned for G2), Zoom in sections, AI Readout (a local vision model describes it) and AI Labels (chart text redrawn sharp).
 
 Keyboard: Gmail-style keys everywhere, VS Code-style Ctrl+P, Ctrl+Shift+P, Ctrl+Tab, Ctrl+F; ? shows every key.
 
@@ -184,5 +184,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.98: Chat and Email pages fill from the newest message back, so the last page is full instead of holding one message (and the page before it no longer holds a stray one). A newest message longer than a page still starts its own page. A chat that gets translations while open stays on the newest message.
+1.0.99: Charts open faster. The views now run Original Picture, Zoom, AI Readout, AI Labels, and the PC starts reading a chart as soon as you open it, so after a few seconds on each view both AI views are ready when you click. AI Labels reuses the readout's look at the picture: about 3 s instead of 5 s when you click straight through. Reading stops when you leave the picture.
 <!-- whatsnew:end -->
