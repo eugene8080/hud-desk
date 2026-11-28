@@ -58,6 +58,13 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 bridge restarted with Eugene's approval for 1.0.95 (Orca bell) and 1.0.96 (AI Labels): old
+supervisor 40464/server 44168/whisper 72344 (ownership checked: pid file, tree, 8787 owner); new
+supervisor 53748, server 29976, whisper 64852 --vad; local and tailnet healthz ok. Read-only check:
+capabilities imageLabels true (images, imageRead true; modules coding+email+chat; orca true);
+/api/threads 53 rows: idle with Orca's bell 3, idle read 6, working 1, unknown 1, no flag 42 (plain
+CLI and Hermes rows, new-output rule). G2 check of both features pending (Eugene).
+
 2026-11-28 beta 1.0.96: AI Labels merged (worker chart-labels, claude, ctx_eaabec0ab8af, 55ca73d,
 fast-forward). Charts only, cycle Original Picture, AI Labels, Zoom, Outline, AI Readout; capability
 imageLabels. bridge/chart-labels.mjs: one cached Ollama JSON call for the words; positions from the
