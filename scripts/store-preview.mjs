@@ -106,6 +106,22 @@ const fractal = { fit: await imaging.render('fractal', fractalLoad, { view: 'fit
   outline: await imaging.render('fractal', fractalLoad, { view: 'outline' }), zoom: [] };
 const fractalZoom = await imaging.render('fractal', fractalLoad, { view: 'zoom', region: 0 });
 for (let region = 0; region < fractalZoom.regions; region++) fractal.zoom.push(await imaging.render('fractal', fractalLoad, { view: 'zoom', region }));
+// A news-style line chart with invented data (scripts/make-store-chart.py). Eugene chose this
+// look-alike over a newsletter's real chart for the README and store (2026-11-27): same genre, nothing
+// copied. Views and the AI Readout come from the bridge's picture code and the local vision model; the
+// readout is cached next to the chart.
+const chartBytes = readFileSync(new URL('../.local/store-assets/markets-chart.png', import.meta.url));
+const chartLoad = async () => chartBytes;
+const chart = { fit: await imaging.render('chart', chartLoad, { view: 'fit' }),
+  outline: await imaging.render('chart', chartLoad, { view: 'outline' }), zoom: [] };
+const chartZoom = await imaging.render('chart', chartLoad, { view: 'zoom', region: 0 });
+for (let region = 0; region < chartZoom.regions; region++) chart.zoom.push(await imaging.render('chart', chartLoad, { view: 'zoom', region }));
+const chartReadoutFile = new URL('../.local/store-assets/markets-chart-readout.txt', import.meta.url);
+let chartReadout;
+try { chartReadout = readFileSync(chartReadoutFile, 'utf8'); } catch {
+  chartReadout = (await imaging.render('chart', chartLoad, { view: 'read' })).text;
+  writeFileSync(chartReadoutFile, chartReadout);
+}
 let readout;
 try { readout = readFileSync(readoutFile, 'utf8'); } catch {
   readout = (await imaging.render('picture', load, { view: 'read' })).text;
@@ -113,6 +129,7 @@ try { readout = readFileSync(readoutFile, 'utf8'); } catch {
 }
 const now = Date.now();
 const mailThreads = [
+  { account: 'work', id: 'markets', from: 'Market Desk', subject: 'Evening wrap: Nimbus back above its offer price', date: now - 12 * 60000, unread: true, count: 1 },
   { account: 'work', id: 'news', from: 'Field Notes Daily', subject: 'Morning briefing: picture of the week', date: now - 25 * 60000, unread: true, count: 1 },
   { account: 'work', id: 'plan', from: 'Workshop Desk', subject: 'Workshop schedule for Thursday', date: now - 3 * 3600000, unread: true, count: 2 },
   { account: 'work', id: 'pack', from: 'Trail Team', subject: 'Revised packing list', date: now - 7 * 3600000, unread: false, count: 1 },
@@ -120,6 +137,7 @@ const mailThreads = [
   { account: 'work', id: 'map', from: 'Survey Office', subject: 'Map corrections', date: now - 50 * 3600000, unread: false, count: 3 },
 ];
 const mailText = {
+  markets: 'Market Desk\nNimbus Robotics finished its second week of trading at $44.70, back above its $40 offer price after closing below it on Mar. 10.\n\n[[img:0]]\nThe chart shows each daily close since the listing.',
   news: 'Field Notes Daily\n[[img:0]]\nGood morning. This week: a fractal to stare at, the new trail map, and the spring workshop list is open.\n\nPicture of the week\n[[img:1]]\nA Mandelbrot set at 1,000 iterations: zoom into any edge and the coastline never ends.\n\nToday\n• Trail map: corrected routes for the east loop\n• Workshop sign-ups close on Friday\n• Volunteer meeting at 4 pm',
 };
 const chats = [
@@ -150,6 +168,9 @@ export const setDemo=()=>{},setApiLang=()=>{},setConnection=()=>{};
 const views=${JSON.stringify(views)};
 const fractal=${JSON.stringify(fractal)};
 const readout=${JSON.stringify(readout)};
+const chart=${JSON.stringify(chart)};
+const chartReadout=${JSON.stringify(chartReadout)};
+const chartView=(request)=>request.view==='read'?{text:chartReadout}:request.view==='zoom'?chart.zoom[Math.min(request.region||0,chart.zoom.length-1)]:request.view==='outline'?chart.outline:chart.fit;
 const pick=(v,request)=>request.view==='zoom'?v.zoom[Math.min(request.region||0,v.zoom.length-1)]:request.view==='outline'?v.outline:request.view==='read'?{text:'A Mandelbrot set: a black cardioid with a round bulb on its left and smaller bulbs around it, on a lighter background.'}:v.fit;
 const view=(request)=>request.view==='read'?{text:readout}:request.view==='zoom'?views.zoom[Math.min(request.region||0,views.zoom.length-1)]:request.view==='outline'?views.outline:views.fit;
 export const currentBase=()=> 'store preview (sample data)';
@@ -163,13 +184,13 @@ export const api={
   historyImage:async(handle,n,request={})=>view(request),
   mail:{
     accounts:async()=>[{id:'work',short:'W',address:'me@example.com',ok:true}],
-    labels:async()=>[{id:'INBOX',name:'Inbox',unread:2},{id:'Label_1',name:'Newsletters',unread:1},{id:'Label_2',name:'Projects',unread:1}],
-    threads:async(filter,page,size=8)=>({items:page?[]:${JSON.stringify(mailThreads)}.slice(0,size),hasMore:false,unread:2,loading:false}),
+    labels:async()=>[{id:'INBOX',name:'Inbox',unread:3},{id:'Label_1',name:'Newsletters',unread:1},{id:'Label_2',name:'Projects',unread:1}],
+    threads:async(filter,page,size=8)=>({items:page?[]:${JSON.stringify(mailThreads)}.slice(0,size),hasMore:false,unread:3,loading:false}),
     thread:async(account,id)=>{const row=${JSON.stringify(mailThreads)}.find(t=>t.id===id);const text=${JSON.stringify(mailText)}[id]||'The updated notes are ready for the next meeting.';
-      return {subject:row.subject,messages:[{id:id+'-1',from:row.from,to:'me@example.com',cc:'',date:row.date,text,images:id==='news'?[{remote:0,name:'Field Notes Daily'},{remote:1,name:'Picture of the week'}]:undefined}]};},
+      return {subject:row.subject,messages:[{id:id+'-1',from:row.from,to:'me@example.com',cc:'',date:row.date,text,images:id==='news'?[{remote:0,name:'Field Notes Daily'},{remote:1,name:'Picture of the week'}]:id==='markets'?[{remote:0,name:'Nimbus Robotics share price'}]:undefined}]};},
     read:async()=>({ok:true}),modify:async()=>({ok:true}),
     compose:async()=>({to:'"Field Notes Daily" <desk@example.com>',cc:'',subject:'Re: Morning briefing'}),
-    image:async(account,message,ref,request={})=>view(request),
+    image:async(account,message,ref,request={})=>message==='markets-1'?chartView(request):view(request),
     send:async()=>{throw new Error('Store preview: sending is disabled.');},
   },
   chat:{

@@ -58,7 +58,7 @@ still need verification. See [implementation](docs/hermes-bridge.md).
 
 ## Screenshots
 
-Native 576 × 288 simulator captures of beta 1.0.91 with fictional sample data (see the [gallery](store/gallery.html)). The picture is a Mandelbrot set drawn by ffmpeg; the keys page is rendered by the app's own code.
+Native 576 × 288 simulator captures of beta 1.0.91 (Coding list and charts: 1.0.95) with fictional sample data. The chart is invented data drawn by `scripts/make-store-chart.py`; its AI Readout is the local vision model's real answer (see the [gallery](store/gallery.html)). The picture is a Mandelbrot set drawn by ffmpeg; the keys page is rendered by the app's own code.
 
 | **Reader: Scientifica 5x11 on Tube** | **Architecture map** | **Live coding** |
 | --- | --- | --- |
@@ -69,6 +69,8 @@ Native 576 × 288 simulator captures of beta 1.0.91 with fictional sample data (
 | ![Email](store/screenshots/07-email.png) | ![Email with pictures](store/screenshots/08-email-pictures.png) | ![Original Picture](store/screenshots/09-picture.png) |
 | **Outline** | **Usage bars** | **AI Readout** |
 | ![Outline](store/screenshots/10-outline.png) | ![Usage bars](store/screenshots/11-usage.png) | ![AI Readout](store/screenshots/12-ai-readout.png) |
+| **Chart on the G2** | **Chart: AI Readout** | |
+| ![Chart on the G2](store/screenshots/19-chart-picture.png) | ![Chart: AI Readout](store/screenshots/20-chart-readout.png) | |
 | **Chat** | **Filter by Network** | **Chat translation** |
 | ![Chat](store/screenshots/13-chat.png) | ![Filter by Network](store/screenshots/14-chat-networks.png) | ![Chat translation](store/screenshots/15-chat-translate.png) |
 | **Keyboard keys** | **Compare backgrounds** | **Compare fonts** |

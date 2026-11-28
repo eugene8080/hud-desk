@@ -186,6 +186,8 @@ spinner on its L frame, and the GitHub README.
 | `16-keys.png` | Keyboard keys: The ? page: Gmail and IDE keys. Rendered by the app's keys-page code, because the simulator has no keyboard. |
 | `17-backgrounds.png` | Compare backgrounds: Every background for your turns; choose in place. |
 | `18-compare-fonts.png` | Compare fonts: Native text and the pixel fonts, large to small; choose in place. |
+| `19-chart-picture.png` | Chart on the G2: a news-style line chart (invented data, `scripts/make-store-chart.py`) as Original Picture. |
+| `20-chart-readout.png` | Chart: AI Readout: the local vision model's real reading of that chart (cached in `.local/store-assets/markets-chart-readout.txt`). |
 
 - Picture: `.local/store-assets/fractal.png` (gitignored, ffmpeg mandelbrot source); the AI Readout
   text is the local model's answer, cached in `.local/store-assets/fractal-readout.txt`.

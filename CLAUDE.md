@@ -58,6 +58,20 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 Eugene: his 'Anthropic takes the win' Bloomberg newsletter chart renders well on G2 and its
+AI Readout is great; add such renders to the GitHub images, and build a view that puts the AI's
+reading back on the chart in Scientifica ('use worker session'). (1) README images: Eugene chose a
+look-alike chart (Bloomberg's is copyrighted, from his work mail). scripts/make-store-chart.py draws
+a fictional 'Nimbus Robotics' line chart -> .local/store-assets/markets-chart.png; store fixture adds
+a Market Desk newsletter with it; real local AI Readout cached in .local/store-assets/
+markets-chart-readout.txt. New shots store/screenshots/19-chart-picture, 20-chart-readout (+ native),
+04-coding-list recaptured with 1.0.95 '/' and '-' marks; README, gallery, listing updated. Portal
+screenshots NOT changed (1.0.94 in review; portal max 8). (2) Worker chart-labels (claude,
+dispatch ctx_eaabec0ab8af, child worktree C:/Users/eugen/orca/workspaces/orca-glass/chart-labels):
+'AI Labels' view. Test chart: Bloomberg original saved once (with the bridge's fetchPublicImage) to
+.local/chart-test/anthropic-chart.jpg, evaluation only, nothing derived from it may be committed.
+Bridge restart for 1.0.95's bell: asked, no answer yet; not restarted.
+
 2026-11-27 beta 1.0.95 (Eugene: Orca shows a bell for unread sessions and a dot for read; use '/'
 unread and '-' read in Coding, like Email/Chat). app/src/coding-read.ts: Orca rows use Orca's
 agent activity.unread + activity.sortAt (bridge/activity.mjs orcaReadState; chats matched by

@@ -8,6 +8,14 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
+- [ ] **Intermittent test (2026-11-27):** `tests/local-agents.test.mjs` fails about one full
+  `npm test` run in three with a file-level 'test failed' (no subtest named); it passes 6/6 when run
+  alone. Likely an async leak or timing under parallel load. Not investigated yet.
+
+- [ ] **Email row overlap (2026-11-27):** in the store fixture, 'Field Notes Daily - Morning briefing:
+  picture of the week' runs into its time '23:05' with no gap (simulator, beta 1.0.95). The title
+  fit should leave the label gap. Not investigated yet.
+
 - [ ] **Launch posts (2026-11-27):** drafts for r/EvenRealities, Even Discord, r/ClaudeAI,
   r/beeper, Show HN, X, a note to Even and a 45 s video script in
   [store/launch-posts.md](store/launch-posts.md). Gate before posting: Even approves 1.0.94;
