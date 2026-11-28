@@ -3313,7 +3313,7 @@ test('AI Labels drawing: Scientifica letters in the ink level with a 1px backgro
   assert.deepEqual([at(400, 100), at(400, 200)], [255, 85]);
 });
 
-test('images: AI Labels comes last for charts when the bridge offers it (Original, Zoom, AI Readout, AI Labels); photos skip it', async () => {
+test('images: AI Labels comes last when the bridge offers it (Original, Zoom, AI Readout, AI Labels); a photo answered as Original Picture skips it', async () => {
   const { fixture, messages } = mailFixture();
   messages[1].images = [{ part: '2', name: 'chart.png' }, { part: '3', name: 'photo.jpg' }];
   const asked = [];
@@ -3356,6 +3356,34 @@ test('images: AI Labels comes last for charts when the bridge offers it (Origina
   await h.scroll('up');
   for (const view of ['read', 'labels']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
   assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(fineExports.captionTiles(fineExports.labelTiles(screen, [], 255, 0), 'AI Labels: no text read · 1/2', 'terminus', 15)));
+});
+
+test('images: AI Labels for any picture with text, photo style or not; a picture the AI found no text in skips it', async () => {
+  // 2026-11-28 (a newsletter in Eugene's mail): an infographic on a grey gradient is 'photo' style and had
+  // no AI Labels. Now the AI's reading decides: labelCount 0 on an answer means no printed text.
+  const { fixture, messages } = mailFixture();
+  messages[1].images = [{ part: '2', name: 'infographic.jpg' }, { part: '3', name: 'rocket.jpg' }];
+  const asked = [];
+  const labels = [{ text: 'ORBITAL DATA CENTER', role: 'title', align: 'center', x: 288, y: 12 }];
+  fixture.image = async (account, message, ref, request = {}) => {
+    asked.push({ part: ref.part, view: request.view });
+    // Picture 3's labels reading is done by its first answer and found nothing.
+    const labelCount = ref.part === '3' ? 0 : undefined;
+    if (request.view === 'read') return { text: 'Text', labelCount };
+    if (request.view === 'labels') return { ...glassImage(5, 0.1), view: 'labels', style: 'photo', negative: false, regions: 1, region: 0, labels, background: 0, ink: 15, labelCount: 1 };
+    return { ...glassImage(5, 0.1), view: request.view, style: 'photo', negative: false, regions: 1, region: 0, labelCount };
+  };
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'], imageLabels: true }, storage: { module: 'email' }, mail: fixture });
+  await h.pickRow(2);
+  for (let i = 0; i < 5 && !/\[Image 1: infographic\.jpg\]/.test(container(h, 'body').content); i++) await h.scroll('down');
+  await h.tap();
+  // The infographic (photo style, text not yet known): Zoom, AI Readout, AI Labels, Original Picture.
+  for (const view of ['zoom', 'read', 'labels', 'fit']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
+  // The rocket photo: its first answer says no text, so AI Labels is not in its cycle.
+  await h.scroll('down');
+  assert.deepEqual(asked.at(-1), { part: '3', view: 'fit' });
+  for (const view of ['zoom', 'read', 'fit']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
+  assert.equal(asked.filter(a => a.part === '3' && a.view === 'labels').length, 0);
 });
 
 test('images: a ready answer goes straight to the glasses in one paint; a slow one shows the "Reading" note first', async () => {

@@ -119,23 +119,26 @@ type ReaderText = 'native' | FineFont;
 // The full-screen picture viewer (2026-11-27): image n of count from the reader's source.
 type ImageMode = 'fit' | 'labels' | 'zoom' | 'read';
 // Original Picture, Zoom, AI Readout, AI Labels (Eugene, 2026-11-28: "it should be original, zoom,
-// ai readout, ai labels"). AI Labels (2026-11-27) is for charts only: the local AI's reading of each
-// printed line redrawn in place. Outline (edges only) was removed on 2026-11-28 (Eugene: "remove the
-// outline image option completely").
+// ai readout, ai labels"). AI Labels (2026-11-27): the local AI's reading of each printed line redrawn
+// in place. Outline (edges only) was removed on 2026-11-28 (Eugene: "remove the outline image option
+// completely").
 const IMAGE_VIEWS: ImageMode[] = ['fit', 'zoom', 'read', 'labels'];
 const IMAGE_VIEW_LABEL = { fit: 'imageViewFit', labels: 'imageViewLabels', zoom: 'imageViewZoom', read: 'imageViewRead' } as const;
 // style: the picture's kind from the last picture answer ('graphic' or 'photo'); labelled: the
-// picture whose labels have been read (the next answer for it is quick, so no "Reading" note).
+// picture whose labels have been read (the next answer for it is quick, so no "Reading" note);
+// noText: the picture the AI read and found no printed text in.
 type ImageView = { n: number; count: number; numbers: number[]; load: (n: number, request?: ImageRequest) => Promise<ImageAnswer>;
   mode: ImageMode; region: number; regions: number; image?: GlassImage; text?: string; textPage: number; invert?: boolean; note: string;
-  style?: string; labelled?: number };
+  style?: string; labelled?: number; noText?: number };
 // Read is offered when the bridge has a vision model (bridges before 1.0.83 do not say: offered).
 let imageReadOffered = true;
 // AI Labels only when the bridge says it has it and the model answers (older bridges: not offered).
 let imageLabelsOffered = false;
-// The views a click cycles through for this picture: AI Labels for charts only.
+// The views a click cycles through for this picture. AI Labels for every picture with printed text
+// (2026-11-28; it was charts only, by the flat-tone test, and Eugene's text-heavy infographic on a grey
+// gradient counted as a photo): offered until the AI's reading found no text in this picture.
 const imageModes = (view: ImageView) => IMAGE_VIEWS.filter(mode => (mode !== 'read' || imageReadOffered) &&
-  (mode !== 'labels' || (imageLabelsOffered && view.style === 'graphic')));
+  (mode !== 'labels' || (imageLabelsOffered && view.noText !== view.n)));
 type Comparison = 'fonts' | 'backgrounds';
 const DEFAULT_SMALL_FONT: FineFont = 'terminus';
 const REMOVED_FONTS = ['fixed9', 'gohu14', 'shinonome'];
@@ -864,13 +867,20 @@ async function loadImage(s: TextScreen) {
   try {
     const answer = await request;
     if (current !== s || view.n !== n || view.mode !== mode || view.region !== region) return;
+    // The AI found no printed text in this picture: AI Labels leaves its cycle.
+    if (answer.labelCount === 0) view.noText = n;
+    else if (answer.labelCount !== undefined && view.noText === n) view.noText = undefined;
     if (mode === 'read') view.text = answer.text ?? '';
     else {
       view.image = answer;
       view.regions = answer.regions ?? 1;
       if (answer.style) view.style = answer.style;
-      // AI Labels on a photo (after a swipe from a chart): the bridge answers with Original Picture.
-      if (mode === 'labels') { if (answer.view === 'labels') view.labelled = n; else view.mode = 'fit'; }
+      // AI Labels on a photo without text (or on an older bridge, any photo): the bridge answers with
+      // Original Picture.
+      if (mode === 'labels') {
+        if (answer.view === 'labels') view.labelled = n;
+        else { view.mode = 'fit'; view.noText = n; }
+      }
     }
   } catch (e) {
     if (current !== s || view.n !== n || view.mode !== mode) return;

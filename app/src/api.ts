@@ -97,7 +97,9 @@ export type GlassImage = { width: number; height: number; data: string; mean: nu
 // The viewer asks for a view (fit, labels, zoom, read) and, in zoom, a section; read answers with text.
 // negative: 'on'/'off', or left out for automatic (the bridge decides; 1.0.84).
 export type ImageRequest = { view?: 'fit' | 'labels' | 'zoom' | 'read'; region?: number; negative?: 'on' | 'off' };
-export type ImageAnswer = GlassImage & { text?: string };
+// labelCount: printed lines the AI found in the picture, once its AI Labels reading is done (bridges
+// from 2026-11-28; absent before the reading or on older bridges).
+export type ImageAnswer = GlassImage & { text?: string; labelCount?: number };
 const viewQuery = (request: ImageRequest) => ({ ...(request.view && { view: request.view }), ...(request.region !== undefined && { region: String(request.region) }),
   ...(request.negative && { negative: request.negative }) });
 // Optional Chat features the bridge PC can serve; a bridge before 1.0.72 omits this (both offered).

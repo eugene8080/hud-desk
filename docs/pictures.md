@@ -1,14 +1,15 @@
 # Pictures on the glasses
 
-Updated: 2026-11-28
+Updated: 2026-11-28 (1.0.101)
 
 Chat photos, mail pictures and pictures pasted into a Claude or Codex session open full screen on
 the G2. The bridge decodes a picture once with ffmpeg (`bridge/image.mjs`) and draws each view as
 576x288 panel levels; the app (`app/src/main.ts`, viewer near `imageViewTiles`) shows it in the
 four image tiles with a caption box in the bottom-right corner.
 
-A click cycles the views: Original Picture, Zoom, AI Readout, then AI Labels for charts (Eugene,
-2026-11-28: "it should be original, zoom, ai readout, ai labels"). Outline (1 px edges only) was
+A click cycles the views: Original Picture, Zoom, AI Readout, then AI Labels (Eugene,
+2026-11-28: "it should be original, zoom, ai readout, ai labels"). AI Labels is offered for any
+picture until the AI has read it and found no printed text (charts only before 1.0.101). Outline (1 px edges only) was
 removed on 2026-11-28 (Eugene: "remove the outline image option completely"); the bridge answers an
 older app's Outline request with Original Picture. Swipe moves through Zoom sections or AI Readout
 pages, then to the next picture; `n` toggles negative; double-click goes back.
@@ -18,7 +19,7 @@ pages, then to the next picture; `n` toggles negative; double-click goes back.
 | Original Picture | The whole picture. Charts and screenshots in four flat tones; photos as thin bright edges over a dot pattern. |
 | Zoom | At least twice the size, in sections. |
 | AI Readout | The local Ollama vision model describes the picture as text (`READ_PROMPT`). |
-| AI Labels | Charts only (see below). |
+| AI Labels | Any picture with printed text: charts, infographics, screenshots (see below). |
 
 AI Labels and AI Readout need a vision-capable model in Ollama on the bridge PC (`visionModel` in
 `bridge/config.local.json`, else the Chat translation model). The bridge reports `imageRead` and
@@ -32,9 +33,36 @@ reading of each printed line and draws it back where it was printed, in Scientif
 (`bridge/chart-labels.mjs`, `app/src/fine-text.ts` `placeLabels`/`labelTiles`).
 
 Place in the cycle: last, after AI Readout (2026-11-28; it came right after Original Picture in
-1.0.96 and 1.0.97). It is offered only for pictures that Original Picture draws in flat tones
-(`pictureStyle` = graphic). A photo asked for AI Labels (after a swipe from a chart) answers as
-Original Picture and the view switches to it.
+1.0.96 and 1.0.97).
+
+Which pictures (1.0.101, 2026-11-28). Until 1.0.100 AI Labels was offered only for pictures that
+Original Picture draws in flat tones (`pictureStyle` = graphic: more than 70 % of the pixels in the
+three fullest of 16 grey bins). That test sorts tones, not text: Eugene opened a newsletter with two
+text-heavy infographics, and the one on a smooth slate-grey gradient had 65 % in its three main greys,
+so it counted as a photo and had no AI Labels (the other, mostly black space, had 74 %). Now the AI's
+reading decides:
+
+- Every picture opened is read in the background (readout, then labels), not only charts.
+- The labels reading records how many printed lines the model found; every later answer for the
+  picture carries it as `labelCount`. The app drops AI Labels from the picture's cycle at 0.
+- AI Labels on a photo-style picture with no text answers as Original Picture in its photo style
+  (`view: 'fit'`), and the app switches to it. A flat-tone picture with no text keeps the AI Labels
+  page with "AI Labels: no text read", as before.
+- The model still gets photos scaled with ffmpeg's default (bicubic), flat-tone pictures with Lanczos.
+
+Measured on that newsletter's four pictures with qwen3.8:27b (readout + labels, image new to the
+model; private mail, evaluation only, nothing from it is in the repo):
+
+| Picture | Style | Lines read | Lines drawn | Time |
+| --- | --- | ---: | ---: | ---: |
+| Photo of a street screen | photo | 0 | - | 6.0 s |
+| Infographic, black space background | graphic | 46 | 36 | 8.0 s |
+| Infographic, slate gradient | photo | 51 | 29 | 8.1 s |
+| Photo of a rocket launch | photo | 0 | - | 1.2 s |
+
+On the gradient infographic a few lines show doubled where the original word was not fully
+cleared, and some small text stays as printed (the same matching limits as on charts). Cost: about
+5 s of GPU per picture opened, photos included; leaving the picture stops it.
 
 How it works:
 

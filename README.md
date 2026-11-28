@@ -35,7 +35,7 @@ Run the one-command setup, then paste the pairing code into HUD Desk on your pho
 - Photos open on the glasses.
 
 **Pictures**
-- AI Labels (charts): the local AI reads every printed line of a chart and HUD Desk draws it back in place in Scientifica 5x11, so titles, ticks and notes become readable. [How it works](docs/pictures.md)
+- AI Labels: the local AI reads every printed line of a chart, infographic or screenshot and HUD Desk draws it back in place in Scientifica 5x11, so titles, ticks and notes become readable. [How it works](docs/pictures.md)
 - Original Picture tuned for the G2's 16 green levels (flat tones for charts and screenshots, thin edges and dithering for photos), Zoom in sections, and AI Readout: a local Ollama vision model describes the picture as text.
 
 **Keyboard**

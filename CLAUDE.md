@@ -58,6 +58,22 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 beta 1.0.101 (Eugene: in a newsletter in his work mail, of two text-heavy infographics only
+one had AI Labels on the G2; 'I want the AI labels on both'; asked why). Cause: AI Labels was offered
+only for pictureStyle 'graphic' (>70 % of pixels in the 3 fullest of 16 grey bins); his slate-gradient
+infographic scored 65 % (photo), the black-space one 74 % (graphic); the mail's two real photos 44 %.
+Fix: bridge/image.mjs reads every opened picture in the background (not only charts), records
+labelCount (lines the model found) and adds it to every later answer; AI Labels on a photo-style
+picture with 0 lines answers as fit (photo style). App: AI Labels offered for any picture until an
+answer says labelCount 0 (view.noText). Real model on the mail's 4 pictures (private, evaluation only,
+.local/balerion-test/, never commit): photos 0 lines (6.0 s, 1.2 s), black infographic 46 read/36
+drawn (8.0 s), gradient infographic 51/29 (8.1 s); preview of the gradient one checked: readable, a few
+doubled words where the original was not fully cleared. New tests fail on 1.0.100 code, pass now.
+333 tests, build pass; beta 1.0.101 CLI verified 253,120 bytes; prototype build restored. Store text:
+'AI Labels (its printed text redrawn sharp)' (1,993 chars), Japanese line, README, docs/pictures.md.
+NOT done: bridge restart (the bridge part needs it; ask Eugene). Cost: ~5 s GPU per picture opened,
+photos included. Original Picture still draws the gradient infographic in photo style (not changed).
+
 2026-11-28 beta 1.0.100 (Eugene: 'emails are currently opening on the last page, but it should open on
 the first page'; Chat right (top of the latest message), Coding right (top of the latest response)).
 Cause: 1.0.98 gave Email Chat's fill-from-the-newest-row paging; a one-message mail (openingOffset 0)

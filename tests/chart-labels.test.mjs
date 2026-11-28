@@ -223,18 +223,48 @@ test('imaging: opening a chart reads it in the background (readout, then labels)
   await settle(imaging);
   assert.deepEqual(calls.map(c => Boolean(c.format)), [false, true]);
   await imaging.render('chat:1', load, { view: 'zoom' });
-  assert.equal((await imaging.render('chat:1', load, { view: 'read' })).text, 'Title: Monthly Widget Orders, 2031');
+  const read = await imaging.render('chat:1', load, { view: 'read' });
+  assert.equal(read.text, 'Title: Monthly Widget Orders, 2031');
+  // Once the labels reading is done, every answer says how many lines it found.
+  assert.ok(read.labelCount >= 25);
   assert.equal((await imaging.render('chat:1', load, { view: 'labels' })).labels.length, 25);
   assert.equal(calls.length, 2);
-  // A photo is not read in the background (its AI Readout is asked when opened).
+  // A photo is read in the background too (2026-11-28: AI Labels for any picture with text). The
+  // model finds no text in it: later answers carry labelCount 0, and AI Labels answers as Original
+  // Picture in its photo style, without another call.
   let seed = 3;
   const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
   const width = 300, height = 200, pixels = Uint8Array.from({ length: width * height }, (_, i) => Math.round(255 * ((i % width) / width * 0.5 + random() * 0.5)));
   const photo = fakeModel([]);
   const photos = createImaging({ model: 'fixture-vision', transport: photo.transport, codec: { decode: () => ({ width, height, pixels }), forModel: () => Buffer.from('png') } });
-  assert.equal((await photos.render('chat:2', async () => Buffer.from('x'), { view: 'fit' })).style, 'photo');
+  const opened = await photos.render('chat:2', async () => Buffer.from('x'), { view: 'fit' });
+  assert.deepEqual([opened.style, opened.labelCount], ['photo', undefined]);
   await settle(photos);
-  assert.equal(photo.calls.length, 0);
+  assert.deepEqual(photo.calls.map(c => Boolean(c.format)), [false, true]);
+  assert.equal((await photos.render('chat:2', async () => Buffer.from('x'), { view: 'zoom' })).labelCount, 0);
+  const labels = await photos.render('chat:2', async () => Buffer.from('x'), { view: 'labels' });
+  assert.deepEqual([labels.view, labels.style, labels.labelCount, labels.data], ['fit', 'photo', 0, opened.data]);
+  assert.equal(photo.calls.length, 2);
+});
+
+test('imaging: AI Labels for a text picture the flat-tone test calls a photo (an infographic on a grey gradient)', async () => {
+  // A newsletter in Eugene's mail (2026-11-28): an infographic on a smooth slate gradient had 65 % of its
+  // pixels in its three main greys (the cut for 'graphic' is 70 %), so it had no AI Labels. Here a
+  // synthetic chart under a left-to-right gradient: a 'photo' by that test, its words still printed.
+  const chart = source('line-reference');
+  const pixels = chart.pixels.map((v, i) => Math.round(v * 0.55 + (i % chart.width) / chart.width * 255 * 0.45));
+  const graded = { width: chart.width, height: chart.height, pixels };
+  const { calls, transport } = fakeModel([recorded('line-reference', 'model-point.json')]);
+  const imaging = createImaging({ model: 'fixture-vision', transport, prefetch: false,
+    codec: { decode: () => ({ ...graded, pixels: Uint8Array.from(graded.pixels) }), forModel: () => Buffer.from('png') } });
+  const load = async () => Buffer.from('graded');
+  assert.equal((await imaging.render('mail:9', load, { view: 'fit' })).style, 'photo');
+  const answer = await imaging.render('mail:9', load, { view: 'labels' });
+  assert.equal(answer.view, 'labels');
+  assert.ok(answer.labelCount >= 20, `lines found: ${answer.labelCount}`);
+  assert.ok(answer.labels.length >= 15, `labels drawn: ${answer.labels.length}`);
+  assert.ok(answer.labels.some(label => label.text === 'Monthly Widget Orders, 2031'));
+  assert.equal(calls.length, 2);
 });
 
 test('imaging: leaving a picture stops its background reading, one model call at a time; a view on screen is never stopped', async () => {
@@ -273,7 +303,7 @@ test('imaging: leaving a picture stops its background reading, one model call at
   assert.equal(model.mostOpen(), 1, 'never two model calls at once');
 });
 
-test('imaging: a chart reached in Zoom is read in the background too; a readout on screen queues the labels; photos keep their old scaling', async () => {
+test('imaging: a chart reached in Zoom is read in the background too; a readout on screen queues the labels; photos keep their scaling', async () => {
   const model = fakeModel([recorded('right-axis-dark', 'model-point.json')]);
   const scaled = [];
   const watching = { decode: codec.decode, forModel: (bytes, sharp) => { scaled.push(sharp); return codec.forModel(bytes); } };
@@ -288,7 +318,8 @@ test('imaging: a chart reached in Zoom is read in the background too; a readout 
   await readFirst.render('r', async () => chartBytes('line-reference'), { view: 'read' });
   await settle(readFirst);
   assert.deepEqual(second.calls.map(c => Boolean(c.format)), [false, true]);
-  // A photo: AI Readout only, with ffmpeg's default scaling as before 2026-11-28.
+  // A photo: its readout, then its labels reading in the background (2026-11-28), both with ffmpeg's
+  // default scaling (one PNG for the conversation).
   let seed = 11;
   const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
   const width = 300, height = 200, pixels = Uint8Array.from({ length: width * height }, (_, i) => Math.round(255 * ((i % width) / width * 0.5 + random() * 0.5)));
@@ -297,7 +328,7 @@ test('imaging: a chart reached in Zoom is read in the background too; a readout 
     codec: { decode: () => ({ width, height, pixels }), forModel: (bytes, sharp) => { photoScaled.push(sharp); return Buffer.from('png'); } } });
   await photos.render('p', async () => Buffer.from('x'), { view: 'read' });
   await settle(photos);
-  assert.deepEqual([photo.calls.length, photoScaled], [1, [false]]);
+  assert.deepEqual([photo.calls.length, photoScaled], [2, [false]]);
 });
 
 test('model queue: foreground before background; cancel stops only other pictures\' background jobs', async () => {
@@ -317,7 +348,7 @@ test('model queue: foreground before background; cancel stops only other picture
   assert.equal(queue.idle, true);
 });
 
-test('imaging: the 1.0.96 box call: unusable boxes are asked once more in plain words; a photo answers as Original Picture', async () => {
+test('imaging: the 1.0.96 box call: unusable boxes are asked once more in plain words; a photo without text answers as Original Picture', async () => {
   const { calls, transport } = fakeModel([recorded('line-reference', 'model-degenerate.json'), recorded('line-reference')]);
   const imaging = createImaging({ model: 'fixture-vision', transport, codec, prefetch: false, labelsCall: LABELS_BOX_CALL });
   const answer = await imaging.render('chat:1', async () => chartBytes('line-reference'), { view: 'labels' });
@@ -330,15 +361,17 @@ test('imaging: the 1.0.96 box call: unusable boxes are asked once more in plain 
     .render('chat:2', async () => chartBytes('line-reference'), { view: 'labels' });
   assert.deepEqual(none.labels, []);
   assert.equal(none.data, screenView(source('line-reference'), 'fit').data);
-  // A photo (smooth random tones, no three dominant greys): Original Picture, no model call.
+  // A photo (smooth random tones, no three dominant greys) in which the model finds no text: Original
+  // Picture in its photo style, and the answer says no text (since 2026-11-28 the model is asked).
   let seed = 7;
   const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
   const width = 300, height = 200, pixels = Uint8Array.from({ length: width * height }, (_, i) => Math.round(255 * ((i % width) / width * 0.5 + random() * 0.5)));
   const photo = fakeModel([]);
   const photoCodec = { decode: () => ({ width, height, pixels }), forModel: () => Buffer.from('png') };
-  const shown = await createImaging({ model: 'fixture-vision', transport: photo.transport, codec: photoCodec }).render('chat:3', async () => Buffer.from('x'), { view: 'labels' });
-  assert.deepEqual([shown.view, shown.style, shown.labels], ['fit', 'photo', undefined]);
-  assert.equal(photo.calls.length, 0);
+  const shown = await createImaging({ model: 'fixture-vision', transport: photo.transport, codec: photoCodec, prefetch: false, labelsCall: LABELS_BOX_CALL })
+    .render('chat:3', async () => Buffer.from('x'), { view: 'labels' });
+  assert.deepEqual([shown.view, shown.style, shown.labels, shown.labelCount], ['fit', 'photo', undefined, 0]);
+  assert.equal(photo.calls.length, 1);
   // No vision model: AI Labels is unavailable, as AI Readout is.
   const blind = createImaging({ transport: fakeModel([]).transport, codec });
   await assert.rejects(blind.render('chat:4', async () => chartBytes('bar-groups'), { view: 'labels' }), { message: 'read-unavailable' });

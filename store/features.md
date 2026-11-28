@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.100**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.101**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -47,12 +47,13 @@ Rule for every agent: each beta release updates this file in the release commit:
   views: Original Picture (whole; a chart or screenshot in four flat tones, a photo as thin bright outlines over a
   dot pattern, as G2oom draws its scenes; a mostly white picture in negative), Zoom (at least twice
   the size, in sections; a tall screenshot fills the width), AI Readout (the PC's local vision model reads it as text: chart values, screen text, or
-  what a photo shows; its pages have no divider and "AI Readout 1/2" in the caption box) and, for
-  charts, AI Labels (when the PC has a vision model: the local AI reads every printed line of the
-  chart (title, legend, ticks, notes, source) and HUD Desk draws it back where it was printed, in
-  Scientifica 5x11 with a 1 px dark halo, over the chart with its own tiny text cleared; positions
-  come from the picture's own pixels, lines the AI misread or that match no printed text are left
-  as printed; tick labels that would collide are thinned). A chart is read in the background from
+  what a photo shows; its pages have no divider and "AI Readout 1/2" in the caption box) and AI
+  Labels (when the PC has a vision model: the local AI reads every printed line of a chart,
+  infographic or screenshot (title, legend, ticks, notes, source) and HUD Desk draws it back where it
+  was printed, in Scientifica 5x11 with a 1 px dark halo, over the picture with its own tiny text
+  cleared; positions come from the picture's own pixels, lines the AI misread or that match no
+  printed text are left as printed; tick labels that would collide are thinned; a photo the AI
+  finds no text in skips it; charts only before 1.0.101). A picture is read in the background from
   the moment it opens (AI Readout first, then AI Labels, one model call at a time), so both are
   usually ready when clicked; leaving the picture or the viewer stops that reading. Swipe moves through sections or text pages, then pictures; n toggles negative; a caption
   shows the view and position; double-click goes back.
@@ -168,7 +169,7 @@ Chat (Beeper: WhatsApp, Signal, Telegram and more):
 - Rows show the day and the app; Filter by Network; formatting kept.
 - Voice notes transcribed (Cantonese tuned). English under each line. Photos open on the glasses.
 
-Pictures: Original Picture (tuned for G2), Zoom in sections, AI Readout (a local vision model describes it) and AI Labels (chart text redrawn sharp).
+Pictures: Original Picture (tuned for G2), Zoom in sections, AI Readout (a local vision model describes it) and AI Labels (its printed text redrawn sharp).
 
 Keyboard: Gmail-style keys everywhere, VS Code-style Ctrl+P, Ctrl+Shift+P, Ctrl+Tab, Ctrl+F; ? shows every key.
 
@@ -184,5 +185,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.100: Email opens on the first page again: a one-message mail opens on page 1, and a thread opens at the top of its newest message. 1.0.98 had opened mail on its last page. Chat still opens on the newest message with full pages, and Coding at the top of the latest response.
+1.0.101: AI Labels works on any picture with printed text, not only charts: infographics on a gradient background, screenshots, slides. The PC reads each picture you open in the background; a photo it finds no text in skips AI Labels and stays a photo. Needs the bridge on the PC updated.
 <!-- whatsnew:end -->

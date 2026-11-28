@@ -11,8 +11,9 @@
 //            sections in reading order; `region` picks the section, `regions` says how many.
 // - read:    the local vision model (Ollama) reads the picture as text: chart values, screen text,
 //            or two or three lines on a photo (Eugene: "AI even?"; a KPI chart read correctly in 20 s).
-// - labels:  charts only: Original Picture with the model's reading of each printed line drawn back
-//            in place by the app (AI Labels, bridge/chart-labels.mjs). A photo answers as fit.
+// - labels:  Original Picture with the model's reading of each printed line drawn back in place by
+//            the app (AI Labels, bridge/chart-labels.mjs). Any picture since 2026-11-28 (charts only
+//            before); a photo in which the model finds no text answers as fit.
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -442,6 +443,9 @@ export function createImaging({ ffmpeg, model, transport = fetch, codec, prefetc
         const again = modelTexts(await ask(LABELS.plain), picture.width, picture.height);
         if (again.length > texts.length) texts = again;
       }
+      // How many printed lines the model found: every later answer for this picture carries it, so
+      // the app drops AI Labels for a picture with none (a photo without text).
+      entry.labelCount = texts.length;
       return texts;
     }, background).catch(error => { throw error instanceof ImageError ? error : new ImageError('read-failed', 502); });
   }
@@ -449,7 +453,7 @@ export function createImaging({ ffmpeg, model, transport = fetch, codec, prefetc
   async function labelTexts(picture, background = false) {
     return chartTexts(picture, background, LABELS.conversation ? await readout(picture, background) : undefined);
   }
-  // Prefetch for a chart just opened: its readout, then its labels, in the background. Errors and
+  // Prefetch for a picture just opened: its readout, then its labels, in the background. Errors and
   // stops are quiet: the foreground request asks again.
   let prefetching = 0; // prefetches under way, from the model check to the last answer
   async function prefetchFor(picture) {
@@ -475,25 +479,35 @@ export function createImaging({ ffmpeg, model, transport = fetch, codec, prefetc
       const picture = await source(key, load);
       // Any request for this picture means the others were left.
       queue.cancel(picture.hash);
-      // A chart on screen in any view is read in the background (a swipe in Zoom opens the next
-      // picture in Zoom); after its readout on screen, its labels are read next.
-      const ahead = () => { if (prefetch && model && isChart(picture)) void prefetchFor(picture); };
+      // Every picture on screen in any view is read in the background (a swipe in Zoom opens the next
+      // picture in Zoom); after its readout on screen, its labels are read next. Until 2026-11-28 only
+      // charts were (pictureStyle 'graphic'), and only charts had AI Labels: an infographic on a smooth
+      // grey gradient (a newsletter in Eugene's mail: 65 % of pixels in the three main greys, the cut is
+      // 70 %) counted as a photo and got none. Whether a picture has text is now the model's reading.
+      const ahead = () => { if (prefetch && model) void prefetchFor(picture); };
+      // Lines found, once the labels reading is done (undefined before): the app drops AI Labels at 0.
+      const counted = answer => {
+        const count = readings.get(picture.hash)?.labelCount;
+        return count === undefined ? answer : { ...answer, labelCount: count };
+      };
       const failed = error => { throw error instanceof ImageError ? error : new ImageError('read-failed', 502); };
       if (view === 'read') {
         if (!await readable()) throw new ImageError('read-unavailable', 503);
         const text = await readout(picture).catch(failed);
         ahead();
-        return { text, view: 'read' };
+        return counted({ text, view: 'read' });
       }
       if (view === 'labels') {
-        // Charts only: a photo (by the same test as Original Picture) answers as Original Picture.
-        if (!isChart(picture)) return screenView(picture, 'fit', 0, negative);
         if (!await readable()) throw new ImageError('read-unavailable', 503);
-        return labelsView(picture, await labelTexts(picture).catch(failed), negative);
+        const texts = await labelTexts(picture).catch(failed);
+        // No printed text on a photo: Original Picture in its photo style, not a flat-tone copy with
+        // "no text read"; the app then leaves AI Labels out for it. A chart keeps its AI Labels page.
+        if (!texts.length && !isChart(picture)) return counted(screenView(picture, 'fit', 0, negative));
+        return counted(labelsView(picture, texts, negative));
       }
       const answer = screenView(picture, view, region, negative);
       ahead();
-      return answer;
+      return counted(answer);
     },
   };
 }
