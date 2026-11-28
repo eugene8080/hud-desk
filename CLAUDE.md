@@ -58,6 +58,13 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 bridge restarted with Eugene's approval for the network fix (24c2db8): old supervisor
+40216/server 27904/whisper 72216 (ownership checked: pid file, tree, 8787 owner); new supervisor
+55984, server 53304, whisper 49668 --vad; local and tailnet healthz ok. Read-only, counts only:
+/api/mail/accounts work ok, personal ok (2.1 s cold); labels work 143, personal 54; Inbox page 0
+8 rows each (loading on the first cold read, complete on the second); modules coding+email+chat,
+imageLabels true. Email works again.
+
 2026-11-28 Eugene (phone, after the 1.0.99 restart): 'why is email unavailable?' Both mailboxes
 answered ok:false error 'network'. Cause: Node fetch to oauth2.googleapis.com (and www.google.com)
 failed with UND_ERR_CONNECT_TIMEOUT at 10.6 s while curl connected in ~1 s. Through the PC's
