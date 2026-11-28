@@ -17,6 +17,7 @@ import { BeeperError, createBeeper, readBeeperConfig } from './beeper.mjs';
 import { createImaging, ImageError, readView } from './image.mjs';
 import { relayIdentity, relayOrigin } from './relay-config.mjs';
 import { createLocalAgents, isLocalAgent, localAgentKey } from './local-agents.mjs';
+import { patientConnections } from './network.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const DIST = join(here, '../app/dist');
@@ -362,6 +363,8 @@ async function handlePrivate(req, res, url, module, route, token, privateHostAll
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  // Before any outbound call: a slow IPv4 route must not lose to a dead IPv6 one (bridge/network.mjs).
+  patientConnections();
   createBridge({ relayConfig: config.relay }).listen(PORT, HOST, () => {
     console.log(`evenhub-orca bridge: http://${HOST}:${PORT}/ (pair with npm run pair)`);
     if (voiceAvailable()) warmWhisper().then(() => console.log('Local speech engine ready')).catch(e => console.error(e.message));

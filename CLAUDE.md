@@ -58,6 +58,18 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 Eugene (phone, after the 1.0.99 restart): 'why is email unavailable?' Both mailboxes
+answered ok:false error 'network'. Cause: Node fetch to oauth2.googleapis.com (and www.google.com)
+failed with UND_ERR_CONNECT_TIMEOUT at 10.6 s while curl connected in ~1 s. Through the PC's
+Tailscale exit node (100.98.13.16) IPv4 to the token server connects in ~270 ms and IPv6 never
+connects; Node tries one address at a time and drops each after 250 ms, so it abandoned IPv4 and hung
+on IPv6. Measured: per-address limit 1000/2500 ms -> token server, google.com, Gmail answer in
+<0.9 s. Fix (bridge only): bridge/network.mjs patientConnections() (1500 ms per address, ipv4first),
+called once in bridge/server.mjs before listen; tests/network.test.mjs. Repro of the bridge's own
+/profile health check with the fix: work and personal ok, addresses match. 330 tests pass. The old
+bridge process had probably kept connections from before (unverified). NOT done: bridge restart
+(needed for the fix; ask Eugene). No app change, no beta.
+
 2026-11-28 bridge restarted with Eugene's approval for 1.0.99 (shared reading, background reading,
 Outline -> fit mapping) and 1.0.97's RETIRED_VIEWS: old supervisor 53748/server 29976/whisper 64852
 (ownership checked: pid file, tree, 8787 owner); new supervisor 40216, server 27904, whisper 72216
