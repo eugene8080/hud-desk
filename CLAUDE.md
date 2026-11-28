@@ -58,6 +58,14 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 Eugene: AI Readout and AI Labels should share one reading if that is faster; order for charts
+Original, Zoom, AI Readout, AI Labels; 'test if that's faster'. Today they are two separate model calls
+(the worker's one-call test made the readout worse). Follow-up sent to the chart-labels worker
+(dispatch ctx_2411c2acaf2f, task_08531d4e9c87): change the order; measure V0 today, V1 readout fed
+into labels, V2 labels without boxes, V3 one conversation reusing the image prefix, V4 background
+prefetch when a chart opens, and combinations; build the fastest that keeps label accuracy and
+readout quality. Waiting on the worker.
+
 2026-11-28 Eugene on G2: "AI labels work great" (1.0.96 after the restart). Then: "remove the outline image
 option completely. graphs or otherwise". Beta 1.0.97: views Original Picture, AI Labels (charts), Zoom,
 AI Readout. Removed from app (ImageMode, cycle, n-key guard, i18n), bridge (VIEWS, outline()), store
