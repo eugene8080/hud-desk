@@ -11,8 +11,8 @@ his approval of the final text.
 | --- | --- | --- | --- |
 | 1 | Even Hub approves 1.0.94. Until then, the public build is 1.0.36, which connects only to Eugene's PC. A stranger who installs it today cannot use it. | In review since 2026-11-27 4:23 PM (portal time) | Even Realities |
 | 2 | One-command setup works on a second PC (PSCAP10: also the different-host proof) | Not run | Eugene / agent |
-| 3 | The GitHub landing page shows HUD Desk. The default branch is `main` = upstream 6315d7f ("Orca Glass", Mac-only text). Fix: make `windows-android-codex` the default branch, or fast-forward `main` to it (`main` is an ancestor). | Not done | Eugene's yes (repo setting) |
-| 4 | A feedback channel exists. GitHub Issues are disabled on eugene8080/hud-desk. | Not done | Eugene's yes (repo setting) |
+| 3 | The GitHub landing page shows HUD Desk | Done 2026-11-27: `windows-android-codex` renamed `main` (default); the old upstream-mirror `main` deleted; old tree links redirect | - |
+| 4 | A feedback channel exists | Done 2026-11-27: GitHub Issues enabled | - |
 | 5 | README facts current (Orca optional, IMAP, macOS, 1.0.94) | Fixed 2026-11-27 | - |
 | 6 | 30-60 s demo clip recorded from the store fixture (fictional data) | Not recorded | Eugene / agent |
 
@@ -28,7 +28,7 @@ Post the Mac setup as new and not yet tested on a real Mac until someone runs it
   to change that behaviour, which would break self-hosting.
 - Read each subreddit's self-promotion rules and flair before posting. Post in one community per
   day and answer comments the same day.
-- Link: https://github.com/eugene8080/hud-desk (after item 3 above, the landing page is correct).
+- Link: https://github.com/eugene8080/hud-desk. Bug reports: https://github.com/eugene8080/hud-desk/issues
 
 ## Order
 

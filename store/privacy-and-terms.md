@@ -46,7 +46,7 @@ Speech recognition, translation, picture readouts and AI output can be wrong. Re
 The software is distributed under the MIT License. The original copyright notice is Copyright (c) 2026 2ero20ne. Preserve the applicable copyright and licence notices when redistributing copies or substantial portions. Nothing in these terms removes or restricts rights granted by the MIT License, including rights to use, copy, modify and distribute the software. Other components retain their respective licences. Quiet Signal is the name used by this fork's developer; it does not imply endorsement by the original author or Even Realities.
 
 Source and full licence:
-https://github.com/eugene8080/hud-desk/tree/windows-android-codex
+https://github.com/eugene8080/hud-desk
 
 Original project:
 https://github.com/2ero20ne/orca-glass

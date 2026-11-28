@@ -58,6 +58,16 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 Eugene approved ('yes'): working branch renamed `main`. GitHub: default set to
+windows-android-codex, old `main` (upstream mirror 6315d7f, = upstream/main, no PRs/protection)
+deleted, windows-android-codex renamed `main` with GitHub's rename (old /tree/windows-android-codex
+links 302 to /tree/main; git clone does NOT follow it), Issues enabled. Local: branch renamed, tracks
+origin/main. **Work on `main` from now on.** Setup one-liners now plain `git clone` (pwsh parse and
+bash -n pass); store source link shortened to https://github.com/eugene8080/hud-desk (description
+1,967 chars); privacy PDF regenerated. The Even Hub description in review still has the old
+/tree link (redirects); update it with the next description edit. Branch names in older entries
+below are historical.
+
 2026-11-27 Eugene: 'how do i get people to use my app?', then 'yes draft'. Drafts in
 store/launch-posts.md (Reddit x3, Discord, Show HN, X, note to Even, 45 s video script; images
 from the store fixture only). Found: GitHub default branch `main` is upstream 6315d7f (visitors see

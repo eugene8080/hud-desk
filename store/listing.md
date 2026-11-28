@@ -77,7 +77,7 @@ PC origin/self-service limitation remains in the current manifest and descriptio
 - App name: **Orca Glass**
 - Tagline: **Read your Orca sessions. Speak your next step.**
 - Description: [exact portal text](description.txt), under 2,000 characters.
-- Windows source/setup: https://github.com/eugene8080/hud-desk/tree/windows-android-codex
+- Windows source/setup: https://github.com/eugene8080/hud-desk
 - Chosen creator: Quiet Signal (Personal Information now complete in portal).
 - Language: English.
 - Attribution: based on 2ero20ne's MIT-licensed Orca Glass. The upstream developer name, privacy URL and Mac-only instructions do not describe this fork.

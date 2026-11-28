@@ -24,7 +24,7 @@ In Terminal, run the following in a directory where you want to keep the
 checkout. If you already cloned it, run `bash scripts/setup-macos.sh` there.
 
 ```bash
-git clone --branch windows-android-codex https://github.com/eugene8080/hud-desk.git && cd hud-desk && bash scripts/setup-macos.sh
+git clone https://github.com/eugene8080/hud-desk.git && cd hud-desk && bash scripts/setup-macos.sh
 ```
 
 If setup installs Tailscale or reports a disconnected client, open Tailscale,

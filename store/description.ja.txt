@@ -24,6 +24,6 @@ HUD Desk（旧名 Orca Glass）は G2 を、Windows PC の Orca で動くエー�
 
 必要なもの: G2、Even Realities アプリ（iPhone は未確認）、Orca、Tailscale 経由で PC 上のブリッジ。任意の PC 向けのセットアップはまだ提供していません。エージェント、メール、チャット、音声、AI はすべて PC 上で動きます。PC がなくてもデモを試せます。
 
-Source/setup: https://github.com/eugene8080/hud-desk/tree/windows-android-codex
+Source/setup: https://github.com/eugene8080/hud-desk
 2ero20ne 氏の Orca Glass（MIT ライセンス）から独立したフォークです。
 Original: https://github.com/2ero20ne/orca-glass

@@ -17,10 +17,10 @@ use Windows x64 and add `-Voice` at the end of the setup command.
 
 In **Windows PowerShell as Administrator**, run this line from the parent
 folder where you want to keep the bridge. The first clause installs Git with
-your approval if needed. The rest clones the self-host branch and runs setup.
+your approval if needed. The rest clones the repository and runs setup.
 
 ```powershell
-$git = (Get-Command git.exe -ErrorAction SilentlyContinue).Source; if (-not $git) { $git = Join-Path $env:ProgramFiles 'Git/cmd/git.exe'; if (-not (Test-Path -LiteralPath $git)) { if ((Read-Host 'Install Git with WinGet? [y/N]') -notmatch '^y(es)?$') { throw 'Git is required to clone HUD Desk.' }; winget install --id Git.Git --exact --source winget --accept-package-agreements --accept-source-agreements; if ($LASTEXITCODE -ne 0) { throw 'Git installation failed.' } } }; & $git clone --branch windows-android-codex https://github.com/eugene8080/hud-desk.git; if ($LASTEXITCODE -eq 0) { powershell.exe -NoProfile -ExecutionPolicy Bypass -File hud-desk/scripts/setup-windows.ps1 }
+$git = (Get-Command git.exe -ErrorAction SilentlyContinue).Source; if (-not $git) { $git = Join-Path $env:ProgramFiles 'Git/cmd/git.exe'; if (-not (Test-Path -LiteralPath $git)) { if ((Read-Host 'Install Git with WinGet? [y/N]') -notmatch '^y(es)?$') { throw 'Git is required to clone HUD Desk.' }; winget install --id Git.Git --exact --source winget --accept-package-agreements --accept-source-agreements; if ($LASTEXITCODE -ne 0) { throw 'Git installation failed.' } } }; & $git clone https://github.com/eugene8080/hud-desk.git; if ($LASTEXITCODE -eq 0) { powershell.exe -NoProfile -ExecutionPolicy Bypass -File hud-desk/scripts/setup-windows.ps1 }
 ```
 
 If Tailscale needs you to sign in, do that from its system tray icon. For a

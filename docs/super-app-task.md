@@ -31,7 +31,9 @@ Build S0 + E1 first, release them, and wait for Eugene's G2 check.
 
 ## State at handoff (2026-11-26)
 
-- Branch `windows-android-codex` is this fork's working branch. `main` mirrors upstream (`6315d7f`);
+- (2026-11-27: the working branch was renamed `main`; the old upstream mirror `main` was deleted,
+  its commits remain in history and in `upstream/main`.) Branch `windows-android-codex` was this
+  fork's working branch. `main` mirrors upstream (`6315d7f`);
   upstream (2ero20ne) last pushed 2026-10-13. Beta 1.0.59, public 1.0.36, 164 tests.
 - **Uncommitted work from 2026-11-11 is in the main checkout**: `bridge/conversation.mjs`, `bridge/orca.mjs`,
   `bridge/session-titles.mjs`, `tests/session-titles.test.mjs` and the new `bridge/cursor-title.mjs`,
