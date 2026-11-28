@@ -58,6 +58,17 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 beta 1.0.98 (Eugene: the chat 'defaults to showing just one message on the last page', sometimes
+the second last too, then a full page; his chats with Ewan MacDougal and Roger Kuo). Cause: readerLayout cut
+Chat/Email at the newest message (openingOffset) and paged the earlier part forward, so the newest message
+sat alone and the leftover landed just before it. Fix: readerPages fromEnd (pages fill from the last row
+back); a newest message that fits one page -> whole text from the end, else earlier part from the end +
+newest forward; keepReaderLine keeps a reader on the newest page when translations reflow. Read-only,
+counts-only check through the bridge (GET; no read marks; no text printed), rows per page old -> new:
+Ewan Terminus 22|1|1 -> 2|22, Scientifica 22|1 -> 23; Roger Terminus 19|1 -> 20, Scientifica 18|1 -> 19.
+Coding paging unchanged (forward; its pre-response part can show the same leftover pattern, not reported).
+324 tests, build pass; beta 1.0.98 CLI verified 252,947 bytes; prototype build restored. App-only.
+
 2026-11-28 Eugene: AI Readout and AI Labels should share one reading if that is faster; order for charts
 Original, Zoom, AI Readout, AI Labels; 'test if that's faster'. Today they are two separate model calls
 (the worker's one-call test made the readout worse). Follow-up sent to the chart-labels worker

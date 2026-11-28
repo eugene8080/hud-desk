@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.97**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.98**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -95,7 +95,8 @@ Rule for every agent: each beta release updates this file in the release commit:
 - Filter by Label on the glasses and the phone page (shared picks): the labels of the mailbox on
   screen with unread counts, several at once. The phone has a type-to-narrow box; on the glasses,
   hold to search by voice (labels containing every spoken word; double-click clears).
-- Threads read oldest to newest and open at the top of the newest message; quoted reply history is
+- Threads read oldest to newest and open on the newest message, on a full page (a newest message
+  longer than a page starts its own page); quoted reply history is
   removed and hard-wrapped plain text is reflowed to the glasses' width.
 - Mail routes answer only over the private Tailscale address, never through the public tunnel.
 
@@ -104,7 +105,8 @@ Rule for every agent: each beta release updates this file in the release commit:
 - Chats from the networks Beeper Desktop connects (WhatsApp, Signal, Telegram, ...), eight a page,
   most recent first, `/` unread and `-` read, unread chats counted on row 0.
 - Filter by Network on the glasses and the phone page (shared picks).
-- Reader opens at the newest message; your messages start `/ `, others `> ` with the sender, with
+- Reader opens on the newest message: pages fill back from it, so the last page is full and the short
+  page is the oldest (1.0.98); a newest message longer than a page starts its own page; your messages start `/ `, others `> ` with the sender, with
   no blank row between messages and line breaks kept.
 - Voice notes and other media show as tags (`[Voice 0:12]`, `[Photo]`, ...). A click transcribes
   the voice notes on the page on screen, on the PC (FunASR SenseVoice, tuned for Cantonese, HK
@@ -180,5 +182,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.97: The Outline picture view is gone. A click now cycles Original Picture, AI Labels (charts), Zoom and AI Readout.
+1.0.98: Chat and Email pages fill from the newest message back, so the last page is full instead of holding one message (and the page before it no longer holds a stray one). A newest message longer than a page still starts its own page. A chat that gets translations while open stays on the newest message.
 <!-- whatsnew:end -->

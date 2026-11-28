@@ -163,8 +163,10 @@ const WRAP_TOKENS = new RegExp(`\\s+|[${NO_END}]*[${CJK}][${NO_START}]*|[^\\s${C
 
 export type ReaderPage = { text: string; userTurns: number[]; firstLine: number; lastLine: number };
 
+// fromEnd: fill pages from the last row back, so the newest page is full and the oldest page is
+// the short one (Chat and Email, 2026-11-28). Default: from the first row, as Coding pages.
 export function readerPages(text: string, measure: (text: string) => number, width = 550, rowsPerPage = 6, byteLimit = 900,
-  startLine = 0): ReaderPage[] {
+  startLine = 0, fromEnd = false): ReaderPage[] {
   const rows: { text: string; turn: number; lineIndex: number }[] = [];
   const fits = (candidate: string) => measure(candidate) <= width && enc.encode(candidate).length <= byteLimit;
   let userTurn = 0, lastTurn = 0;
@@ -208,16 +210,24 @@ export function readerPages(text: string, measure: (text: string) => number, wid
   for (let i = rows.length - 1; i >= 0; i--) {
     if (rows[i].turn && !rows[i].text.trim() && rows[i + 1]?.turn !== rows[i].turn) rows[i].turn = 0;
   }
-  const pages: ReaderPage[] = [];
+  const full = (page: typeof rows, row: (typeof rows)[number], before: boolean) => page.length > 0 && (page.length === rowsPerPage ||
+    (byteLimit !== Infinity && enc.encode((before ? [row, ...page] : [...page, row]).map(r => r.text).join('\n')).length > byteLimit));
+  const groups: (typeof rows)[] = [];
   let page: typeof rows = [];
-  const save = () => pages.push({ text: page.map(row => row.text).join('\n'), userTurns: page.map(row => row.turn),
-    firstLine: page[0].lineIndex, lastLine: page[page.length - 1].lineIndex });
-  for (const row of rows) {
-    if (page.length && (page.length === rowsPerPage || (byteLimit !== Infinity && enc.encode([...page, row].map(r => r.text).join('\n')).length > byteLimit))) {
-      save(); page = [];
+  if (fromEnd) {
+    // Walk back from the newest row; each page is closed when the row before it would not fit.
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (full(page, rows[i], true)) { groups.unshift(page); page = []; }
+      page.unshift(rows[i]);
     }
-    page.push(row);
+    groups.unshift(page);
+  } else {
+    for (const row of rows) {
+      if (full(page, row, false)) { groups.push(page); page = []; }
+      page.push(row);
+    }
+    groups.push(page);
   }
-  save();
-  return pages;
+  return groups.map(group => ({ text: group.map(row => row.text).join('\n'), userTurns: group.map(row => row.turn),
+    firstLine: group[0].lineIndex, lastLine: group[group.length - 1].lineIndex }));
 }

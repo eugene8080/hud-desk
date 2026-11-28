@@ -291,7 +291,8 @@ test('Chat reader opens at the newest message start and refreshes past the last 
   messages.push({ text: 'Synthetic refresh result.', date: messages[0].date + 1000, own: true, from: '' });
   for (let i = 0; i < 3; i++) await h.scroll('down');
   assert.equal(reads.length, 2);
-  assert.match(h.upgrades.findLast(item => item.containerName === 'body').content, /^\/ Synthetic refresh result/);
+  // A short newest message ends a full last page (2026-11-28), under the end of the long one.
+  assert.match(h.upgrades.findLast(item => item.containerName === 'body').content, /Sample line 12\.\n\/ Synthetic refresh result\.$/);
   assert.equal(sends.length, 0);
   await h.back();
   assert.match(container(h, 'menu-count').content, /4 unread chats/);
@@ -3413,4 +3414,19 @@ test('Usage bars: fill is proportional to the used share and the page fits every
     ] }, font, 15);
     assert.equal(tiles.length, 4, font);
   }
+});
+
+test('Chat and Email pages fill from the newest row back: the last page is full, the short page is the oldest', () => {
+  const measure = text => text.length;
+  const lines = Array.from({ length: 23 }, (_, i) => `${i % 2 ? '/' : '> Fixture sender:'} Short message ${i + 1}.`).join('\n');
+  const forward = textExports.readerPages(lines, measure, 200, 10, Infinity);
+  const back = textExports.readerPages(lines, measure, 200, 10, Infinity, 0, true);
+  // The old order left 3 rows on the last page; filling back puts those 3 on the first page.
+  // Array.from: plain arrays of this realm (the module runs in a vm context).
+  assert.deepEqual(Array.from(forward, page => page.text.split('\n').length), [10, 10, 3]);
+  assert.deepEqual(Array.from(back, page => page.text.split('\n').length), [3, 10, 10]);
+  assert.match(back.at(-1).text, /Short message 23\.$/);
+  assert.deepEqual([back[0].firstLine, back.at(-1).lastLine], [0, 22]);
+  // Same rows, same order: only the page boundaries move.
+  assert.equal(back.map(page => page.text).join('\n'), forward.map(page => page.text).join('\n'));
 });
