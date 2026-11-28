@@ -94,9 +94,9 @@ export type MailConversation = { subject: string; messages: { id: string; from: 
 export type ChartLabelAnswer = { text: string; role: string; align: 'left' | 'center' | 'right'; x: number; y: number };
 export type GlassImage = { width: number; height: number; data: string; mean: number; view?: string; regions?: number; region?: number; negative?: boolean;
   style?: string; labels?: ChartLabelAnswer[]; background?: number; ink?: number };
-// The viewer asks for a view (fit, labels, zoom, outline, read) and, in zoom, a section; read answers with text.
+// The viewer asks for a view (fit, labels, zoom, read) and, in zoom, a section; read answers with text.
 // negative: 'on'/'off', or left out for automatic (the bridge decides; 1.0.84).
-export type ImageRequest = { view?: 'fit' | 'labels' | 'zoom' | 'outline' | 'read'; region?: number; negative?: 'on' | 'off' };
+export type ImageRequest = { view?: 'fit' | 'labels' | 'zoom' | 'read'; region?: number; negative?: 'on' | 'off' };
 export type ImageAnswer = GlassImage & { text?: string };
 const viewQuery = (request: ImageRequest) => ({ ...(request.view && { view: request.view }), ...(request.region !== undefined && { region: String(request.region) }),
   ...(request.negative && { negative: request.negative }) });

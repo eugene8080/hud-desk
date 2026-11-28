@@ -36,7 +36,7 @@ Run the one-command setup, then paste the pairing code into HUD Desk on your pho
 
 **Pictures**
 - AI Labels (charts): the local AI reads every printed line of a chart and HUD Desk draws it back in place in Scientifica 5x11, so titles, ticks and notes become readable. [How it works](docs/pictures.md)
-- Original Picture tuned for the G2's 16 green levels (flat tones for charts and screenshots, thin edges and dithering for photos), Zoom in sections, Outline, and AI Readout: a local Ollama vision model describes the picture as text.
+- Original Picture tuned for the G2's 16 green levels (flat tones for charts and screenshots, thin edges and dithering for photos), Zoom in sections, and AI Readout: a local Ollama vision model describes the picture as text.
 
 **Keyboard**
 - Gmail-style keys everywhere; VS Code-style `Ctrl+P`, `Ctrl+Shift+P`, `Ctrl+Tab`, `Ctrl+F`, `Ctrl+,`; `?` shows every key on the glasses.
@@ -68,8 +68,8 @@ Native 576 × 288 simulator captures of beta 1.0.91 (Coding list and charts: 1.0
 | ![Coding sessions](store/screenshots/04-coding-list.png) | ![Reader: native text](store/screenshots/05-coding-native.png) | ![Voice review](store/screenshots/06-voice.png) |
 | **Email** | **Email with pictures** | **Original Picture** |
 | ![Email](store/screenshots/07-email.png) | ![Email with pictures](store/screenshots/08-email-pictures.png) | ![Original Picture](store/screenshots/09-picture.png) |
-| **Outline** | **Usage bars** | **AI Readout** |
-| ![Outline](store/screenshots/10-outline.png) | ![Usage bars](store/screenshots/11-usage.png) | ![AI Readout](store/screenshots/12-ai-readout.png) |
+| **Usage bars** | **AI Readout** | |
+| ![Usage bars](store/screenshots/11-usage.png) | ![AI Readout](store/screenshots/12-ai-readout.png) | |
 | **Chart on the G2** | **Chart: AI Labels** | **Chart: AI Readout** |
 | ![Chart on the G2](store/screenshots/19-chart-picture.png) | ![Chart: AI Labels](store/screenshots/21-chart-labels.png) | ![Chart: AI Readout](store/screenshots/20-chart-readout.png) |
 | **Chat** | **Filter by Network** | **Chat translation** |

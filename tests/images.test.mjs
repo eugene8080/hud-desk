@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ditherLevels, glassImage, packLevels, thinEdges, IMAGE_WIDTH, IMAGE_HEIGHT } from '../bridge/image.mjs';
+import { ditherLevels, glassImage, packLevels, readView, thinEdges, VIEWS, IMAGE_WIDTH, IMAGE_HEIGHT } from '../bridge/image.mjs';
 import { visibleClaudeMessage, visibleMessage } from '../bridge/conversation.mjs';
 import { htmlImages, htmlToText } from '../bridge/mail-text.mjs';
 import { messagePictures, messageWithPictures } from '../bridge/mail.mjs';
@@ -119,4 +119,12 @@ test('AI Readout sends a JPEG to the model as a PNG', async (t) => {
   assert.equal(answer.text, 'A test pattern.');
   assert.equal(sent.length, 1);
   assert.equal(sent[0].subarray(0, 4).toString('latin1'), '\x89PNG');
+});
+
+test('Outline is gone; an older app asking for it gets Original Picture, not an error', () => {
+  assert.deepEqual([...VIEWS].sort(), ['fit', 'labels', 'read', 'zoom']);
+  const query = values => key => values[key];
+  assert.deepEqual(readView(query({ view: 'outline' })), { view: 'fit', region: 0, negative: undefined });
+  assert.deepEqual(readView(query({ view: 'outline', region: '2', negative: 'on' })), { view: 'fit', region: 2, negative: true });
+  assert.throws(() => readView(query({ view: 'edges' })), /bad request/);
 });

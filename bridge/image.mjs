@@ -9,8 +9,6 @@
 // A mostly white picture (a light-mode screenshot) is made negative first, so its edges stay lit.
 // - zoom:    at least twice the fit size (a tall screenshot fills the width), read in 576x288
 //            sections in reading order; `region` picks the section, `regions` says how many.
-// - outline: edges only (Sobel), lit lines on black, no dithering (G2 1.0.81: dithered greys of
-//            photos and charts were hard to read on the waveguide).
 // - read:    the local vision model (Ollama) reads the picture as text: chart values, screen text,
 //            or two or three lines on a photo (Eugene: "AI even?"; a KPI chart read correctly in 20 s).
 // - labels:  charts only: Original Picture with the model's reading of each printed line drawn back
@@ -23,7 +21,10 @@ import { LABELS_PROMPT, LABELS_PROMPT_PLAIN, LABELS_SCHEMA, labelsView, modelTex
 
 export const IMAGE_WIDTH = 576, IMAGE_HEIGHT = 288;
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-export const VIEWS = new Set(['fit', 'labels', 'zoom', 'outline', 'read']);
+export const VIEWS = new Set(['fit', 'labels', 'zoom', 'read']);
+// Outline (edges only) was removed on 2026-11-28 (Eugene). Apps before 1.0.97 still offer it, so
+// their request gets Original Picture instead of an error.
+const RETIRED_VIEWS = { outline: 'fit' };
 const MAX_SIDE = 2400;
 const FORMATS = 'png_pipe,jpeg_pipe,webp_pipe,gif,bmp_pipe,tiff_pipe,image2pipe,mov';
 const DECODE_FILTER = `scale='min(${MAX_SIDE},iw)':'min(${MAX_SIDE},ih)':force_original_aspect_ratio=decrease,format=gray`;
@@ -166,14 +167,6 @@ export function thinEdges({ width, height, pixels }, high = 0.3, low = 0.12) {
   return out;
 }
 
-// Edges only, 1 px wide; strong lines full, faint ones dimmer (never below level 7, so they show).
-export function outline(picture) {
-  const strength = thinEdges(picture);
-  const levels = new Uint8Array(strength.length);
-  for (let i = 0; i < levels.length; i++) if (strength[i] > 0) levels[i] = Math.max(7, Math.round(Math.sqrt(strength[i]) * 15));
-  return levels;
-}
-
 const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 // The G2 picture style for a scaled grey picture (levels 0..15, edges 15, dots 15).
 export function g2Picture(picture) {
@@ -229,21 +222,21 @@ export function layout(width, height, view, region = 0) {
   return { w, h, regions, region: r, x, y };
 }
 
-// One 576x288 screen of a decoded picture for a view (fit, zoom or outline). negative: true or
+// One 576x288 screen of a decoded picture for a view (fit or zoom). negative: true or
 // false as asked, undefined = automatic (mostly white pictures).
 export function screenView(source, view = 'fit', region = 0, negative) {
   const { w, h, regions, region: r, x, y } = layout(source.width, source.height, view, region);
   const resampled = resample(source, w, h);
   const brightness = mean(resampled.pixels);
-  const inverted = view !== 'outline' && (negative ?? brightness > 0.6);
+  const inverted = negative ?? brightness > 0.6;
   const scaled = inverted ? { ...resampled, pixels: resampled.pixels.map(v => 255 - v) } : resampled;
   const screen = new Uint8Array(IMAGE_WIDTH * IMAGE_HEIGHT);
   // Centre a smaller picture; crop a section of a larger one.
   const ox = w < IMAGE_WIDTH ? (IMAGE_WIDTH - w) >> 1 : -x, oy = h < IMAGE_HEIGHT ? (IMAGE_HEIGHT - h) >> 1 : -y;
   // Both work on the picture alone, so the edge between the picture and the black padding does not
   // become a line.
-  const style = view === 'outline' ? 'outline' : pictureStyle(scaled.pixels);
-  const tone = style === 'outline' ? outline(scaled) : style === 'graphic' ? flatLevels(scaled.pixels) : g2Picture(scaled);
+  const style = pictureStyle(scaled.pixels);
+  const tone = style === 'graphic' ? flatLevels(scaled.pixels) : g2Picture(scaled);
   for (let yy = 0; yy < h; yy++) {
     const sy = yy + oy;
     if (sy < 0 || sy >= IMAGE_HEIGHT) continue;
@@ -390,7 +383,8 @@ export function createImaging({ ffmpeg, model, transport = fetch, codec } = {}) 
     available: () => Boolean(path()),
     readable,
     // key: a stable id for the source (chat message, mail part) or null (not cached).
-    async render(key, load, { view = 'fit', region = 0, negative } = {}) {
+    async render(key, load, { view: asked = 'fit', region = 0, negative } = {}) {
+      const view = RETIRED_VIEWS[asked] ?? asked;
       if (!VIEWS.has(view) || !Number.isSafeInteger(region) || region < 0 || region > 99) throw new ImageError('bad request', 400);
       const picture = await source(key, load);
       if (view === 'read') return read(key, picture);
@@ -402,7 +396,8 @@ export function createImaging({ ffmpeg, model, transport = fetch, codec } = {}) 
 
 // View and region from a query or a JSON body (defaults: fit, 0).
 export function readView(get) {
-  const view = get('view') ?? 'fit';
+  const asked = get('view') ?? 'fit';
+  const view = RETIRED_VIEWS[asked] ?? asked;
   const region = Number(get('region') ?? 0);
   const negative = get('negative');
   if (!VIEWS.has(view) || !Number.isSafeInteger(region) || region < 0 || region > 99 ||

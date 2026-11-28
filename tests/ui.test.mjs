@@ -3189,7 +3189,7 @@ const usageTiles = (groups, mode = 'Computer time', note = '') => fineExports.re
   { title: 'Usage', reset: `Reset: ${mode}  (Click to change)`, groups, note, none: 'no data' }, 'terminus', 15);
 const sameTiles = (h, tiles) => JSON.stringify(shownTiles(h)) === JSON.stringify(tiles);
 
-test('images: views cycle Original Picture, Zoom, Outline, AI Readout; swipe moves sections then pictures; n inverts; double-click returns', async () => {
+test('images: views cycle Original Picture, Zoom, AI Readout; swipe moves sections then pictures; n inverts; double-click returns', async () => {
   const { fixture, messages } = mailFixture();
   messages[1].images = [{ part: '2', name: 'plan.png' }, { part: '3', name: '' }];
   const asked = [];
@@ -3219,10 +3219,8 @@ test('images: views cycle Original Picture, Zoom, Outline, AI Readout; swipe mov
   await h.scroll('down');
   await h.scroll('down');
   assert.deepEqual(asked.at(-1), { part: '3', view: 'zoom', region: 0 });
-  // Click: Outline, then AI Readout: the AI's text in the pixel font, no divider, and
-  // "AI Readout 1/1" in the picture's bottom-right caption box.
-  await h.tap();
-  assert.deepEqual(asked.at(-1), { part: '3', view: 'outline', region: 0 });
+  // Click: AI Readout (Outline was removed on 2026-11-28): the AI's text in the pixel font, no
+  // divider, and "AI Readout 1/1" in the picture's bottom-right caption box.
   await h.tap();
   assert.deepEqual(asked.at(-1), { part: '3', view: 'read', region: 0 });
   const { textWidth, rows } = fineExports.fineLayout('terminus');
@@ -3326,12 +3324,12 @@ test('images: AI Labels follows Original Picture for charts when the bridge offe
   assert.equal(asked.at(-1).view, 'zoom');
   await h.scroll('down');
   assert.deepEqual(asked.at(-1), { part: '3', view: 'zoom', negative: undefined });
-  // The photo's cycle: Outline, AI Readout, Original Picture, then Zoom: no AI Labels.
-  for (const view of ['outline', 'read', 'fit', 'zoom']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
+  // The photo's cycle: AI Readout, Original Picture, then Zoom: no AI Labels and no Outline.
+  for (const view of ['read', 'fit', 'zoom']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
   // Back on the chart, nothing read: the picture as it is and the caption says so.
   readNothing = true;
   await h.scroll('up');
-  for (const view of ['outline', 'read', 'fit', 'labels']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
+  for (const view of ['read', 'fit', 'labels']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
   assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(fineExports.captionTiles(fineExports.labelTiles(screen, [], 255, 0), 'AI Labels: no text read · 1/2', 'terminus', 15)));
 });
 

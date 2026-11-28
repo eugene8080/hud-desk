@@ -157,6 +157,8 @@ spinner on its L frame, and the GitHub README.
   them over its Environment photo; the opaque copies in `store/screenshots/` show as a black box (seen
   2026-11-27). The portal keeps at most 8. Uploaded 2026-11-27 (second set, no kettle), in this order:
   02-architecture, 01-coding-dense, 03-live-diff, 10-outline, 11-usage, 13-chat, 15-chat-translate, 07-email.
+  2026-11-28: the Outline view was removed (1.0.97) and `10-outline.png` deleted; the portal still shows
+  it until a portal edit replaces it (candidate: `native/21-chart-labels.png`).
 - Portal also updated 2026-11-27: name HUD Desk, tagline 'Agents, inbox, chats. Heads up, hands free.',
   icon `store/icon/hud-desk-icon.png` (ink must be exactly #F4F4F4), tags orca claude codex email chat.
 - Portal privacy attachment: left as it is; Eugene ruled 2026-11-27 "no update to privacy statement
@@ -177,7 +179,6 @@ spinner on its L frame, and the GitHub README.
 | `07-email.png` | Email: One mailbox, Filter by Label, read marks and times. |
 | `08-email-pictures.png` | Email with pictures: A fictional newsletter; [Image] rows open the picture. |
 | `09-picture.png` | Original Picture: A Mandelbrot set (drawn by ffmpeg) converted for the G2's 16 green levels. |
-| `10-outline.png` | Outline: The same picture as thin edges. |
 | `11-usage.png` | Usage bars: Codex, Claude and Cursor allowances drawn as bars, with reset times (beta 1.0.91). |
 | `12-ai-readout.png` | AI Readout: The local vision model's description of the fractal (its real answer). |
 | `13-chat.png` | Chat: Beeper chats with [day/app]: WhatsApp, Signal, Telegram. |

@@ -96,14 +96,12 @@ const local = (() => { try { return JSON.parse(readFileSync(new URL('../bridge/c
 const imaging = createImaging({ ffmpeg: local.ffmpegPath ?? local.beeper?.ffmpegPath, model: local.visionModel ?? local.beeper?.translationModel });
 const pictureBytes = readFileSync(pictureFile);
 const load = async () => pictureBytes;
-const views = { fit: await imaging.render('picture', load, { view: 'fit' }),
-  outline: await imaging.render('picture', load, { view: 'outline' }), zoom: [] };
+const views = { fit: await imaging.render('picture', load, { view: 'fit' }), zoom: [] };
 const firstZoom = await imaging.render('picture', load, { view: 'zoom', region: 0 });
 for (let region = 0; region < firstZoom.regions; region++) views.zoom.push(await imaging.render('picture', load, { view: 'zoom', region }));
 const fractalBytes = readFileSync(new URL('../.local/store-assets/fractal.png', import.meta.url));
 const fractalLoad = async () => fractalBytes;
-const fractal = { fit: await imaging.render('fractal', fractalLoad, { view: 'fit' }),
-  outline: await imaging.render('fractal', fractalLoad, { view: 'outline' }), zoom: [] };
+const fractal = { fit: await imaging.render('fractal', fractalLoad, { view: 'fit' }), zoom: [] };
 const fractalZoom = await imaging.render('fractal', fractalLoad, { view: 'zoom', region: 0 });
 for (let region = 0; region < fractalZoom.regions; region++) fractal.zoom.push(await imaging.render('fractal', fractalLoad, { view: 'zoom', region }));
 // A news-style line chart with invented data (scripts/make-store-chart.py). Eugene chose this
@@ -112,8 +110,7 @@ for (let region = 0; region < fractalZoom.regions; region++) fractal.zoom.push(a
 // readout is cached next to the chart.
 const chartBytes = readFileSync(new URL('../.local/store-assets/markets-chart.png', import.meta.url));
 const chartLoad = async () => chartBytes;
-const chart = { fit: await imaging.render('chart', chartLoad, { view: 'fit' }),
-  outline: await imaging.render('chart', chartLoad, { view: 'outline' }), zoom: [] };
+const chart = { fit: await imaging.render('chart', chartLoad, { view: 'fit' }), zoom: [] };
 const chartZoom = await imaging.render('chart', chartLoad, { view: 'zoom', region: 0 });
 for (let region = 0; region < chartZoom.regions; region++) chart.zoom.push(await imaging.render('chart', chartLoad, { view: 'zoom', region }));
 const chartReadoutFile = new URL('../.local/store-assets/markets-chart-readout.txt', import.meta.url);
@@ -177,9 +174,9 @@ const fractal=${JSON.stringify(fractal)};
 const readout=${JSON.stringify(readout)};
 const chart=${JSON.stringify(chart)};
 const chartReadout=${JSON.stringify(chartReadout)};
-const chartView=(request)=>request.view==='read'?{text:chartReadout}:request.view==='labels'?chart.labels:request.view==='zoom'?chart.zoom[Math.min(request.region||0,chart.zoom.length-1)]:request.view==='outline'?chart.outline:chart.fit;
-const pick=(v,request)=>request.view==='zoom'?v.zoom[Math.min(request.region||0,v.zoom.length-1)]:request.view==='outline'?v.outline:request.view==='read'?{text:'A Mandelbrot set: a black cardioid with a round bulb on its left and smaller bulbs around it, on a lighter background.'}:v.fit;
-const view=(request)=>request.view==='read'?{text:readout}:request.view==='zoom'?views.zoom[Math.min(request.region||0,views.zoom.length-1)]:request.view==='outline'?views.outline:views.fit;
+const chartView=(request)=>request.view==='read'?{text:chartReadout}:request.view==='labels'?chart.labels:request.view==='zoom'?chart.zoom[Math.min(request.region||0,chart.zoom.length-1)]:chart.fit;
+const pick=(v,request)=>request.view==='zoom'?v.zoom[Math.min(request.region||0,v.zoom.length-1)]:request.view==='read'?{text:'A Mandelbrot set: a black cardioid with a round bulb on its left and smaller bulbs around it, on a lighter background.'}:v.fit;
+const view=(request)=>request.view==='read'?{text:readout}:request.view==='zoom'?views.zoom[Math.min(request.region||0,views.zoom.length-1)]:views.fit;
 export const currentBase=()=> 'store preview (sample data)';
 export const api={
   threads:async()=>${JSON.stringify(samples)},

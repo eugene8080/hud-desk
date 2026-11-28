@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.96**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.97**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -51,8 +51,7 @@ Rule for every agent: each beta release updates this file in the release commit:
   1 px dark halo, over the chart with its own tiny text cleared; positions come from the picture's
   own pixels, lines the AI misread or that match no printed text are left as printed; tick labels
   that would collide are thinned), Zoom (at least twice
-  the size, in sections; a tall screenshot fills the width), Outline (1 px edges only, lit lines on
-  black) and AI Readout (the PC's local vision model reads it as text: chart values, screen text, or
+  the size, in sections; a tall screenshot fills the width) and AI Readout (the PC's local vision model reads it as text: chart values, screen text, or
   what a photo shows; its pages have no divider and "AI Readout 1/2" in the caption box). Swipe moves through sections or text pages, then pictures; n toggles negative; a caption
   shows the view and position; double-click goes back.
   Tube draws CRT scanlines on every third pixel row across the whole screen; Tube 1/2, 1/4 and
@@ -165,7 +164,7 @@ Chat (Beeper: WhatsApp, Signal, Telegram and more):
 - Rows show the day and the app; Filter by Network; formatting kept.
 - Voice notes transcribed (Cantonese tuned). English under each line. Photos open on the glasses.
 
-Pictures: Original Picture (tuned for G2), Zoom in sections, Outline, and AI Readout: a local vision model describes the picture.
+Pictures: Original Picture (tuned for G2), AI Labels (chart text redrawn sharp), Zoom in sections, and AI Readout: a local vision model describes the picture.
 
 Keyboard: Gmail-style keys everywhere, VS Code-style Ctrl+P, Ctrl+Shift+P, Ctrl+Tab, Ctrl+F; ? shows every key.
 
@@ -181,5 +180,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.96: AI Labels for charts. Open a chart in mail or chat and click once after Original Picture: the PC's local AI reads every printed line (title, legend, axis ticks, notes, source) and HUD Desk draws it back where it was printed, in the sharp Scientifica pixel font. Positions come from the picture itself; lines the AI misread are left as printed. Needs a vision model in Ollama on the PC.
+1.0.97: The Outline picture view is gone. A click now cycles Original Picture, AI Labels (charts), Zoom and AI Readout.
 <!-- whatsnew:end -->

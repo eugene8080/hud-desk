@@ -7,7 +7,9 @@ the G2. The bridge decodes a picture once with ffmpeg (`bridge/image.mjs`) and d
 576x288 panel levels; the app (`app/src/main.ts`, viewer near `imageViewTiles`) shows it in the
 four image tiles with a caption box in the bottom-right corner.
 
-A click cycles the views. Swipe moves through Zoom sections or AI Readout pages, then to the next
+A click cycles the views. Outline (1 px edges only) was removed on 2026-11-28 (Eugene: "remove the
+outline image option completely"); the bridge answers an older app's Outline request with Original
+Picture. Swipe moves through Zoom sections or AI Readout pages, then to the next
 picture; `n` toggles negative; double-click goes back.
 
 | View | What it shows |
@@ -15,7 +17,6 @@ picture; `n` toggles negative; double-click goes back.
 | Original Picture | The whole picture. Charts and screenshots in four flat tones; photos as thin bright edges over a dot pattern. |
 | AI Labels | Charts only (see below). |
 | Zoom | At least twice the size, in sections. |
-| Outline | 1 px edges only. |
 | AI Readout | The local Ollama vision model describes the picture as text (`READ_PROMPT`). |
 
 AI Labels and AI Readout need a vision-capable model in Ollama on the bridge PC (`visionModel` in
@@ -29,7 +30,7 @@ At 576x288 in 16 green levels most of a chart's text is unreadable. AI Labels ta
 reading of each printed line and draws it back where it was printed, in Scientifica 5x11
 (`bridge/chart-labels.mjs`, `app/src/fine-text.ts` `placeLabels`/`labelTiles`).
 
-Place in the cycle: Original Picture, AI Labels, Zoom, Outline, AI Readout. It is offered only for
+Place in the cycle: Original Picture, AI Labels, Zoom, AI Readout. It is offered only for
 pictures that Original Picture draws in flat tones (`pictureStyle` = graphic). A photo asked for
 AI Labels (after a swipe from a chart) answers as Original Picture and the view switches to it.
 

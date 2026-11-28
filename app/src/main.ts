@@ -117,12 +117,12 @@ let viewProvider = 'all';
 // Reader text: the firmware's native font, or small text drawn as image tiles.
 type ReaderText = 'native' | FineFont;
 // The full-screen picture viewer (2026-11-27): image n of count from the reader's source.
-type ImageMode = 'fit' | 'labels' | 'zoom' | 'outline' | 'read';
-// Original Picture, AI Labels, Zoom, Outline, AI Readout (Eugene, 2026-11-27: Outline kept for now
-// with thin, 1px lines; he may drop it after trying them). AI Labels (2026-11-27) comes right after
-// Original Picture, for charts only: the local AI's reading of each printed line redrawn in place.
-const IMAGE_VIEWS: ImageMode[] = ['fit', 'labels', 'zoom', 'outline', 'read'];
-const IMAGE_VIEW_LABEL = { fit: 'imageViewFit', labels: 'imageViewLabels', zoom: 'imageViewZoom', outline: 'imageViewOutline', read: 'imageViewRead' } as const;
+type ImageMode = 'fit' | 'labels' | 'zoom' | 'read';
+// Original Picture, AI Labels, Zoom, AI Readout. AI Labels (2026-11-27) comes right after Original
+// Picture, for charts only: the local AI's reading of each printed line redrawn in place. Outline
+// (edges only) was removed on 2026-11-28 (Eugene: "remove the outline image option completely").
+const IMAGE_VIEWS: ImageMode[] = ['fit', 'labels', 'zoom', 'read'];
+const IMAGE_VIEW_LABEL = { fit: 'imageViewFit', labels: 'imageViewLabels', zoom: 'imageViewZoom', read: 'imageViewRead' } as const;
 // style: the picture's kind from the last picture answer ('graphic' or 'photo'); labelled: the
 // picture whose labels have been read (the next answer for it is quick, so no "Reading" note).
 type ImageView = { n: number; count: number; numbers: number[]; load: (n: number, request?: ImageRequest) => Promise<ImageAnswer>;
@@ -758,7 +758,7 @@ function imageViewTiles(view: ImageView): number[][] {
   const scaled = (level: number) => Math.round(level * top / 15);
   // The bridge draws the negative itself (before finding the edges); bridges before 1.0.84 send
   // no `negative` field, and there the app still inverts a mostly white picture.
-  const invert = view.mode !== 'outline' && view.image.negative === undefined && (view.invert ?? view.image.mean > 0.6);
+  const invert = view.image.negative === undefined && (view.invert ?? view.image.mean > 0.6);
   const screen = new Uint8Array(576 * 288);
   for (let i = 0; i < screen.length; i++) {
     const packed = bytes[i >> 1] ?? 0;
@@ -788,7 +788,7 @@ function pageImage(s: TextScreen): number | undefined {
 }
 
 // Picture viewer (Eugene, 2026-11-27, after looking at charts on G2): a click cycles Picture
-// (whole, auto negative), Zoom (sections; swipe moves through them), Outline (edges only) and Read
+// (whole, auto negative), AI Labels (charts), Zoom (sections; swipe moves through them) and Read
 // (the local AI's text). Swipe: the next section, text page or picture; n: negative; double-click: back.
 function openPageImage(s: Screen | null): boolean {
   if (s?.kind !== 'text' || !s.reader?.image || s.voice) return false;
@@ -2354,7 +2354,7 @@ const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Page
 
 function gmailKey(ev: KeyboardEvent, s: Screen, glassEvent: (type: OsEventTypeList) => void): boolean {
   const key = keyName(ev);
-  if (key === 'n' && s.kind === 'text' && s.imageView?.image && s.imageView.mode !== 'outline') {
+  if (key === 'n' && s.kind === 'text' && s.imageView?.image) {
     const view = s.imageView;
     view.invert = !(view.invert ?? view.image!.negative ?? view.image!.mean > 0.6);
     // The bridge redraws it (edges are found after the negative); an older bridge: the app inverts.

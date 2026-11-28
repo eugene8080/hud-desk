@@ -58,6 +58,17 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 Eugene on G2: "AI labels work great" (1.0.96 after the restart). Then: "remove the outline image
+option completely. graphs or otherwise". Beta 1.0.97: views Original Picture, AI Labels (charts), Zoom,
+AI Readout. Removed from app (ImageMode, cycle, n-key guard, i18n), bridge (VIEWS, outline()), store
+fixture, tests, docs, README, gallery, listing; screenshots 10-outline deleted. thinEdges stays (the
+photo style uses it). Bridge maps an older app's 'outline' request to 'fit' (RETIRED_VIEWS; test in
+tests/images.test.mjs); live after the next bridge restart (not needed now: the running bridge still
+serves Outline to older apps). Store description: Outline -> 'AI Labels (chart text redrawn sharp)',
+1,996 chars; Japanese line updated. 323 tests, build pass; beta 1.0.97 CLI verified 252,859 bytes;
+prototype build restored. NOT done (portal, asked Eugene): the Even Hub listing still shows the
+10-outline screenshot and the description still says Outline (1.0.94 in review).
+
 2026-11-28 bridge restarted with Eugene's approval for 1.0.95 (Orca bell) and 1.0.96 (AI Labels): old
 supervisor 40464/server 44168/whisper 72344 (ownership checked: pid file, tree, 8787 owner); new
 supervisor 53748, server 29976, whisper 64852 --vad; local and tailnet healthz ok. Read-only check:
