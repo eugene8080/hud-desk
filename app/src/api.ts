@@ -153,6 +153,9 @@ export const api = {
   health: () => call<{ ok: boolean }>('GET', '/healthz'),
   threads: () => call<Thread[]>('GET', '/api/threads'),
   activity: (handle: string) => call<{ state: Activity; elapsedSeconds?: number | null; readOnly?: boolean }>('GET', `/api/activity?handle=${encodeURIComponent(handle)}`),
+  // The picture viewer closed: the bridge stops reading the chart in the background (bridges before
+  // 1.0.98 answer 404; the call is fire and forget).
+  imageIdle: () => call<{ ok: boolean }>('POST', '/api/image/idle', {}),
   historyImage: (handle: string, index: number, request: ImageRequest = {}) =>
     call<ImageAnswer>('GET', `/api/history/image?${new URLSearchParams({ handle, index: String(index), ...viewQuery(request) })}`, undefined, 200000),
   history: (handle: string) => call<{ text: string; model?: string; source?: string; limited?: boolean; messageCount?: number; reason?: string }>('GET', `/api/history?handle=${encodeURIComponent(handle)}`),

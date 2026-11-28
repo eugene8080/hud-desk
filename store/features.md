@@ -45,14 +45,16 @@ Rule for every agent: each beta release updates this file in the release commit:
   only; tracking pixels, icons and ad servers skipped); [Image N] where a picture was pasted
   into a Claude or Codex session. A click on the page opens its first picture. A click cycles the
   views: Original Picture (whole; a chart or screenshot in four flat tones, a photo as thin bright outlines over a
-  dot pattern, as G2oom draws its scenes; a mostly white picture in negative), AI Labels (charts only,
-  when the PC has a vision model: the local AI reads every printed line of the chart (title, legend,
-  ticks, notes, source) and HUD Desk draws it back where it was printed, in Scientifica 5x11 with a
-  1 px dark halo, over the chart with its own tiny text cleared; positions come from the picture's
-  own pixels, lines the AI misread or that match no printed text are left as printed; tick labels
-  that would collide are thinned), Zoom (at least twice
-  the size, in sections; a tall screenshot fills the width) and AI Readout (the PC's local vision model reads it as text: chart values, screen text, or
-  what a photo shows; its pages have no divider and "AI Readout 1/2" in the caption box). Swipe moves through sections or text pages, then pictures; n toggles negative; a caption
+  dot pattern, as G2oom draws its scenes; a mostly white picture in negative), Zoom (at least twice
+  the size, in sections; a tall screenshot fills the width), AI Readout (the PC's local vision model reads it as text: chart values, screen text, or
+  what a photo shows; its pages have no divider and "AI Readout 1/2" in the caption box) and, for
+  charts, AI Labels (when the PC has a vision model: the local AI reads every printed line of the
+  chart (title, legend, ticks, notes, source) and HUD Desk draws it back where it was printed, in
+  Scientifica 5x11 with a 1 px dark halo, over the chart with its own tiny text cleared; positions
+  come from the picture's own pixels, lines the AI misread or that match no printed text are left
+  as printed; tick labels that would collide are thinned). A chart is read in the background from
+  the moment it opens (AI Readout first, then AI Labels, one model call at a time), so both are
+  usually ready when clicked; leaving the picture or the viewer stops that reading. Swipe moves through sections or text pages, then pictures; n toggles negative; a caption
   shows the view and position; double-click goes back.
   Tube draws CRT scanlines on every third pixel row across the whole screen; Tube 1/2, 1/4 and
   1/8 scan your turns over a half-, quarter- and eighth-lit band.

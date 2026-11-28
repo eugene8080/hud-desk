@@ -134,6 +134,9 @@ function codingRoutes(agents, orca) {
     },
     // An image pasted into a Claude or Codex session, by its [Image N] number in the history.
     // Not cached: a /clear restarts the numbering on the same terminal.
+    // The app left the picture viewer (2026-11-28): stop the model's background readings
+    // (prefetched AI Readout and AI Labels of the chart that was open).
+    'POST /api/image/idle': () => { imaging.idle(); return { ok: true }; },
     'GET /api/history/image': (q) => {
       const index = Number(q.get('index'));
       if (!Number.isSafeInteger(index) || index < 1) throw new ImageError('bad request', 400);

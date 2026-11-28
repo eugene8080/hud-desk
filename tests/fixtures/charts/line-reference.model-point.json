@@ -1,0 +1,195 @@
+{
+ "prompt": "LABELS_CALL (centre points, second turn of the AI Readout conversation)",
+ "model": "qwen3.8:27b",
+ "seconds": 3.2,
+ "readout": "Title: Monthly Widget Orders, 2031\nSeries: Orders (thousands)\nJan: 32, Feb: 38, Mar: 45, Apr: 52\nMay: 60, Jun: 75 (highest on record)\nJul: 68, Aug: 58, Sep: 55, Oct: 50\nNov: 43, Dec: 41\nTarget line: 50 (dashed)\nY-axis range: 0 to 80\nSource: Fictional Data Office",
+ "answer": {
+  "isChart": true,
+  "texts": [
+   {
+    "text": "Monthly Widget Orders, 2031",
+    "role": "title",
+    "point": [
+     238,
+     58
+    ]
+   },
+   {
+    "text": "Orders (thousands)",
+    "role": "legend",
+    "point": [
+     148,
+     137
+    ]
+   },
+   {
+    "text": "80",
+    "role": "y-tick",
+    "point": [
+     72,
+     225
+    ]
+   },
+   {
+    "text": "60",
+    "role": "y-tick",
+    "point": [
+     72,
+     372
+    ]
+   },
+   {
+    "text": "40",
+    "role": "y-tick",
+    "point": [
+     72,
+     519
+    ]
+   },
+   {
+    "text": "20",
+    "role": "y-tick",
+    "point": [
+     72,
+     666
+    ]
+   },
+   {
+    "text": "0",
+    "role": "y-tick",
+    "point": [
+     72,
+     813
+    ]
+   },
+   {
+    "text": "Jan",
+    "role": "x-tick",
+    "point": [
+     107,
+     882
+    ]
+   },
+   {
+    "text": "Feb",
+    "role": "x-tick",
+    "point": [
+     187,
+     882
+    ]
+   },
+   {
+    "text": "Mar",
+    "role": "x-tick",
+    "point": [
+     267,
+     882
+    ]
+   },
+   {
+    "text": "Apr",
+    "role": "x-tick",
+    "point": [
+     347,
+     882
+    ]
+   },
+   {
+    "text": "May",
+    "role": "x-tick",
+    "point": [
+     427,
+     882
+    ]
+   },
+   {
+    "text": "Jun",
+    "role": "x-tick",
+    "point": [
+     507,
+     882
+    ]
+   },
+   {
+    "text": "Jul",
+    "role": "x-tick",
+    "point": [
+     587,
+     882
+    ]
+   },
+   {
+    "text": "Aug",
+    "role": "x-tick",
+    "point": [
+     667,
+     882
+    ]
+   },
+   {
+    "text": "Sep",
+    "role": "x-tick",
+    "point": [
+     747,
+     882
+    ]
+   },
+   {
+    "text": "Oct",
+    "role": "x-tick",
+    "point": [
+     827,
+     882
+    ]
+   },
+   {
+    "text": "Nov",
+    "role": "x-tick",
+    "point": [
+     907,
+     882
+    ]
+   },
+   {
+    "text": "Dec",
+    "role": "x-tick",
+    "point": [
+     987,
+     882
+    ]
+   },
+   {
+    "text": "Highest month",
+    "role": "annotation",
+    "point": [
+     612,
+     225
+    ]
+   },
+   {
+    "text": "on record",
+    "role": "annotation",
+    "point": [
+     592,
+     268
+    ]
+   },
+   {
+    "text": "Target 50",
+    "role": "annotation",
+    "point": [
+     133,
+     420
+    ]
+   },
+   {
+    "text": "Source: Fictional Data Office",
+    "role": "source",
+    "point": [
+     128,
+     958
+    ]
+   }
+  ]
+ }
+}

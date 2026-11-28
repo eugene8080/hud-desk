@@ -118,10 +118,11 @@ let viewProvider = 'all';
 type ReaderText = 'native' | FineFont;
 // The full-screen picture viewer (2026-11-27): image n of count from the reader's source.
 type ImageMode = 'fit' | 'labels' | 'zoom' | 'read';
-// Original Picture, AI Labels, Zoom, AI Readout. AI Labels (2026-11-27) comes right after Original
-// Picture, for charts only: the local AI's reading of each printed line redrawn in place. Outline
-// (edges only) was removed on 2026-11-28 (Eugene: "remove the outline image option completely").
-const IMAGE_VIEWS: ImageMode[] = ['fit', 'labels', 'zoom', 'read'];
+// Original Picture, Zoom, AI Readout, AI Labels (Eugene, 2026-11-28: "it should be original, zoom,
+// ai readout, ai labels"). AI Labels (2026-11-27) is for charts only: the local AI's reading of each
+// printed line redrawn in place. Outline (edges only) was removed on 2026-11-28 (Eugene: "remove the
+// outline image option completely").
+const IMAGE_VIEWS: ImageMode[] = ['fit', 'zoom', 'read', 'labels'];
 const IMAGE_VIEW_LABEL = { fit: 'imageViewFit', labels: 'imageViewLabels', zoom: 'imageViewZoom', read: 'imageViewRead' } as const;
 // style: the picture's kind from the last picture answer ('graphic' or 'photo'); labelled: the
 // picture whose labels have been read (the next answer for it is quick, so no "Reading" note).
@@ -811,12 +812,18 @@ function openPageImage(s: Screen | null): boolean {
   reader.reading = true;
   const view: ImageView = { n, count: numbers.length, numbers, load, mode: 'fit', region: 0, regions: 1, textPage: 0, note: '' };
   const screen: TextScreen = { kind: 'text', title: ' ', text: '', fine: reader.fine ?? smallFont, imageView: view,
-    onBack: () => { Object.assign(reader, { reading: false }); void show(reader).catch(e => diag((e as Error).message)); },
+    onBack: () => {
+      Object.assign(reader, { reading: false });
+      // Stop the bridge's background readings of this chart (prefetch); quiet on older bridges.
+      void api.imageIdle().catch(() => {});
+      void show(reader).catch(e => diag((e as Error).message));
+    },
     onClick: () => {
       const modes = imageModes(view);
       view.mode = modes[(modes.indexOf(view.mode) + 1) % modes.length];
       Object.assign(view, { region: 0, textPage: 0, image: undefined, text: undefined, note: '' });
-      void repaintImage(screen).then(() => loadImage(screen));
+      // No "Loading" page first: loadImage paints one only when the answer takes over 0.3 s.
+      void loadImage(screen);
     } };
   void show(screen).then(() => loadImage(screen)).catch(e => diag((e as Error).message));
   return true;
@@ -830,11 +837,23 @@ function repaintImage(s: TextScreen) {
 async function loadImage(s: TextScreen) {
   const view = s.imageView!;
   const { n, mode, region } = view;
-  if (mode === 'read') { view.note = tr('imageReading'); await repaintImage(s); view.note = ''; }
-  // The chart's text is read once per picture (about 5 s); a negative toggle after that is quick.
-  if (mode === 'labels' && view.labelled !== n) { view.note = tr('imageLabelling'); await repaintImage(s); view.note = ''; }
+  const request = view.load(n, { view: mode, region, ...(view.invert !== undefined && { negative: view.invert ? 'on' : 'off' }) });
+  // AI Readout and a chart's first AI Labels can take seconds: a "Reading" note then. The bridge
+  // reads a chart in the background from the moment it opens (2026-11-28), so the answer is often
+  // already there: the note shows only when it does not come within 0.3 s (a repaint of the glasses
+  // for nothing otherwise).
+  // The same for the "Loading image" page of any view: each repaint of the four tiles takes time on
+  // the glasses, so a quick answer (Zoom, a prefetched reading) goes straight to the screen.
+  const note = mode === 'read' ? 'imageReading' : mode === 'labels' && view.labelled !== n ? 'imageLabelling' : '';
+  if (!await Promise.race([request.then(() => true, () => true), new Promise<boolean>(r => setTimeout(() => r(false), 300))])) {
+    // A newer click or swipe owns the screen now.
+    if (current !== s || view.n !== n || view.mode !== mode || view.region !== region) return;
+    if (note) view.note = tr(note);
+    await repaintImage(s);
+    view.note = '';
+  }
   try {
-    const answer = await view.load(n, { view: mode, region, ...(view.invert !== undefined && { negative: view.invert ? 'on' : 'off' }) });
+    const answer = await request;
     if (current !== s || view.n !== n || view.mode !== mode || view.region !== region) return;
     if (mode === 'read') view.text = answer.text ?? '';
     else {
@@ -871,7 +890,7 @@ function moveImage(s: TextScreen, step: number) {
   const at = view.numbers.indexOf(view.n);
   Object.assign(view, { n: view.numbers[(at + step + view.count) % view.count], image: undefined, text: undefined,
     region: 0, regions: 1, textPage: 0, invert: undefined, note: '' });
-  void repaintImage(s).then(() => loadImage(s));
+  void loadImage(s);
 }
 
 // The Halo row of Compare backgrounds: toggles, saves and redraws the page (it stays open).

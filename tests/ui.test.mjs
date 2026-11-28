@@ -59,7 +59,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     return elements.get(id);
   };
   const threads = Array.from({ length: count }, (_, i) => ({ handle: `terminal-${i}`, title: `Session ${i}`, agent: 'codex', state: 'unknown' }));
-  const pages = [], sends = [], choices = [], timers = new Map(), mic = [], upgrades = [], transcriptions = [], images = [];
+  const pages = [], sends = [], choices = [], timers = new Map(), mic = [], upgrades = [], transcriptions = [], images = [], imageIdles = [];
   const animations = new Map();
   const timeouts = new Map();
   const storage = new Map(Object.entries(options.storage ?? {}));
@@ -78,6 +78,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     mail: options.mail,
     chat: options.chat,
     transcribe: async pcm => { transcriptions.push(pcm); return { text: 'A voice test.' }; },
+    imageIdle: async () => { imageIdles.push(Date.now()); return { ok: true }; },
     say: async (handle, text) => { sends.push({ handle, text }); return { sent: text }; },
     choice: async (handle, menuId, value) => { choices.push({ handle, menuId, value }); return { sent: value }; },
   };
@@ -129,7 +130,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
   const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush();
   const pickRow = async i => { event({ listEvent: { currentSelectItemIndex: i, eventType: 0 } }); await flush(); };
-  return { api, bridge, elements, pages, sends, choices, threads, timers, animations, mic, upgrades, images, transcriptions, flush, phone: () => phoneDeps, phoneCalls, storage, timeouts, exited: () => exited, pickRow,
+  return { api, bridge, elements, pages, sends, choices, threads, timers, animations, mic, upgrades, images, transcriptions, imageIdles, flush, phone: () => phoneDeps, phoneCalls, storage, timeouts, exited: () => exited, pickRow,
     debounce: async () => { for (const [id, { fn }] of timeouts) { timeouts.delete(id); fn(); } await flush(); },
     menu: async id => { event({ menuItemClickEvent: { itemID: id } }); await flush(); },
     system: async type => { event({ sysEvent: { eventType: type } }); await flush(); },
@@ -3232,6 +3233,8 @@ test('images: views cycle Original Picture, Zoom, AI Readout; swipe moves sectio
   assert.deepEqual(asked.at(-1), { part: '3', view: 'fit', region: 0 });
   await h.back();
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'body'), 'back in the mail reader');
+  // Leaving the viewer tells the bridge to stop reading the picture in the background.
+  assert.equal(h.imageIdles.length, 1);
 });
 
 // ---- AI Labels (2026-11-27): the AI's reading of a chart drawn back in place, synthetic labels only ----
@@ -3292,7 +3295,7 @@ test('AI Labels drawing: Scientifica letters in the ink level with a 1px backgro
   assert.deepEqual([at(400, 100), at(400, 200)], [255, 85]);
 });
 
-test('images: AI Labels follows Original Picture for charts when the bridge offers it; photos and older bridges skip it', async () => {
+test('images: AI Labels comes last for charts when the bridge offers it (Original, Zoom, AI Readout, AI Labels); photos skip it', async () => {
   const { fixture, messages } = mailFixture();
   messages[1].images = [{ part: '2', name: 'chart.png' }, { part: '3', name: 'photo.jpg' }];
   const asked = [];
@@ -3302,8 +3305,10 @@ test('images: AI Labels follows Original Picture for charts when the bridge offe
     asked.push({ part: ref.part, view: request.view, negative: request.negative });
     const style = ref.part === '2' ? 'graphic' : 'photo';
     if (request.view === 'read') return { text: 'Widget orders' };
-    if (request.view === 'labels') return { ...glassImage(5, 0.1), view: 'labels', style, negative: request.negative === 'on', regions: 1, region: 0,
+    // The bridge answers AI Labels on a photo with Original Picture.
+    if (request.view === 'labels' && style === 'graphic') return { ...glassImage(5, 0.1), view: 'labels', style, negative: request.negative === 'on', regions: 1, region: 0,
       labels: readNothing ? [] : labels, background: 0, ink: 15 };
+    if (request.view === 'labels') return { ...glassImage(5, 0.1), view: 'fit', style, negative: false, regions: 1, region: 0 };
     return { ...glassImage(5, 0.1), view: request.view, style, negative: false, regions: 1, region: 0 };
   };
   const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'], imageLabels: true }, storage: { module: 'email' }, mail: fixture });
@@ -3311,8 +3316,8 @@ test('images: AI Labels follows Original Picture for charts when the bridge offe
   for (let i = 0; i < 5 && !/\[Image 1: chart\.png\]/.test(container(h, 'body').content); i++) await h.scroll('down');
   await h.tap();
   assert.deepEqual(asked.at(-1), { part: '2', view: 'fit', negative: undefined });
-  // Click: AI Labels, drawn over the picture in Scientifica, captioned "AI Labels".
-  await h.tap();
+  // Clicks: Zoom, AI Readout, then AI Labels, drawn over the picture in Scientifica, captioned "AI Labels".
+  for (const view of ['zoom', 'read', 'labels']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
   assert.deepEqual(asked.at(-1), { part: '2', view: 'labels', negative: undefined });
   const screen = new Uint8Array(576 * 288).fill(85);
   const expected = fineExports.captionTiles(fineExports.labelTiles(screen, labels, 255, 0), 'AI Labels · 1/2', 'terminus', 15);
@@ -3320,18 +3325,58 @@ test('images: AI Labels follows Original Picture for charts when the bridge offe
   // n asks the bridge for the negative of the labelled picture.
   await h.key('n');
   assert.deepEqual(asked.at(-1), { part: '2', view: 'labels', negative: 'on' });
-  // Click: Zoom. Swipe past its only section to the photo, still in Zoom.
-  await h.tap();
-  assert.equal(asked.at(-1).view, 'zoom');
+  // Swipe to the photo while in AI Labels: the bridge answers with Original Picture, and the viewer
+  // shows it as Original Picture.
   await h.scroll('down');
-  assert.deepEqual(asked.at(-1), { part: '3', view: 'zoom', negative: undefined });
-  // The photo's cycle: AI Readout, Original Picture, then Zoom: no AI Labels and no Outline.
-  for (const view of ['read', 'fit', 'zoom']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
+  assert.deepEqual(asked.at(-1), { part: '3', view: 'labels', negative: undefined });
+  const plainTiles = [0, 1, 2, 3].map(() => new Array(288 * 144).fill(85));
+  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(fineExports.captionTiles(plainTiles, 'Original Picture · 2/2', 'terminus', 15)));
+  // The photo's cycle from Original Picture: Zoom, AI Readout, back to Original Picture: no AI Labels.
+  for (const view of ['zoom', 'read', 'fit', 'zoom']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
   // Back on the chart, nothing read: the picture as it is and the caption says so.
   readNothing = true;
   await h.scroll('up');
-  for (const view of ['read', 'fit', 'labels']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
+  for (const view of ['read', 'labels']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
   assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(fineExports.captionTiles(fineExports.labelTiles(screen, [], 255, 0), 'AI Labels: no text read · 1/2', 'terminus', 15)));
+});
+
+test('images: a ready answer goes straight to the glasses in one paint; a slow one shows the "Reading" note first', async () => {
+  const { fixture, messages } = mailFixture();
+  messages[1].images = [{ part: '2', name: 'chart.png' }];
+  let slow = null;
+  fixture.image = async (account, message, ref, request = {}) => {
+    if (request.view === 'read') return slow ?? { text: 'Widget orders' };
+    return { ...glassImage(5, 0.1), view: request.view, style: 'graphic', negative: false, regions: 1, region: 0 };
+  };
+  const h = await emailHarness(fixture);
+  await h.pickRow(2);
+  for (let i = 0; i < 5 && !/\[Image 1: chart\.png\]/.test(container(h, 'body').content); i++) await h.scroll('down');
+  await h.tap();
+  await h.tap();
+  const fineWrites = () => h.images.filter(image => image.containerName.startsWith('fine-')).length;
+  const { textWidth, rows } = fineExports.fineLayout('terminus');
+  const page = text => textExports.readerPages(text, fineExports.fineMeasure('terminus'), textWidth, rows, Infinity)[0];
+  const readout = fineExports.captionTiles(fineExports.renderTextPage(page('Widget orders'), 'terminus', 15), 'AI Readout 1/1', 'terminus', 15);
+  // Prefetched (answered at once): the readout is the only paint, no "Loading" page, no note.
+  let before = fineWrites();
+  await h.tap();
+  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(readout));
+  assert.ok(fineWrites() - before <= 4, `${fineWrites() - before} tile writes`);
+  // Slow (not in 0.3 s): the note, then the readout.
+  await h.tap();
+  await h.tap();
+  let answer;
+  slow = new Promise(resolve => { answer = resolve; });
+  before = fineWrites();
+  await h.tap();
+  assert.equal(fineWrites(), before, 'nothing painted before 0.3 s');
+  await h.debounce();
+  const note = fineExports.captionTiles(fineExports.renderTextPage(page('Reading the picture with the local AI…'), 'terminus', 15), 'AI Readout', 'terminus', 15);
+  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(note));
+  answer({ text: 'Widget orders' });
+  await h.flush();
+  await h.flush();
+  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(readout));
 });
 
 test('images: Chat photos are numbered rows and open from the page; Coding screenshots open by number', async () => {

@@ -60,6 +60,28 @@ export const LABELS_SCHEMA = {
   required: ['isChart', 'texts'],
 };
 
+// The same reading with the centre point [x, y] of each line instead of its box (2026-11-28): about
+// a quarter fewer tokens to write, so the call is about a second shorter, and the same lines landed
+// on the same words as with boxes (positions come from the picture; the point only says which run of
+// words is meant). Without any position (text and role only), same-shape values ("20", "40") were
+// put on each other's places: not used.
+const POINT = 'For each entry give its role and the centre point [x, y] of the printed letters, ' +
+  'with coordinates normalised to 0-1000 (0,0 is the top-left corner of the image, 1000,1000 the bottom-right).';
+export const LABELS_POINT_CALL = {
+  prompt: LABELS_PROMPT.replace(BOX, POINT),
+  plain: [...ASK, POINT].join(' '),
+  schema: { ...LABELS_SCHEMA, properties: { ...LABELS_SCHEMA.properties, texts: { type: 'array', items: { type: 'object', properties: {
+    text: { type: 'string' }, role: { type: 'string', enum: LABEL_ROLES },
+    point: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 } }, required: ['text', 'role', 'point'] } } } },
+};
+
+// How the bridge asks (bridge/image.mjs): `conversation` puts the labels question as the second turn
+// of the AI Readout conversation, so Ollama reuses the processed picture (2026-11-28: the labels
+// prompt took 0.16-0.21 s instead of 0.4-1.3 s). LABELS_BOX_CALL is the 1.0.96 call (a box per line,
+// a call of its own), kept for tests and measurements.
+export const LABELS_BOX_CALL = { conversation: false, prompt: LABELS_PROMPT, plain: LABELS_PROMPT_PLAIN, schema: LABELS_SCHEMA };
+export const LABELS_CALL = { conversation: true, ...LABELS_POINT_CALL };
+
 const MAX_TEXTS = 80, MAX_TEXT = 80;
 // Letters, digits, punctuation, symbols and spaces; no control or format characters.
 const PRINTABLE = /^[\p{L}\p{M}\p{N}\p{P}\p{S} ]+$/u;
@@ -68,22 +90,33 @@ const degenerate = ([x0, y0, x1, y1]) => y1 - y0 > 150 || (x1 - x0) * (y1 - y0) 
 
 // The model's answer (parsed JSON) -> lines of text with boxes in source pixels, and how many boxes
 // were unusable. Anything that is not a clean single line of printable text with a sensible box is
-// dropped here.
+// dropped here. An entry may give the centre `point` [x, y] instead of a `box`: it becomes a nominal
+// box (2 % of the picture's height, 0.6 of that per character), marked `point`, whose size is
+// not compared with the printed words.
 export function modelTexts(answer, width, height) {
   const texts = [];
   let unusable = 0;
   if (!answer || typeof answer !== 'object' || !Array.isArray(answer.texts)) return Object.assign(texts, { unusable });
   for (const item of answer.texts.slice(0, MAX_TEXTS)) {
-    if (!item || typeof item.text !== 'string' || !Array.isArray(item.box) || item.box.length !== 4) continue;
+    if (!item || typeof item.text !== 'string') continue;
     const text = item.text.replace(/\s+/g, ' ').trim();
     if (!text || text.length > MAX_TEXT || !PRINTABLE.test(text)) continue;
+    const role = LABEL_ROLES.includes(item.role) ? item.role : 'other';
+    if (!Array.isArray(item.box) && Array.isArray(item.point) && item.point.length === 2) {
+      const [px, py] = item.point.map(Number);
+      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+      const x = Math.max(0, Math.min(1000, px)) / 1000 * width, y = Math.max(0, Math.min(1000, py)) / 1000 * height;
+      const h = 0.02 * height, w = 0.6 * h * [...text].length;
+      texts.push({ text, role, box: [x - w / 2, y - h / 2, x + w / 2, y + h / 2], point: true });
+      continue;
+    }
+    if (!Array.isArray(item.box) || item.box.length !== 4) continue;
     const box = item.box.map(Number);
     if (!box.every(Number.isFinite)) continue;
     const [a, b, c, d] = box.map(v => Math.max(0, Math.min(1000, v)));
     const norm = [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)];
     if (norm[2] - norm[0] < 1 || norm[3] - norm[1] < 1 || degenerate(norm)) { unusable++; continue; }
-    texts.push({ text, role: LABEL_ROLES.includes(item.role) ? item.role : 'other',
-      box: [norm[0] / 1000 * width, norm[1] / 1000 * height, norm[2] / 1000 * width, norm[3] / 1000 * height] });
+    texts.push({ text, role, box: [norm[0] / 1000 * width, norm[1] / 1000 * height, norm[2] / 1000 * width, norm[3] / 1000 * height] });
   }
   return Object.assign(texts, { unusable });
 }
@@ -253,8 +286,9 @@ function candidates(element, found) {
         const perChar = w / (chars * h);
         if (perChar < 0.22 || perChar > 1.4) continue;
         // A word fewer than the spaces suggest is a strong sign of the wrong run; a word more is
-        // often only kerning that split a word.
-        out.push({ ids, box, extra: len < tokens ? 2.5 * (tokens - len) : len - tokens });
+        // often only kerning that split a word. `letters`: the letters the run shows.
+        out.push({ ids, box, extra: len < tokens ? 2.5 * (tokens - len) : len - tokens,
+          letters: ids.reduce((n, id) => n + letterCount(found.words[id]), 0) });
       }
     }
   }
@@ -272,7 +306,11 @@ function cost(element, cand, shift) {
   const distance = Math.hypot(cx - bx, cy - by) / em;
   // The model's box widths are loose (a "0" tick as wide as "100" beside it); the run's own width is
   // already checked against the text's length, so width counts less than height here.
-  const size = 0.6 * Math.abs(Math.log(cw / Math.max(1, b[2] - b[0]))) + Math.abs(Math.log(ch / Math.max(1, b[3] - b[1])));
+  // A centre point has no size to compare; a run showing fewer letters than the text has is then
+  // likely part of it ("10" of a "310" whose 3 stands apart), and costs by the share it misses.
+  const chars = [...element.text.replace(/ /g, '')].length;
+  const size = element.point ? 2 * Math.max(0, chars - cand.letters) / chars / 1.5
+    : 0.6 * Math.abs(Math.log(cw / Math.max(1, b[2] - b[0]))) + Math.abs(Math.log(ch / Math.max(1, b[3] - b[1])));
   return { distance, size, total: distance + 1.5 * size + 0.4 * cand.extra };
 }
 

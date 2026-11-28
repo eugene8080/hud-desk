@@ -1,0 +1,219 @@
+{
+ "prompt": "LABELS_CALL (centre points, second turn of the AI Readout conversation)",
+ "model": "qwen3.8:27b",
+ "seconds": 3.9,
+ "readout": "Title: Fictional Fruit Harvest by Region\nSubtitle: Tonnes, 2030 vs 2031\nLegend: Black=2030, Grey=2031\nNorth: 180 (2030), 220 (2031)\nSouth: 310 (2030), 290 (2031)\nEast: 95 (2030), 140 (2031)\nWest: 250 (2030), 335 (2031)\nCentral: 160 (2030), 175 (2031)\nY-axis: Tonnes (0-400)\nSource: Example Growers Guild",
+ "answer": {
+  "isChart": true,
+  "texts": [
+   {
+    "text": "Fictional Fruit Harvest by Region",
+    "role": "title",
+    "point": [
+     333,
+     52
+    ]
+   },
+   {
+    "text": "Tonnes, 2030 vs 2031",
+    "role": "subtitle",
+    "point": [
+     166,
+     104
+    ]
+   },
+   {
+    "text": "2030",
+    "role": "legend",
+    "point": [
+     62,
+     167
+    ]
+   },
+   {
+    "text": "2031",
+    "role": "legend",
+    "point": [
+     166,
+     167
+    ]
+   },
+   {
+    "text": "400",
+    "role": "y-tick",
+    "point": [
+     111,
+     235
+    ]
+   },
+   {
+    "text": "300",
+    "role": "y-tick",
+    "point": [
+     111,
+     398
+    ]
+   },
+   {
+    "text": "200",
+    "role": "y-tick",
+    "point": [
+     111,
+     561
+    ]
+   },
+   {
+    "text": "100",
+    "role": "y-tick",
+    "point": [
+     111,
+     724
+    ]
+   },
+   {
+    "text": "0",
+    "role": "y-tick",
+    "point": [
+     111,
+     887
+    ]
+   },
+   {
+    "text": "Tonnes",
+    "role": "axis-title",
+    "point": [
+     31,
+     561
+    ]
+   },
+   {
+    "text": "North",
+    "role": "x-tick",
+    "point": [
+     222,
+     940
+    ]
+   },
+   {
+    "text": "South",
+    "role": "x-tick",
+    "point": [
+     389,
+     940
+    ]
+   },
+   {
+    "text": "East",
+    "role": "x-tick",
+    "point": [
+     556,
+     940
+    ]
+   },
+   {
+    "text": "West",
+    "role": "x-tick",
+    "point": [
+     722,
+     940
+    ]
+   },
+   {
+    "text": "Central",
+    "role": "x-tick",
+    "point": [
+     889,
+     940
+    ]
+   },
+   {
+    "text": "180",
+    "role": "data-label",
+    "point": [
+     181,
+     545
+    ]
+   },
+   {
+    "text": "220",
+    "role": "data-label",
+    "point": [
+     250,
+     492
+    ]
+   },
+   {
+    "text": "310",
+    "role": "data-label",
+    "point": [
+     347,
+     354
+    ]
+   },
+   {
+    "text": "290",
+    "role": "data-label",
+    "point": [
+     417,
+     382
+    ]
+   },
+   {
+    "text": "95",
+    "role": "data-label",
+    "point": [
+     514,
+     708
+    ]
+   },
+   {
+    "text": "140",
+    "role": "data-label",
+    "point": [
+     583,
+     622
+    ]
+   },
+   {
+    "text": "250",
+    "role": "data-label",
+    "point": [
+     681,
+     484
+    ]
+   },
+   {
+    "text": "335",
+    "role": "data-label",
+    "point": [
+     750,
+     313
+    ]
+   },
+   {
+    "text": "160",
+    "role": "data-label",
+    "point": [
+     847,
+     586
+    ]
+   },
+   {
+    "text": "175",
+    "role": "data-label",
+    "point": [
+     917,
+     558
+    ]
+   },
+   {
+    "text": "Source: Example Growers Guild",
+    "role": "source",
+    "point": [
+     166,
+     968
+    ]
+   }
+  ]
+ }
+}

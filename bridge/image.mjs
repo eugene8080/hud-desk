@@ -17,7 +17,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { executable } from './platform.mjs';
-import { LABELS_PROMPT, LABELS_PROMPT_PLAIN, LABELS_SCHEMA, labelsView, modelTexts } from './chart-labels.mjs';
+import { LABELS_CALL, labelsView, modelTexts } from './chart-labels.mjs';
 
 export const IMAGE_WIDTH = 576, IMAGE_HEIGHT = 288;
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
@@ -278,17 +278,60 @@ const forModel = (ffmpeg, bytes, sharp = false) => /^\x89PNG/.test(bytes.subarra
   : run(ffmpeg, [...INPUT, '-vf', `scale='min(1600,iw)':'min(1600,ih)':force_original_aspect_ratio=decrease${sharp ? ':flags=lanczos' : ''}`,
     '-f', 'image2pipe', '-c:v', 'png', 'pipe:1'], bytes, MAX_IMAGE_BYTES);
 
+// ---- The local vision model (2026-11-28) ----
+// One model call at a time: the GPU runs one model, and a second call would only wait inside Ollama.
+// Calls for the view on screen (foreground) go before prefetch calls (background, for the chart just
+// opened). Leaving a picture (another picture asked for, or the viewer closed) stops its background
+// calls: the one in flight is aborted (Ollama stops generating when the request closes) and the
+// waiting ones are dropped. A foreground caller that wants a background job's answer joins it and
+// it is no longer stopped.
+export function modelQueue() {
+  const waiting = [];
+  let running = null;
+  const pump = () => {
+    if (running || !waiting.length) return;
+    const at = waiting.findIndex(job => !job.background);
+    const job = waiting.splice(at >= 0 ? at : 0, 1)[0];
+    const controller = new AbortController();
+    running = { job, controller };
+    Promise.resolve().then(() => job.run(controller.signal)).then(job.resolve, job.reject)
+      .finally(() => { running = null; pump(); });
+  };
+  return {
+    // run(signal) -> Promise; picture: the picture's id; background: a prefetch.
+    add(run, { picture, background = false } = {}) {
+      const job = { run, picture, background };
+      job.promise = new Promise((resolve, reject) => Object.assign(job, { resolve, reject }));
+      waiting.push(job);
+      pump();
+      return job;
+    },
+    promote(job) { job.background = false; },
+    // Stop the background work of every picture but `keep` (all of it without `keep`).
+    cancel(keep) {
+      for (let i = waiting.length - 1; i >= 0; i--) {
+        const job = waiting[i];
+        if (job.background && job.picture !== keep) { waiting.splice(i, 1); job.reject(new ImageError('cancelled', 409)); }
+      }
+      if (running?.job.background && running.job.picture !== keep) running.controller.abort();
+    },
+    get idle() { return !running && !waiting.length; },
+  };
+}
+
 // ffmpeg from PATH, else the configured path; `model` the Ollama vision model for the Read and
 // AI Labels views. `codec` replaces ffmpeg in tests: { decode(bytes) -> {width, height, pixels},
-// forModel(bytes) -> PNG bytes }.
-export function createImaging({ ffmpeg, model, transport = fetch, codec } = {}) {
+// forModel(bytes, sharp) -> PNG bytes }. `prefetch` (default on): opening a chart in Original Picture
+// starts its AI Readout and then its AI Labels reading in the background. `labelsCall` replaces
+// LABELS_CALL (tests and measurements).
+export function createImaging({ ffmpeg, model, transport = fetch, codec, prefetch = true, labelsCall = LABELS_CALL } = {}) {
+  const LABELS = labelsCall;
   const path = () => codec ? 'codec' : executable('ffmpeg') || (ffmpeg && existsSync(ffmpeg) ? ffmpeg : undefined);
   const decodeWith = (tool, bytes) => codec ? Promise.resolve(codec.decode(bytes)) : decode(tool, bytes);
-  const pngFor = (tool, bytes, sharp) => codec ? Promise.resolve(codec.forModel(bytes)) : forModel(tool, bytes, sharp);
-  // Chart texts per picture content (sha256 of the bytes), so a history picture (no stable key)
-  // is read once too.
-  const sources = new Map(), reads = new Map(), labelReads = new Map();
-  let queue = Promise.resolve(), readQueue = Promise.resolve();
+  const pngFor = (tool, bytes, sharp) => codec ? Promise.resolve(codec.forModel(bytes, sharp)) : forModel(tool, bytes, sharp);
+  const sources = new Map();
+  let decoding = Promise.resolve();
+  const queue = modelQueue();
   let vision; // { at, ok }: the model's vision capability, checked at most once a minute
   const remember = (map, key, value, limit) => {
     map.delete(key);
@@ -306,9 +349,11 @@ export function createImaging({ ffmpeg, model, transport = fetch, codec } = {}) 
     const bytes = await load();
     if (!bytes?.length || bytes.length > MAX_IMAGE_BYTES) throw new ImageError('image-failed', 502);
     // One decode at a time: a page of photos must not start a dozen ffmpeg processes.
-    const pending = queue.then(() => decodeWith(ffmpeg, bytes));
-    queue = pending.catch(() => {});
-    const value = { ...(await pending), bytes };
+    const pending = decoding.then(() => decodeWith(ffmpeg, bytes));
+    decoding = pending.catch(() => {});
+    // The picture's id for the model's readings: its content, so a history picture (no stable key)
+    // is read once too.
+    const value = { ...(await pending), bytes, hash: createHash('sha256').update(bytes).digest('hex') };
     if (key !== null) remember(sources, key, value, 6);
     return value;
   }
@@ -324,72 +369,131 @@ export function createImaging({ ffmpeg, model, transport = fetch, codec } = {}) 
     vision = { at: Date.now(), ok };
     return ok;
   }
-  async function read(key, picture) {
-    if (key !== null && reads.has(key)) return reads.get(key);
-    if (!await readable()) throw new ImageError('read-unavailable', 503);
-    const ffmpeg = path();
-    const image = await pngFor(ffmpeg, picture.bytes);
-    const pending = readQueue.then(async () => {
-      const res = await transport(`${OLLAMA}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ model, stream: false, think: false, options: { temperature: 0 },
-          messages: [{ role: 'user', content: READ_PROMPT, images: [image.toString('base64')] }] }),
-        signal: AbortSignal.timeout(180000) });
-      const text = res.ok ? String((await res.json()).message?.content ?? '').trim() : '';
-      if (!text) throw new ImageError('read-failed', 502);
-      return { text: text.slice(0, 4000), view: 'read' };
-    });
-    readQueue = pending.catch(() => {});
-    const value = await pending.catch(error => { throw error instanceof ImageError ? error : new ImageError('read-failed', 502); });
-    if (key !== null) remember(reads, key, value, 24);
-    return value;
-  }
-  // One model call with the JSON schema; the parsed answer, or null when the model gave none.
-  async function askLabels(image, prompt) {
+  // One chat call; the answer's text ('' when the model gave none). Stopped by `signal` (prefetch
+  // left behind) or after 180 s.
+  async function chat(messages, signal, format) {
     const res = await transport(`${OLLAMA}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, stream: false, think: false, format: LABELS_SCHEMA, options: { temperature: 0 },
-        messages: [{ role: 'user', content: prompt, images: [image.toString('base64')] }] }),
-      signal: AbortSignal.timeout(180000) });
-    if (!res.ok) return null;
-    try { return JSON.parse(String((await res.json()).message?.content ?? '')); } catch { return null; }
+      body: JSON.stringify({ model, stream: false, think: false, ...(format && { format }), options: { temperature: 0 }, messages }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(180000)]) });
+    return res.ok ? String((await res.json()).message?.content ?? '').trim() : '';
   }
-  // The chart's printed lines as the model reads them, in source pixels. When more than a third of
-  // an answer's boxes are unusable (one wording gave [0, 0, 1000, 1000] for every line), the plain
-  // wording is asked once more. Nothing usable: an empty list (the app keeps Original Picture).
-  async function chartTexts(picture) {
-    const hash = createHash('sha256').update(picture.bytes).digest('hex');
-    if (labelReads.has(hash)) return labelReads.get(hash);
-    if (!await readable()) throw new ImageError('read-unavailable', 503);
-    const image = await pngFor(path(), picture.bytes, true);
-    const pending = readQueue.then(async () => {
-      let texts = modelTexts(await askLabels(image, LABELS_PROMPT), picture.width, picture.height);
+  // Whether Original Picture draws it in flat tones (a chart, a screenshot); once per picture.
+  const isChart = picture => {
+    if (picture.chart === undefined) {
+      const { w, h } = layout(picture.width, picture.height, 'fit');
+      picture.chart = pictureStyle(resample(picture, w, h).pixels) === 'graphic';
+    }
+    return picture.chart;
+  };
+  // Readings per picture (by content): the PNG the model sees, and the readout and chart texts as
+  // queue jobs, in flight or done. 24 pictures kept. A chart goes to the model scaled with Lanczos
+  // (both turns of its conversation send the same picture); a photo as before (bicubic).
+  const readings = new Map();
+  function readingOf(picture) {
+    const entry = readings.get(picture.hash) ?? { hash: picture.hash };
+    remember(readings, picture.hash, entry, 24);
+    if (!entry.image) {
+      entry.image = pngFor(path(), picture.bytes, isChart(picture)).then(png => png.toString('base64'));
+      entry.image.catch(() => { delete entry.image; });
+    }
+    return entry;
+  }
+  // The job behind `field`, started if needed; a foreground caller promotes a background job. A job
+  // that fails or is stopped is forgotten, so the next request starts it again.
+  function joined(entry, field, run, background) {
+    let job = entry[field];
+    if (!job) {
+      job = queue.add(run, { picture: entry.hash, background });
+      entry[field] = job;
+      job.promise.catch(() => { if (entry[field] === job) delete entry[field]; });
+    } else if (!background) queue.promote(job);
+    return job.promise;
+  }
+  // AI Readout: the picture's text for the glasses.
+  function readout(picture, background = false) {
+    const entry = readingOf(picture);
+    return joined(entry, 'readout', async signal => {
+      const image = await entry.image;
+      const text = await chat([{ role: 'user', content: READ_PROMPT, images: [image] }], signal);
+      if (!text) throw new ImageError('read-failed', 502);
+      return text.slice(0, 4000);
+    }, background);
+  }
+  // AI Labels: the chart's printed lines as the model reads them, in source pixels. LABELS_CALL
+  // decides how; `readoutText` is the conversation's first answer when it is a conversation. When
+  // more than a third of an answer's positions are unusable, the plain wording is asked once more.
+  // Nothing usable: an empty list (the app keeps Original Picture).
+  function chartTexts(picture, background, readoutText) {
+    const entry = readingOf(picture);
+    return joined(entry, 'texts', async signal => {
+      const image = await entry.image;
+      const ask = async prompt => {
+        const messages = LABELS.conversation
+          // The readout's conversation, the labels question as its second turn: Ollama reuses the
+          // processed picture (measured 2026-11-28, docs/pictures.md).
+          ? [{ role: 'user', content: READ_PROMPT, images: [image] }, { role: 'assistant', content: readoutText },
+            { role: 'user', content: prompt }]
+          : [{ role: 'user', content: prompt, images: [image] }];
+        const text = await chat(messages, signal, LABELS.schema);
+        try { return JSON.parse(text); } catch { return null; }
+      };
+      let texts = modelTexts(await ask(LABELS.prompt), picture.width, picture.height);
       if (texts.unusable > (texts.length + texts.unusable) / 3) {
-        const again = modelTexts(await askLabels(image, LABELS_PROMPT_PLAIN), picture.width, picture.height);
+        const again = modelTexts(await ask(LABELS.plain), picture.width, picture.height);
         if (again.length > texts.length) texts = again;
       }
       return texts;
-    });
-    readQueue = pending.catch(() => {});
-    const texts = await pending.catch(() => { throw new ImageError('read-failed', 502); });
-    remember(labelReads, hash, texts, 24);
-    return texts;
+    }, background).catch(error => { throw error instanceof ImageError ? error : new ImageError('read-failed', 502); });
   }
-  async function labels(picture, negative) {
-    // Charts only: a photo (by the same test as Original Picture) answers as Original Picture.
-    const { w, h } = layout(picture.width, picture.height, 'fit');
-    if (pictureStyle(resample(picture, w, h).pixels) !== 'graphic') return screenView(picture, 'fit', 0, negative);
-    return labelsView(picture, await chartTexts(picture), negative);
+  // In a conversation, the labels call needs the readout first (a quick call).
+  async function labelTexts(picture, background = false) {
+    return chartTexts(picture, background, LABELS.conversation ? await readout(picture, background) : undefined);
+  }
+  // Prefetch for a chart just opened: its readout, then its labels, in the background. Errors and
+  // stops are quiet: the foreground request asks again.
+  let prefetching = 0; // prefetches under way, from the model check to the last answer
+  async function prefetchFor(picture) {
+    prefetching++;
+    try {
+      if (!await readable()) return;
+      await readout(picture, true);
+      await labelTexts(picture, true);
+    } catch { /* Stopped (picture left) or failed: asked again when the view is opened. */ }
+    finally { prefetching--; }
   }
   return {
     available: () => Boolean(path()),
     readable,
+    // The app left the picture viewer: stop the background readings.
+    idle: () => queue.cancel(),
+    // Whether a model call is running or waiting (measurements, tests).
+    busy: () => prefetching > 0 || !queue.idle,
     // key: a stable id for the source (chat message, mail part) or null (not cached).
     async render(key, load, { view: asked = 'fit', region = 0, negative } = {}) {
       const view = RETIRED_VIEWS[asked] ?? asked;
       if (!VIEWS.has(view) || !Number.isSafeInteger(region) || region < 0 || region > 99) throw new ImageError('bad request', 400);
       const picture = await source(key, load);
-      if (view === 'read') return read(key, picture);
-      if (view === 'labels') return labels(picture, negative);
-      return screenView(picture, view, region, negative);
+      // Any request for this picture means the others were left.
+      queue.cancel(picture.hash);
+      // A chart on screen in any view is read in the background (a swipe in Zoom opens the next
+      // picture in Zoom); after its readout on screen, its labels are read next.
+      const ahead = () => { if (prefetch && model && isChart(picture)) void prefetchFor(picture); };
+      const failed = error => { throw error instanceof ImageError ? error : new ImageError('read-failed', 502); };
+      if (view === 'read') {
+        if (!await readable()) throw new ImageError('read-unavailable', 503);
+        const text = await readout(picture).catch(failed);
+        ahead();
+        return { text, view: 'read' };
+      }
+      if (view === 'labels') {
+        // Charts only: a photo (by the same test as Original Picture) answers as Original Picture.
+        if (!isChart(picture)) return screenView(picture, 'fit', 0, negative);
+        if (!await readable()) throw new ImageError('read-unavailable', 503);
+        return labelsView(picture, await labelTexts(picture).catch(failed), negative);
+      }
+      const answer = screenView(picture, view, region, negative);
+      ahead();
+      return answer;
     },
   };
 }

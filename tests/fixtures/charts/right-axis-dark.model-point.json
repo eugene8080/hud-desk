@@ -1,0 +1,171 @@
+{
+ "prompt": "LABELS_CALL (centre points, second turn of the AI Readout conversation)",
+ "model": "qwen3.8:27b",
+ "seconds": 2.8,
+ "readout": "Title: Example Index Since Launch\nSeries: Example Index\nMar. 3: 100 (Launch price)\nMar. 4: approx 108\nMar. 5: approx 115 (peak)\nMar. 6: approx 111\nMar. 7: approx 104\nMar. 10: approx 95\nMar. 11: approx 87 (Lowest close)\nMar. 12: approx 91\nMar. 13: approx 98\nMar. 14: approx 105\nY-axis range: 80 to 120\nSource: Sample Exchange",
+ "answer": {
+  "isChart": true,
+  "texts": [
+   {
+    "text": "Example Index Since Launch",
+    "role": "title",
+    "point": [
+     213,
+     47
+    ]
+   },
+   {
+    "text": "Example Index",
+    "role": "legend",
+    "point": [
+     100,
+     112
+    ]
+   },
+   {
+    "text": "$120",
+    "role": "y-tick",
+    "point": [
+     970,
+     168
+    ]
+   },
+   {
+    "text": "110",
+    "role": "y-tick",
+    "point": [
+     970,
+     333
+    ]
+   },
+   {
+    "text": "100",
+    "role": "y-tick",
+    "point": [
+     970,
+     494
+    ]
+   },
+   {
+    "text": "90",
+    "role": "y-tick",
+    "point": [
+     970,
+     659
+    ]
+   },
+   {
+    "text": "80",
+    "role": "y-tick",
+    "point": [
+     970,
+     824
+    ]
+   },
+   {
+    "text": "Launch price",
+    "role": "annotation",
+    "point": [
+     76,
+     488
+    ]
+   },
+   {
+    "text": "Lowest close",
+    "role": "annotation",
+    "point": [
+     535,
+     791
+    ]
+   },
+   {
+    "text": "Mar. 3",
+    "role": "x-tick",
+    "point": [
+     38,
+     885
+    ]
+   },
+   {
+    "text": "4",
+    "role": "x-tick",
+    "point": [
+     134,
+     885
+    ]
+   },
+   {
+    "text": "5",
+    "role": "x-tick",
+    "point": [
+     230,
+     885
+    ]
+   },
+   {
+    "text": "6",
+    "role": "x-tick",
+    "point": [
+     326,
+     885
+    ]
+   },
+   {
+    "text": "7",
+    "role": "x-tick",
+    "point": [
+     422,
+     885
+    ]
+   },
+   {
+    "text": "10",
+    "role": "x-tick",
+    "point": [
+     518,
+     885
+    ]
+   },
+   {
+    "text": "11",
+    "role": "x-tick",
+    "point": [
+     614,
+     885
+    ]
+   },
+   {
+    "text": "12",
+    "role": "x-tick",
+    "point": [
+     710,
+     885
+    ]
+   },
+   {
+    "text": "13",
+    "role": "x-tick",
+    "point": [
+     806,
+     885
+    ]
+   },
+   {
+    "text": "Mar. 14",
+    "role": "x-tick",
+    "point": [
+     902,
+     885
+    ]
+   },
+   {
+    "text": "Source: Sample Exchange",
+    "role": "source",
+    "point": [
+     117,
+     962
+    ]
+   }
+  ]
+ }
+}
