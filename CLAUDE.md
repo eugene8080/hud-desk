@@ -58,6 +58,14 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 bridge restarted with Eugene's approval for 1.0.101 (AI Labels for any picture with
+text): old supervisor 55984/server 53304/whisper 49668 (ownership checked: pid file, tree, 8787
+owner); new supervisor 57432, server 52428, whisper 7452 --vad; healthz ok; modules
+coding+email+chat, imageLabels true; mail work ok, personal ok. Live, GET only, on the newsletter's
+pictures: gradient infographic (photo style) AI Labels answered 'labels', 29 drawn, 0.82 s after 12 s
+of fit/zoom (first reading after the restart, model likely loading: labelCount not yet on the zoom
+answer); rocket photo zoom labelCount 0, AI Labels answered 'fit'. G2 check pending (Eugene).
+
 2026-11-28 beta 1.0.101 (Eugene: in a newsletter in his work mail, of two text-heavy infographics only
 one had AI Labels on the G2; 'I want the AI labels on both'; asked why). Cause: AI Labels was offered
 only for pictureStyle 'graphic' (>70 % of pixels in the 3 fullest of 16 grey bins); his slate-gradient
