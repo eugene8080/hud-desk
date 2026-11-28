@@ -7,6 +7,18 @@ export function activityState(agent) {
   return 'unknown';
 }
 
+// Orca's own read state for one agent row (`orca worktree ps`, agent.activity): `unread` is the bell
+// in Orca's sidebar, `sortAt` the time of the row's latest activity on the PC's clock. Only fields
+// Orca actually reported are returned, so rows from older Orca versions keep their old shape and the
+// app falls back to its own "new output since opened" rule (app/src/coding-read.ts).
+export function orcaReadState(agent) {
+  const activity = agent?.activity;
+  const fields = {};
+  if (typeof activity?.unread === 'boolean') fields.unread = activity.unread;
+  if (Number.isFinite(activity?.sortAt)) fields.activityAt = activity.sortAt;
+  return fields;
+}
+
 export function reportedElapsed(lines, provider) {
   if (provider !== 'codex') return null;
   for (const raw of lines.slice(-20).reverse()) {

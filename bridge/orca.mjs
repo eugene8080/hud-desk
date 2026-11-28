@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { orcaExecutable } from './platform.mjs';
 import { parseChoices, validateChoice } from './choices.mjs';
 import { sessionTitles, sessionTitle } from './session-titles.mjs';
-import { activityState, reportedElapsed } from './activity.mjs';
+import { activityState, orcaReadState, reportedElapsed } from './activity.mjs';
 import { terminalConversation, terminalModel } from './reader-text.mjs';
 import { terminalProvider } from './terminal-provider.mjs';
 import { progressSummary } from './progress.mjs';
@@ -70,12 +70,12 @@ export async function listThreads({ onBindings, timeoutMs } = {}) {
       workspaceName: workspaceLabels(workspace).name,
       workspaceLabel: workspaceLabels(workspace).label,
       state: (() => {
-        const workspace = worktrees.find(w => w.worktreeId === t.worktreeId);
-        const agent = workspace?.agents?.find(a => a.paneKey === `${t.tabId}:${t.leafId}`);
-        const state = activityState(agent);
+        const state = activityState(activity);
         return state === 'working' ? 'busy' : state === 'waiting' ? 'idle' : 'unknown';
       })(),
       lastOutputAt: t.lastOutputAt,
+      // Orca's bell (unread) and the time of its latest activity, for the '/' and '-' marks.
+      ...orcaReadState(activity),
     }]; })
     .concat(chats)
     .sort((a, b) => (b.lastOutputAt || 0) - (a.lastOutputAt || 0));

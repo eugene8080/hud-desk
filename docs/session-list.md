@@ -1,5 +1,31 @@
 # Session list
 
+## Read marks (2026-11-27, beta 1.0.95)
+
+Eugene: Orca shows a bell for unread sessions and a dot for read ones; Coding should use `/` for
+unread and `-` for read, like Email and Chat. Marks now: `/` unread, `-` read, the moving dot while
+working, `?` unknown. Logic: `app/src/coding-read.ts`.
+
+- Orca rows (terminals and Orca chats) carry Orca's own read state from `orca worktree ps`
+  (agent `activity.unread`, the sidebar bell, and `activity.sortAt`); `bridge/activity.mjs`
+  `orcaReadState` passes them as `unread` and `activityAt`. A chat's row in `orca agent list` has
+  no read state, so the bridge takes it from the same session ID in `orca worktree ps`.
+- Other rows (plain Claude Code and Codex CLI, Hermes) have no read state anywhere. A row is
+  unread when its last write (`lastOutputAt`) is newer than the stamp recorded when it was last
+  opened on the glasses. Rows seen for the first time start read, so a first install does not mark
+  every old session unread.
+- Opening a session records its activity stamp (`coding-seen` in the Even app's storage, at most
+  300 entries). Going back to the list records the stamp again, so output produced while it was
+  on screen counts as read. All stamps are PC-clock values, never the phone's clock.
+- Opening a session on the glasses does not clear Orca's bell. Orca 1.4.277's CLI can clear unread
+  for a whole worktree (`orca worktree set --read`), not for one session.
+- Limits: a plain CLI session you use at the PC also turns `/` on the glasses, because the bridge
+  cannot see that you read it there. Leaving a reader for another module and returning to Coding
+  later records the stamp at that later time.
+- Live check 2026-11-27 (counts only, new bridge code run read-only against Orca): 22 Orca and
+  Hermes rows; idle with the bell 2, idle without 6, working 1, unknown 1, Hermes without a flag 12.
+  The bell part needs a bridge restart; until then Orca rows use the new-output rule.
+
 ## Module selector (2026-11-26, unreleased)
 
 Row 0 selects the module. The module name is at the left, `Orca-glass <version>`

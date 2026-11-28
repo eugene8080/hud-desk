@@ -176,8 +176,8 @@ export function labelPickerPages(accounts: AccountLabels[], selected: Set<string
 
 export function mailColumns(thread: MailThread): SessionColumns {
   const date = mailDate(thread.date);
-  // Gutter marks (Eugene, 2026-11-26): '/' unread, as Coding's '/' marks a session waiting for
-  // you; '-' read (2026-11-27, was '--'). '*' stays for action rows such as Filter.
+  // Gutter marks (Eugene, 2026-11-26): '/' unread, '-' read (2026-11-27, was '--'); Coding uses
+  // the same two marks (app/src/coding-read.ts). '*' stays for action rows such as Filter.
   return { marker: thread.unread ? '/' : '-', title: `${singleLine(thread.from)} - ${singleLine(thread.subject)}`,
     right: date, preserveSuffix: false };
 }

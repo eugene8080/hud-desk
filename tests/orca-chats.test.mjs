@@ -20,6 +20,17 @@ test('Orca chats become read-only Coding rows; terminal agents and bad IDs are l
   assert.deepEqual(chatThreads(undefined, []), []);
 });
 
+test('an Orca chat takes its unread flag from the same session in worktree ps', () => {
+  const agents = [{ kind: 'chat', orcaSessionId: id, agent: 'claude', state: 'done', worktreeId: 'w1', title: 'Fixture', updatedAt: 30 }];
+  const worktrees = [{ worktreeId: 'w1', path: 'D:/dev/fixture-repo', repo: 'fixture-repo', isMainWorktree: true,
+    agents: [{ orcaSessionId: id, activity: { unread: true, sortAt: 29 } }] }];
+  const [row] = chatThreads(agents, worktrees);
+  assert.equal(row.unread, true);
+  assert.equal(row.activityAt, 29);
+  // Without a matching worktree ps row the chat has no read fields at all.
+  assert.equal('unread' in chatThreads(agents, [{ ...worktrees[0], agents: [] }])[0], false);
+});
+
 test('chat handles are validated before reaching the Orca CLI', () => {
   assert.equal(isChat(`chat:${id}`), true);
   assert.equal(isChat('term_123'), false);

@@ -9,8 +9,8 @@ const version = JSON.parse(readFileSync(new URL('../app/app.json', import.meta.u
 const samples = [
   { handle: 'store-a12c34', title: 'Polish search UI', agent: 'cursor', state: 'busy', workspaceId: 'site', workspaceName: 'website' },
   { handle: 'store-b56d78', title: 'Review project', agent: 'pi', state: 'idle', workspaceId: 'docs', workspaceName: 'docs' },
-  { handle: 'store-c90e12', title: 'Release notes', agent: 'claude', state: 'idle', workspaceId: 'glass', workspaceName: 'orca-glass' },
-  { handle: 'store-d34f56', title: 'Simplify sign-in', agent: 'codex', state: 'idle', workspaceId: 'app', workspaceName: 'sample-app' },
+  { handle: 'store-c90e12', title: 'Release notes', agent: 'claude', state: 'idle', unread: true, workspaceId: 'glass', workspaceName: 'orca-glass' },
+  { handle: 'store-d34f56', title: 'Simplify sign-in', agent: 'codex', state: 'idle', unread: true, workspaceId: 'app', workspaceName: 'sample-app' },
   { handle: 'store-e78a90', title: 'Retry the sync', agent: 'opencode', state: 'busy', workspaceId: 'app', workspaceName: 'sample-app' },
   { handle: 'store-f12g34', title: 'Architecture map', agent: 'openclaude', state: 'idle', workspaceId: 'glass', workspaceName: 'orca-glass' },
   { handle: 'store-g56h78', title: 'API sketch', agent: 'claude', state: 'busy', workspaceId: 'archive', workspaceName: 'archive' },

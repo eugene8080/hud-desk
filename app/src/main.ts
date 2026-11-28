@@ -27,6 +27,7 @@ import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type 
 import { createPhone, type Connection } from './phone';
 import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, renderKeysPage, renderTextPage, renderUsagePage, type UsagePage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
+import { markSeen, parseSeen, readMarker, withBaseline, type SeenMap } from './coding-read';
 import { Mail, mailColumns, imageNumbers, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
 import { Chat, ChatReader, chatColumns, CHAT_NETWORKS_KEY, CHAT_TRANSLATE_KEY } from './chat';
 import { composeText, CURSOR, CURSOR_MARK, emptyFields, hasRecipient, MAIL_FIELDS, newSendId, sendError, type ComposeField, type ComposeFields, type MailMode } from './compose';
@@ -203,6 +204,19 @@ function setReplyTarget(target: ReplyTarget | null) {
   replyTarget = target;
   document.getElementById('composer')!.hidden = !target || !!target.readOnly;
   document.getElementById('reply-target')!.textContent = target?.label ?? '';
+}
+
+// Coding read marks: handle -> PC-clock stamp of the activity last seen on the glasses
+// (app/src/coding-read.ts). Saved in the Even app's storage so marks survive a restart.
+const CODING_SEEN_KEY = 'coding-seen';
+let codingSeen: SeenMap = {};
+let codingSeenWrites = Promise.resolve();
+function setCodingSeen(next: SeenMap) {
+  if (next === codingSeen) return; // the helpers return the same object when nothing changed
+  codingSeen = next;
+  const value = JSON.stringify(next);
+  codingSeenWrites = codingSeenWrites.then(async () => { await bridge.setLocalStorage(CODING_SEEN_KEY, value); })
+    .catch(e => diag((e as Error).message));
 }
 
 function selectThread(t: Thread | null) {
@@ -970,8 +984,9 @@ function startMenuSpinner(screen: SessionMenuScreen) {
       if (current !== screen || screen.paging) return;
       for (const row of screen.columns!) {
         if (!row.handle) continue;
-        const state = latest.find(t => t.handle === row.handle)?.state || 'unknown';
-        row.busy = state === 'busy'; row.marker = state === 'idle' ? '/' : state === 'busy' ? '' : '?';
+        // A session that finishes while the list is open turns '/' (unread) here.
+        const t = latest.find(x => x.handle === row.handle);
+        row.busy = t?.state === 'busy'; row.marker = t ? readMarker(t, codingSeen) : '?';
       }
       if (!screen.cursorWriting) sessionCursorWrites = updateSessionCursor(screen);
     } catch (e) { diag((e as Error).message); }
@@ -1126,6 +1141,8 @@ function moduleRowText(list: SessionMenuScreen): [number, string, string][] {
 }
 
 function home(page = positions.coding.page, selected = positions.coding.cursor, mounted?: SessionMenuScreen) {
+  // The session being left was on screen until now; its output so far counts as read below.
+  const leaving = selectedThread?.handle;
   selectThread(null);
   return guard('Orca-glass', async () => {
     const owner = current;
@@ -1133,6 +1150,8 @@ function home(page = positions.coding.page, selected = positions.coding.cursor, 
     const allThreads = await api.threads().catch(e => { if (mounted || current !== owner || revision !== moduleRevision) return null; throw e; });
     if (!allThreads) return; // The cached rows remain usable during a refresh failure.
     if (current !== owner || revision !== moduleRevision) return;
+    const left = leaving ? allThreads.find(t => t.handle === leaving) : undefined;
+    setCodingSeen(withBaseline(allThreads, left ? markSeen(left, codingSeen) : codingSeen));
     // Hermes Agent lists only Hermes sessions; the Coding filters
     // exclude Hermes. Each side applies its own workspace selection.
     const selection = activeWorkspaces();
@@ -1148,11 +1167,11 @@ function home(page = positions.coding.page, selected = positions.coding.cursor, 
     const actions: { label: string; run: () => unknown }[] = [
       { label: `* ${tr('filterAgent')} [${providerFilterLabel()}]`, run: () => { enterPage('agents'); return viewOptions(); } },
       { label: `* ${tr('filterWorkspace')} [${workspaceFilter}]`, run: () => { enterPage('workspaces'); return workspaceOptions(); } },
-      ...visible.map(t => ({ label: sessionRow(t.title, t.handle, t.agent, t.state, t.workspaceName), run: () => thread(t) })),
+      ...visible.map(t => ({ label: sessionRow(t.title, t.handle, t.agent, readMarker(t, codingSeen), t.workspaceName), run: () => thread(t) })),
     ];
     const columns = actions.map((a, i): SessionColumns => {
       const t = i >= 2 ? visible[i - 2] : undefined;
-      if (t) return { marker: t.state === 'idle' ? '/' : t.state === 'busy' ? '' : '?', title: compactSessionTitle(t.title, t.handle), right: sessionAgentLabel(t.workspaceName || '', t.agent), busy: t.state === 'busy', handle: t.handle };
+      if (t) return { marker: readMarker(t, codingSeen), title: compactSessionTitle(t.title, t.handle), right: sessionAgentLabel(t.workspaceName || '', t.agent), busy: t.state === 'busy', handle: t.handle };
       return i === 0 ? { marker: '*', title: tr('filterAgent'), right: `[${providerFilterLabel()}]` }
         : i === 1 ? { marker: '*', title: tr('filterWorkspace'), right: `[${workspaceFilter}]` } : { marker: '', title: a.label, right: '' };
     });
@@ -1588,7 +1607,7 @@ function thread(t: Thread, note = '') {
       if (current?.kind === 'text' && current.choiceMenu) void replies(t);
       else openPageImage(current);
     });
-    if (screen && current === screen) selectThread(t);
+    if (screen && current === screen) { selectThread(t); setCodingSeen(markSeen(t, codingSeen)); }
   }, home);
 }
 
@@ -3095,6 +3114,7 @@ async function main() {
   }
   const pref = (await bridge.getLocalStorage('lang')) || 'en';
   viewProvider = (await bridge.getLocalStorage('view-provider')) || 'all';
+  codingSeen = parseSeen(await bridge.getLocalStorage(CODING_SEEN_KEY));
   const savedText = await bridge.getLocalStorage('reader-text');
   if (FINE_FONTS.includes(savedText as FineFont)) readerText = savedText as FineFont;
   else if (REMOVED_FONTS.includes(savedText)) readerText = DEFAULT_SMALL_FONT;

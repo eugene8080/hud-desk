@@ -12,12 +12,13 @@ test('native session rows retain provider and handle within byte budget', () => 
   const result = {};
   vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/session-list.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: result, __APP_VERSION__: '1.0.11', require: name => name === './i18n' ? i18n : text, TextEncoder });
   for (const title of ['A long title '.repeat(50), '語'.repeat(100)]) {
-    const row = result.sessionRow(title, 'terminal-e4c9a8', 'codex', 'idle');
+    const row = result.sessionRow(title, 'terminal-e4c9a8', 'codex', '/');
     assert.ok(new TextEncoder().encode(row).length <= 48);
     assert.match(row, /^\/ /);
     assert.match(row, /e4c9a8 \[Codex\]$/);
   }
-  assert.match(result.sessionRow('Working', 'terminal', 'cursor', 'busy'), /^\* /);
+  assert.match(result.sessionRow('Working', 'terminal', 'cursor', ''), /^\* /);
+  assert.match(result.sessionRow('Read', 'terminal', 'cursor', '-'), /^- /);
 });
 
 test('only the saved preference ja selects Japanese; anything else is English', () => {

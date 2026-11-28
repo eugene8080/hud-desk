@@ -32,6 +32,8 @@ vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/filters.t
 
 const composeExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/compose.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: composeExports, require: () => i18nExports });
+const codingReadExports = {};
+vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/coding-read.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: codingReadExports });
 const listExports = {};
 vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../app/src/session-list.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: listExports, __APP_VERSION__: '1.0.12', require: name => name === './i18n' ? i18nExports : textExports, TextEncoder, document: { createElement: () => ({ getContext: () => ({ font: '', measureText: t => ({ width: t.length * 10 }) }) }) } });
 const mailSource = ts.transpileModule(readFileSync(new URL('../app/src/mail.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -106,6 +108,7 @@ async function harness(count = 2, voice = false, mode = 'tap', savedView = '', s
     './footer-hint': hintExports,
     './usage-reset': usageResetExports,
     './session-list': listExports,
+    './coding-read': codingReadExports,
     './mail': mailModule(api),
     './chat': chatModule(api),
     './filters': filterExports,
@@ -870,7 +873,8 @@ test('Filter by Agent lists Hermes Agent, then All coding sessions and each Orca
     { handle: 'gemini', title: 'Gemini conversation', agent: 'gemini' },
   ];
   const saved = [];
-  h.bridge.setLocalStorage = async (key, value) => { saved.push([key, value]); };
+  // Read marks are saved on every list load; these tests check the filter writes only.
+  h.bridge.setLocalStorage = async (key, value) => { if (key !== 'coding-seen') saved.push([key, value]); };
   await h.pick(0);
   // No title, divider or back row; double-click returns.
   assert.equal(JSON.stringify([...menuItems(h)]),
@@ -2538,7 +2542,8 @@ test('phone filters and glasses share one saved selection and redraw each other'
     { handle: 'hermes:x', title: 'Bot chat', agent: 'hermes', workspaceId: 'hermes-bot:1', workspaceName: 'Bot', workspaceLabel: 'Bot', hermesGroup: 'bot' },
   ];
   const saved = [];
-  h.bridge.setLocalStorage = async (key, value) => { saved.push([key, value]); };
+  // Read marks are saved on every list load; these tests check the filter writes only.
+  h.bridge.setLocalStorage = async (key, value) => { if (key !== 'coding-seen') saved.push([key, value]); };
   // Demo start reports the connection to the phone page.
   assert.deepEqual(h.phoneCalls[0], ['connection', 'demo']);
   const phone = h.phone();

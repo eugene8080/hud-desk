@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.94**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.95**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -64,6 +64,10 @@ Rule for every agent: each beta release updates this file in the release commit:
 - Sessions from Claude, Codex, Cursor, OpenCode, OpenCode 2, Pi, OpenClaude and Hermes Agent
   (bots, sessions, scheduled jobs), with workspace and agent labels and the model name.
 - Filter by Agent and Filter by Workspace (multi-select), on the glasses and the phone page.
+- Read marks as in Email and Chat (1.0.95): '/' unread, '-' read, the moving dot while working.
+  Orca sessions use Orca's own unread flag (its bell); other sessions turn '/' on new output since
+  they were last opened on the glasses. Opening marks a session read on the glasses only: Orca's
+  bell stays until the session is viewed in Orca (its CLI clears unread per worktree only).
 - Reader opens at the start of the latest reply; swipe down on the last page to refresh. Status row
   shows working or waiting, the model, a spinner and the response timer. Markdown tables line up in
   small fonts.
@@ -172,5 +176,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.94: Self-hosting on your own computer. One setup command for Windows or macOS installs the bridge, starts it at sign-in, serves it on your Tailscale address and prints a pairing code that carries that address: paste it on the phone (with Tailscale on the phone) and you're connected. Guide: docs/self-host.md.
+1.0.95: Coding rows show read marks like Email and Chat: '/' for a session with something you have not read, '-' for one you have. Orca sessions follow Orca's own unread bell; plain Claude Code, Codex and Hermes sessions turn '/' when they have new output since you last opened them. Opening a session on the glasses marks it read. A working session keeps the moving dot.
 <!-- whatsnew:end -->

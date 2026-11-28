@@ -2,7 +2,7 @@
 import type { Lang } from './i18n';
 import type { ChatConversation, MailThread } from './api';
 
-type Thread = { handle: string; title: string; agent: string; state: 'idle' | 'busy' | 'unknown' };
+type Thread = { handle: string; title: string; agent: string; state: 'idle' | 'busy' | 'unknown'; unread?: boolean };
 
 const demoLabels = ['Inbox', 'Bulletins', 'Events', 'Logistics', 'Planning', 'Projects', 'Reading', 'Reference', 'Travel', 'Updates'];
 const demoSubjects = ['Field notes newsletter', 'Workshop schedule', 'Revised packing list', 'Trail opening', 'Reading list', 'A new meeting room', 'Map corrections', 'April notes', 'Survey draft', 'Volunteer schedule'];
@@ -156,7 +156,8 @@ export function demoCall(lang: Lang, method: string, path: string, body: unknown
     case 'GET /healthz':
       return { ok: true };
     case 'GET /api/threads':
-      return c.threads.map(([handle, title, agent, state]) => ({ handle, title, agent, state, workspaceId: handle === 'demo-3' ? 'demo-ws-2' : 'demo-ws-1', workspaceName: handle === 'demo-3' ? 'website' : 'my-app', workspaceLabel: handle === 'demo-3' ? 'website' : 'my-app' }) as Thread);
+      // demo-1 waits for an answer, so it starts unread ('/'); opening it marks it read ('-').
+      return c.threads.map(([handle, title, agent, state]) => ({ handle, title, agent, state, unread: handle === 'demo-1', workspaceId: handle === 'demo-3' ? 'demo-ws-2' : 'demo-ws-1', workspaceName: handle === 'demo-3' ? 'website' : 'my-app', workspaceLabel: handle === 'demo-3' ? 'website' : 'my-app' }) as Thread);
     case 'GET /api/thread':
     case 'GET /api/history':
       return { text: '/ Please review this session.\n> ' + (c.texts[searchParams.get('handle') as keyof typeof c.texts] ?? '').replaceAll('\n', '\n  ') };

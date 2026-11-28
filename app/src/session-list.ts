@@ -5,8 +5,10 @@ export const agentLabel = (id: string) => ({ hermes: 'Hermes', codex: 'Codex', c
 export const sessionListTitle = (count: number) => `HUD Desk ${__APP_VERSION__} · ${t('sessionCount', count)}`;
 
 // Preserve the handle/provider suffix inside the native 48-byte compact text-row budget.
-export function sessionRow(title: string, handle: string, agent: string, state: string, workspace = ''): string {
-  const prefix = state === 'idle' ? '/ ' : state === 'busy' ? '* ' : '? ';
+// `marker` is the row's gutter mark (app/src/coding-read.ts readMarker): '/' unread, '-' read,
+// '?' unknown, '' working, shown as '*' because the compact row has no moving dot.
+export function sessionRow(title: string, handle: string, agent: string, marker: string, workspace = ''): string {
+  const prefix = `${marker || '*'} `;
   const suffix = ` · ${handle.slice(-6)} ${sessionAgentLabel(workspace, agent)}`;
   const budget = Math.max(0, 48 - new TextEncoder().encode(prefix + suffix).length);
   return prefix + clipBytes(title, budget) + suffix;

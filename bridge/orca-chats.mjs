@@ -4,6 +4,7 @@
 // `orca agent read <orcaSessionId>`. Orca's CLI has no command that sends into a chat, so a chat is
 // read-only on the glasses: the bridge refuses any send to it.
 import { workspaceLabels } from './workspace-label.mjs';
+import { orcaReadState } from './activity.mjs';
 
 export const CHAT_PREFIX = 'chat:';
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,6 +34,8 @@ export function chatThreads(agents, worktrees) {
       const workspace = (worktrees ?? []).find(w => w.worktreeId === a.worktreeId);
       const labels = workspace ? workspaceLabels(workspace) : { name: a.repo || 'Orca', label: a.repo || 'Orca' };
       const activity = chatActivity(a.state);
+      // `orca agent list` has no read state; the same chat's row in `orca worktree ps` does.
+      const psAgent = workspace?.agents?.find(x => x?.orcaSessionId === a.orcaSessionId);
       return {
         handle: CHAT_PREFIX + a.orcaSessionId,
         title: typeof a.title === 'string' && a.title.trim() ? a.title.trim() : 'Orca chat',
@@ -43,6 +46,7 @@ export function chatThreads(agents, worktrees) {
         state: activity === 'working' ? 'busy' : activity === 'waiting' ? 'idle' : 'unknown',
         lastOutputAt: Number(a.updatedAt) || 0,
         readOnly: true,
+        ...orcaReadState(psAgent),
       };
     });
 }

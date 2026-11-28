@@ -58,6 +58,16 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 beta 1.0.95 (Eugene: Orca shows a bell for unread sessions and a dot for read; use '/'
+unread and '-' read in Coding, like Email/Chat). app/src/coding-read.ts: Orca rows use Orca's
+agent activity.unread + activity.sortAt (bridge/activity.mjs orcaReadState; chats matched by
+orcaSessionId in `orca worktree ps`); other rows unread on new output since last opened on the
+glasses (stamps in storage 'coding-seen', PC clock only; first sight = read). Opening marks read on
+the glasses only (Orca CLI clears unread per worktree, not per session). 311 tests, build pass;
+beta 1.0.95 CLI verified 251,696 bytes; prototype build restored. Live read-only run of the new
+listThreads: 22 rows, idle+bell 2, idle 6, working 1, unknown 1, Hermes (no flag) 12. Orca's bell
+needs an approved bridge restart (not done); until then Orca rows use the new-output rule.
+
 2026-11-27 Eugene approved ('yes'): working branch renamed `main`. GitHub: default set to
 windows-android-codex, old `main` (upstream mirror 6315d7f, = upstream/main, no PRs/protection)
 deleted, windows-android-codex renamed `main` with GitHub's rename (old /tree/windows-android-codex
