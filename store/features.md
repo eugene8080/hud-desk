@@ -45,7 +45,12 @@ Rule for every agent: each beta release updates this file in the release commit:
   only; tracking pixels, icons and ad servers skipped); [Image N] where a picture was pasted
   into a Claude or Codex session. A click on the page opens its first picture. A click cycles the
   views: Original Picture (whole; a chart or screenshot in four flat tones, a photo as thin bright outlines over a
-  dot pattern, as G2oom draws its scenes; a mostly white picture in negative), Zoom (at least twice
+  dot pattern, as G2oom draws its scenes; a mostly white picture in negative), AI Labels (charts only,
+  when the PC has a vision model: the local AI reads every printed line of the chart (title, legend,
+  ticks, notes, source) and HUD Desk draws it back where it was printed, in Scientifica 5x11 with a
+  1 px dark halo, over the chart with its own tiny text cleared; positions come from the picture's
+  own pixels, lines the AI misread or that match no printed text are left as printed; tick labels
+  that would collide are thinned), Zoom (at least twice
   the size, in sections; a tall screenshot fills the width), Outline (1 px edges only, lit lines on
   black) and AI Readout (the PC's local vision model reads it as text: chart values, screen text, or
   what a photo shows; its pages have no divider and "AI Readout 1/2" in the caption box). Swipe moves through sections or text pages, then pictures; n toggles negative; a caption

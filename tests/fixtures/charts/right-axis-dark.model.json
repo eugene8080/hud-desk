@@ -1,0 +1,210 @@
+{
+ "prompt": "LABELS_PROMPT",
+ "model": "qwen3.8:27b",
+ "seconds": 4.2,
+ "answer": {
+  "isChart": true,
+  "texts": [
+   {
+    "text": "Example Index Since Launch",
+    "role": "title",
+    "box": [
+     12,
+     20,
+     410,
+     75
+    ]
+   },
+   {
+    "text": "Example Index",
+    "role": "legend",
+    "box": [
+     40,
+     95,
+     165,
+     130
+    ]
+   },
+   {
+    "text": "$120",
+    "role": "y-tick",
+    "box": [
+     950,
+     155,
+     988,
+     180
+    ]
+   },
+   {
+    "text": "110",
+    "role": "y-tick",
+    "box": [
+     962,
+     320,
+     988,
+     345
+    ]
+   },
+   {
+    "text": "100",
+    "role": "y-tick",
+    "box": [
+     962,
+     480,
+     988,
+     505
+    ]
+   },
+   {
+    "text": "90",
+    "role": "y-tick",
+    "box": [
+     962,
+     645,
+     988,
+     670
+    ]
+   },
+   {
+    "text": "80",
+    "role": "y-tick",
+    "box": [
+     962,
+     810,
+     988,
+     835
+    ]
+   },
+   {
+    "text": "Mar. 3",
+    "role": "x-tick",
+    "box": [
+     12,
+     870,
+     62,
+     900
+    ]
+   },
+   {
+    "text": "4",
+    "role": "x-tick",
+    "box": [
+     130,
+     870,
+     138,
+     900
+    ]
+   },
+   {
+    "text": "5",
+    "role": "x-tick",
+    "box": [
+     227,
+     870,
+     235,
+     900
+    ]
+   },
+   {
+    "text": "6",
+    "role": "x-tick",
+    "box": [
+     323,
+     870,
+     331,
+     900
+    ]
+   },
+   {
+    "text": "7",
+    "role": "x-tick",
+    "box": [
+     420,
+     870,
+     428,
+     900
+    ]
+   },
+   {
+    "text": "10",
+    "role": "x-tick",
+    "box": [
+     512,
+     870,
+     530,
+     900
+    ]
+   },
+   {
+    "text": "11",
+    "role": "x-tick",
+    "box": [
+     610,
+     870,
+     628,
+     900
+    ]
+   },
+   {
+    "text": "12",
+    "role": "x-tick",
+    "box": [
+     707,
+     870,
+     725,
+     900
+    ]
+   },
+   {
+    "text": "13",
+    "role": "x-tick",
+    "box": [
+     804,
+     870,
+     822,
+     900
+    ]
+   },
+   {
+    "text": "Mar. 14",
+    "role": "x-tick",
+    "box": [
+     877,
+     870,
+     937,
+     900
+    ]
+   },
+   {
+    "text": "Launch price",
+    "role": "annotation",
+    "box": [
+     25,
+     475,
+     128,
+     500
+    ]
+   },
+   {
+    "text": "Lowest close",
+    "role": "annotation",
+    "box": [
+     482,
+     775,
+     585,
+     800
+    ]
+   },
+   {
+    "text": "Source: Sample Exchange",
+    "role": "source",
+    "box": [
+     12,
+     945,
+     223,
+     975
+    ]
+   }
+  ]
+ }
+}

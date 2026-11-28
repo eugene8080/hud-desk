@@ -326,12 +326,16 @@ class Surface {
     this.canvas.fillStyle = '#fff'; this.canvas.textBaseline = 'alphabetic';
     return this.canvas;
   }
+  // Fallback glyphs (drawn on the canvas) into the pixels: on/off at half coverage, like every other
+  // pixel here.
+  applyFallback() {
+    if (!this.canvasUsed) return;
+    const data = this.ctx().getImageData(0, 0, SCREEN.width, SCREEN.height).data;
+    for (let i = 0; i < this.pixels.length; i++) if (data[i * 4] >= 128) this.pixels[i] = this.ink;
+    this.canvasUsed = false;
+  }
   tiles(): number[][] {
-    if (this.canvasUsed) {
-      // Fallback glyphs only: on/off at half coverage, like every other pixel here.
-      const data = this.ctx().getImageData(0, 0, SCREEN.width, SCREEN.height).data;
-      for (let i = 0; i < this.pixels.length; i++) if (data[i * 4] >= 128) this.pixels[i] = this.ink;
-    }
+    this.applyFallback();
     return FINE_TILES.map(tile => {
       const out = new Array<number>(tile.width * tile.height);
       for (let y = 0; y < tile.height; y++) for (let x = 0; x < tile.width; x++)
@@ -521,6 +525,106 @@ export function captionTiles(tiles: number[][], caption: string, font: FineFont,
   const w = cells * cw + 6, h = ch + 3, x = SCREEN.width - FRAME - w, y = SCREEN.height - FRAME - h;
   s.rect(x, y, w, h, 0);
   s.text(caption, x + 3, y + 2, cells);
+  return s.tiles();
+}
+
+// AI Labels (Eugene, 2026-11-27): the local AI's reading of a chart drawn back onto the chart in
+// Scientifica 5x11. The bridge sends the picture with the original words cleared and, per label,
+// its text, role, alignment and anchor in screen pixels: x is the left edge, the centre or the right
+// edge as `align` says; y is the vertical centre of the printed line.
+export type ChartLabel = { text: string; role: string; align: 'left' | 'center' | 'right'; x: number; y: number };
+// Scientifica 5x11 for every label, whatever the reader's own font (Eugene's choice for AI Labels).
+export type PlacedLabel = ChartLabel & { left: number; top: number; width: number };
+export const LABEL_FONT: FineFont = 'scientifica';
+// Who wins where two labels would overlap (Eugene's order: title > annotations > axis titles >
+// legend > ticks; subtitles with the title, sources and data labels before the ticks).
+const LABEL_PRIORITY: Record<string, number> = {
+  title: 0, subtitle: 1, annotation: 2, 'axis-title': 3, legend: 4, source: 5, 'data-label': 6, 'x-tick': 7, 'y-tick': 7, other: 8,
+};
+// The label's box with its 1px halo, for overlap tests: [x0, y0, x1, y1) in screen pixels.
+// Row 0 of a Scientifica cell is never inked, so the box starts at row 1 (the halo of row 2's caps)
+// and ends below the last row (the halo of descenders).
+const labelBox = (l: PlacedLabel): [number, number, number, number] =>
+  [l.left - 1, l.top + 1, l.left + l.width + 1, l.top + TABLES[LABEL_FONT].height + 1];
+const overlaps = (a: number[], b: number[], gap = 0) => a[0] < b[2] + gap && b[0] < a[2] + gap && a[1] < b[3] && b[1] < a[3];
+
+// Where each label goes, or not at all: labels wider than the screen are left out (never cut, so a
+// number is never shown in part); notes close to a tick row step away from it; ticks that would
+// collide are thinned; then labels are placed by priority, and a label that would cover one already
+// placed moves up to 3px or is left out.
+export function placeLabels(labels: ChartLabel[]): PlacedLabel[] {
+  const { width: cw, ascent } = TABLES[LABEL_FONT];
+  const sized: PlacedLabel[] = [];
+  for (const label of labels) {
+    const width = fineCells(label.text, LABEL_FONT) * cw;
+    if (!width || width > SCREEN.width - 2 * FRAME - 2) continue;
+    const anchor = label.align === 'left' ? label.x : label.align === 'right' ? label.x - width : Math.round(label.x - width / 2);
+    // Centre the capital height (rows 2..ascent-1) on y; keep the cell on the screen.
+    const left = Math.max(FRAME + 1, Math.min(SCREEN.width - FRAME - 1 - width, anchor));
+    const top = Math.max(0, Math.min(SCREEN.height - TABLES[LABEL_FONT].height, Math.round(label.y - (ascent + 1) / 2)));
+    sized.push({ ...label, left, top, width });
+  }
+  const isTick = (l: ChartLabel) => l.role === 'x-tick' || l.role === 'y-tick';
+  const fits = (l: PlacedLabel) => l.top >= 0 && l.top + TABLES[LABEL_FONT].height <= SCREEN.height;
+  // Make room for ticks: an axis title or note printed close under a row of ticks (closer than the
+  // 11px cell) moves up to 4px away from them when that clears every tick (the month-and-year title
+  // under the dates of a real chart covered three of them).
+  const ticksAll = sized.filter(isTick);
+  const others = sized.filter(l => !isTick(l)).map(l => {
+    const hit = ticksAll.filter(t => overlaps(labelBox(t), labelBox(l)));
+    if (!hit.length) return l;
+    const away = l.top >= hit[0].top ? 1 : -1;
+    for (let d = 1; d <= 4; d++) {
+      const moved = { ...l, top: l.top + away * d };
+      if (fits(moved) && !ticksAll.some(t => overlaps(labelBox(t), labelBox(moved)))) return moved;
+    }
+    return l;
+  });
+  // Thin a run of ticks (sorted along its axis): keep each tick that clears the ones kept so far;
+  // the last tick (often the full end date) wins over the one before it when only that one blocks it.
+  const thin = (ticks: PlacedLabel[]) => {
+    const kept: PlacedLabel[] = [];
+    for (const t of ticks) if (!kept.some(k => overlaps(labelBox(k), labelBox(t), 2))) kept.push(t);
+    const last = ticks[ticks.length - 1];
+    if (last && !kept.includes(last)) {
+      const blocking = kept.filter(k => overlaps(labelBox(k), labelBox(last), 2));
+      if (blocking.length === 1 && blocking[0] !== kept[0]) kept.splice(kept.indexOf(blocking[0]), 1, last);
+    }
+    return kept;
+  };
+  const xTicks = thin(sized.filter(l => l.role === 'x-tick').sort((a, b) => a.left - b.left));
+  const yTicks = thin(sized.filter(l => l.role === 'y-tick').sort((a, b) => a.top - b.top));
+  const candidates = others.concat(xTicks, yTicks)
+    .map((label, order) => ({ label, order }))
+    .sort((a, b) => (LABEL_PRIORITY[a.label.role] ?? 8) - (LABEL_PRIORITY[b.label.role] ?? 8) || a.order - b.order);
+  const placed: PlacedLabel[] = [];
+  const free = (label: PlacedLabel) => !placed.some(p => overlaps(labelBox(p), labelBox(label)));
+  for (const { label } of candidates) {
+    if (free(label)) { placed.push(label); continue; }
+    // A line of a note stacked closer than 11px under the one above (two lines 28px apart at 0.4x)
+    // moves down or up by up to 3px rather than being left out. Ticks stay on their tick.
+    if (isTick(label)) continue;
+    const moved = [1, -1, 2, -2, 3, -3].map(dy => ({ ...label, top: label.top + dy })).find(l => fits(l) && free(l));
+    if (moved) placed.push(moved);
+  }
+  return placed;
+}
+
+// The picture (screen bytes, 576x288) with the labels: each letter in `ink`, and every pixel next
+// to a letter in `background` (a 1px halo), so gridlines and series lines under a label do not
+// touch its letters. Bytes are already scaled to the reader's brightness.
+export function labelTiles(picture: ArrayLike<number>, labels: ChartLabel[], ink: number, background: number): number[][] {
+  const mask = new Surface(LABEL_FONT, 255);
+  for (const label of placeLabels(labels)) mask.text(label.text, label.left, label.top, Infinity);
+  mask.applyFallback();
+  const s = new Surface(LABEL_FONT, ink);
+  for (let i = 0; i < s.pixels.length; i++) s.pixels[i] = picture[i];
+  const { width, height } = SCREEN;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    if (!mask.pixels[y * width + x]) continue;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s.set(x + dx, y + dy, background);
+  }
+  for (let i = 0; i < s.pixels.length; i++) if (mask.pixels[i]) s.pixels[i] = ink;
   return s.tiles();
 }
 

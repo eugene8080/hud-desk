@@ -13,13 +13,17 @@
 //            photos and charts were hard to read on the waveguide).
 // - read:    the local vision model (Ollama) reads the picture as text: chart values, screen text,
 //            or two or three lines on a photo (Eugene: "AI even?"; a KPI chart read correctly in 20 s).
+// - labels:  charts only: Original Picture with the model's reading of each printed line drawn back
+//            in place by the app (AI Labels, bridge/chart-labels.mjs). A photo answers as fit.
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { executable } from './platform.mjs';
+import { LABELS_PROMPT, LABELS_PROMPT_PLAIN, LABELS_SCHEMA, labelsView, modelTexts } from './chart-labels.mjs';
 
 export const IMAGE_WIDTH = 576, IMAGE_HEIGHT = 288;
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-export const VIEWS = new Set(['fit', 'zoom', 'outline', 'read']);
+export const VIEWS = new Set(['fit', 'labels', 'zoom', 'outline', 'read']);
 const MAX_SIDE = 2400;
 const FORMATS = 'png_pipe,jpeg_pipe,webp_pipe,gif,bmp_pipe,tiff_pipe,image2pipe,mov';
 const DECODE_FILTER = `scale='min(${MAX_SIDE},iw)':'min(${MAX_SIDE},ih)':force_original_aspect_ratio=decrease,format=gray`;
@@ -274,13 +278,23 @@ const decode = (ffmpeg, bytes) => run(ffmpeg, [...INPUT, '-vf', DECODE_FILTER, '
 // A PNG goes to the model as it is; anything else (JPEG, WebP, HEIC, GIF) goes as a PNG of at most
 // 1600 px. JPEG is converted too: Ollama's loader refused a progressive JPEG with 400 'Failed to load
 // image or audio file' (2026-11-27, a product photo from a chat).
-const forModel = (ffmpeg, bytes) => /^\x89PNG/.test(bytes.subarray(0, 4).toString('latin1')) ? Promise.resolve(bytes)
-  : run(ffmpeg, [...INPUT, '-vf', "scale='min(1600,iw)':'min(1600,ih)':force_original_aspect_ratio=decrease", '-f', 'image2pipe', '-c:v', 'png', 'pipe:1'], bytes, MAX_IMAGE_BYTES);
+// sharp: Lanczos scaling, for AI Labels. With ffmpeg's default (bicubic) a real chart's title came
+// back with a doubled letter read once; with Lanczos (and with the full-size picture) it was read
+// right, in the same number of prompt tokens (2026-11-27). AI Readout keeps the default.
+const forModel = (ffmpeg, bytes, sharp = false) => /^\x89PNG/.test(bytes.subarray(0, 4).toString('latin1')) ? Promise.resolve(bytes)
+  : run(ffmpeg, [...INPUT, '-vf', `scale='min(1600,iw)':'min(1600,ih)':force_original_aspect_ratio=decrease${sharp ? ':flags=lanczos' : ''}`,
+    '-f', 'image2pipe', '-c:v', 'png', 'pipe:1'], bytes, MAX_IMAGE_BYTES);
 
-// ffmpeg from PATH, else the configured path; `model` the Ollama vision model for the Read view.
-export function createImaging({ ffmpeg, model, transport = fetch } = {}) {
-  const path = () => executable('ffmpeg') || (ffmpeg && existsSync(ffmpeg) ? ffmpeg : undefined);
-  const sources = new Map(), reads = new Map();
+// ffmpeg from PATH, else the configured path; `model` the Ollama vision model for the Read and
+// AI Labels views. `codec` replaces ffmpeg in tests: { decode(bytes) -> {width, height, pixels},
+// forModel(bytes) -> PNG bytes }.
+export function createImaging({ ffmpeg, model, transport = fetch, codec } = {}) {
+  const path = () => codec ? 'codec' : executable('ffmpeg') || (ffmpeg && existsSync(ffmpeg) ? ffmpeg : undefined);
+  const decodeWith = (tool, bytes) => codec ? Promise.resolve(codec.decode(bytes)) : decode(tool, bytes);
+  const pngFor = (tool, bytes, sharp) => codec ? Promise.resolve(codec.forModel(bytes)) : forModel(tool, bytes, sharp);
+  // Chart texts per picture content (sha256 of the bytes), so a history picture (no stable key)
+  // is read once too.
+  const sources = new Map(), reads = new Map(), labelReads = new Map();
   let queue = Promise.resolve(), readQueue = Promise.resolve();
   let vision; // { at, ok }: the model's vision capability, checked at most once a minute
   const remember = (map, key, value, limit) => {
@@ -299,7 +313,7 @@ export function createImaging({ ffmpeg, model, transport = fetch } = {}) {
     const bytes = await load();
     if (!bytes?.length || bytes.length > MAX_IMAGE_BYTES) throw new ImageError('image-failed', 502);
     // One decode at a time: a page of photos must not start a dozen ffmpeg processes.
-    const pending = queue.then(() => decode(ffmpeg, bytes));
+    const pending = queue.then(() => decodeWith(ffmpeg, bytes));
     queue = pending.catch(() => {});
     const value = { ...(await pending), bytes };
     if (key !== null) remember(sources, key, value, 6);
@@ -321,7 +335,7 @@ export function createImaging({ ffmpeg, model, transport = fetch } = {}) {
     if (key !== null && reads.has(key)) return reads.get(key);
     if (!await readable()) throw new ImageError('read-unavailable', 503);
     const ffmpeg = path();
-    const image = await forModel(ffmpeg, picture.bytes);
+    const image = await pngFor(ffmpeg, picture.bytes);
     const pending = readQueue.then(async () => {
       const res = await transport(`${OLLAMA}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ model, stream: false, think: false, options: { temperature: 0 },
@@ -336,6 +350,42 @@ export function createImaging({ ffmpeg, model, transport = fetch } = {}) {
     if (key !== null) remember(reads, key, value, 24);
     return value;
   }
+  // One model call with the JSON schema; the parsed answer, or null when the model gave none.
+  async function askLabels(image, prompt) {
+    const res = await transport(`${OLLAMA}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model, stream: false, think: false, format: LABELS_SCHEMA, options: { temperature: 0 },
+        messages: [{ role: 'user', content: prompt, images: [image.toString('base64')] }] }),
+      signal: AbortSignal.timeout(180000) });
+    if (!res.ok) return null;
+    try { return JSON.parse(String((await res.json()).message?.content ?? '')); } catch { return null; }
+  }
+  // The chart's printed lines as the model reads them, in source pixels. When more than a third of
+  // an answer's boxes are unusable (one wording gave [0, 0, 1000, 1000] for every line), the plain
+  // wording is asked once more. Nothing usable: an empty list (the app keeps Original Picture).
+  async function chartTexts(picture) {
+    const hash = createHash('sha256').update(picture.bytes).digest('hex');
+    if (labelReads.has(hash)) return labelReads.get(hash);
+    if (!await readable()) throw new ImageError('read-unavailable', 503);
+    const image = await pngFor(path(), picture.bytes, true);
+    const pending = readQueue.then(async () => {
+      let texts = modelTexts(await askLabels(image, LABELS_PROMPT), picture.width, picture.height);
+      if (texts.unusable > (texts.length + texts.unusable) / 3) {
+        const again = modelTexts(await askLabels(image, LABELS_PROMPT_PLAIN), picture.width, picture.height);
+        if (again.length > texts.length) texts = again;
+      }
+      return texts;
+    });
+    readQueue = pending.catch(() => {});
+    const texts = await pending.catch(() => { throw new ImageError('read-failed', 502); });
+    remember(labelReads, hash, texts, 24);
+    return texts;
+  }
+  async function labels(picture, negative) {
+    // Charts only: a photo (by the same test as Original Picture) answers as Original Picture.
+    const { w, h } = layout(picture.width, picture.height, 'fit');
+    if (pictureStyle(resample(picture, w, h).pixels) !== 'graphic') return screenView(picture, 'fit', 0, negative);
+    return labelsView(picture, await chartTexts(picture), negative);
+  }
   return {
     available: () => Boolean(path()),
     readable,
@@ -343,7 +393,9 @@ export function createImaging({ ffmpeg, model, transport = fetch } = {}) {
     async render(key, load, { view = 'fit', region = 0, negative } = {}) {
       if (!VIEWS.has(view) || !Number.isSafeInteger(region) || region < 0 || region > 99) throw new ImageError('bad request', 400);
       const picture = await source(key, load);
-      return view === 'read' ? read(key, picture) : screenView(picture, view, region, negative);
+      if (view === 'read') return read(key, picture);
+      if (view === 'labels') return labels(picture, negative);
+      return screenView(picture, view, region, negative);
     },
   };
 }

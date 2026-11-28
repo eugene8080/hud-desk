@@ -25,7 +25,7 @@ import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, renderKeysPage, renderTextPage, renderUsagePage, type UsagePage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
+import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, labelTiles, renderKeysPage, renderTextPage, renderUsagePage, type UsagePage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { markSeen, parseSeen, readMarker, withBaseline, type SeenMap } from './coding-read';
 import { Mail, mailColumns, imageNumbers, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
@@ -117,15 +117,24 @@ let viewProvider = 'all';
 // Reader text: the firmware's native font, or small text drawn as image tiles.
 type ReaderText = 'native' | FineFont;
 // The full-screen picture viewer (2026-11-27): image n of count from the reader's source.
-type ImageMode = 'fit' | 'zoom' | 'outline' | 'read';
-// Original Picture, Zoom, Outline, AI Readout (Eugene, 2026-11-27: Outline kept for now with thin,
-// 1px lines; he may drop it after trying them).
-const IMAGE_VIEWS: ImageMode[] = ['fit', 'zoom', 'outline', 'read'];
-const IMAGE_VIEW_LABEL = { fit: 'imageViewFit', zoom: 'imageViewZoom', outline: 'imageViewOutline', read: 'imageViewRead' } as const;
+type ImageMode = 'fit' | 'labels' | 'zoom' | 'outline' | 'read';
+// Original Picture, AI Labels, Zoom, Outline, AI Readout (Eugene, 2026-11-27: Outline kept for now
+// with thin, 1px lines; he may drop it after trying them). AI Labels (2026-11-27) comes right after
+// Original Picture, for charts only: the local AI's reading of each printed line redrawn in place.
+const IMAGE_VIEWS: ImageMode[] = ['fit', 'labels', 'zoom', 'outline', 'read'];
+const IMAGE_VIEW_LABEL = { fit: 'imageViewFit', labels: 'imageViewLabels', zoom: 'imageViewZoom', outline: 'imageViewOutline', read: 'imageViewRead' } as const;
+// style: the picture's kind from the last picture answer ('graphic' or 'photo'); labelled: the
+// picture whose labels have been read (the next answer for it is quick, so no "Reading" note).
 type ImageView = { n: number; count: number; numbers: number[]; load: (n: number, request?: ImageRequest) => Promise<ImageAnswer>;
-  mode: ImageMode; region: number; regions: number; image?: GlassImage; text?: string; textPage: number; invert?: boolean; note: string };
+  mode: ImageMode; region: number; regions: number; image?: GlassImage; text?: string; textPage: number; invert?: boolean; note: string;
+  style?: string; labelled?: number };
 // Read is offered when the bridge has a vision model (bridges before 1.0.83 do not say: offered).
 let imageReadOffered = true;
+// AI Labels only when the bridge says it has it and the model answers (older bridges: not offered).
+let imageLabelsOffered = false;
+// The views a click cycles through for this picture: AI Labels for charts only.
+const imageModes = (view: ImageView) => IMAGE_VIEWS.filter(mode => (mode !== 'read' || imageReadOffered) &&
+  (mode !== 'labels' || (imageLabelsOffered && view.style === 'graphic')));
 type Comparison = 'fonts' | 'backgrounds';
 const DEFAULT_SMALL_FONT: FineFont = 'terminus';
 const REMOVED_FONTS = ['fixed9', 'gohu14', 'shinonome'];
@@ -237,8 +246,9 @@ let chatTranslate = false;
 let chatFeatures: ChatFeatures = { transcribe: true, translate: true };
 let orcaAvailable = true;
 const translating = () => chatTranslate && chatFeatures.translate;
-function applyCapabilities(capabilities: { chatFeatures?: ChatFeatures; imageRead?: boolean; orca?: boolean } | null) {
+function applyCapabilities(capabilities: { chatFeatures?: ChatFeatures; imageRead?: boolean; imageLabels?: boolean; orca?: boolean } | null) {
   imageReadOffered = capabilities?.imageRead !== false;
+  imageLabelsOffered = capabilities?.imageLabels === true;
   if (capabilities) orcaAvailable = capabilities.orca !== false;
   const next = capabilities?.chatFeatures;
   if (!next) return;
@@ -745,18 +755,26 @@ function imageViewTiles(view: ImageView): number[][] {
     userTurns: [], firstLine: 0, lastLine: 0 }, smallFont, inkLevel), `${label}${position}`, smallFont, inkLevel);
   const bytes = Uint8Array.from(atob(view.image.data), ch => ch.charCodeAt(0));
   const top = inkByte(inkLevel);
+  const scaled = (level: number) => Math.round(level * top / 15);
   // The bridge draws the negative itself (before finding the edges); bridges before 1.0.84 send
   // no `negative` field, and there the app still inverts a mostly white picture.
   const invert = view.mode !== 'outline' && view.image.negative === undefined && (view.invert ?? view.image.mean > 0.6);
+  const screen = new Uint8Array(576 * 288);
+  for (let i = 0; i < screen.length; i++) {
+    const packed = bytes[i >> 1] ?? 0;
+    const level = i & 1 ? packed & 15 : packed >> 4;
+    screen[i] = scaled(invert ? 15 - level : level);
+  }
+  if (view.mode === 'labels') {
+    // AI Labels: the chart with its words cleared, and the AI's reading drawn back in Scientifica;
+    // nothing read: the picture as it is, and the caption says so.
+    const labels = view.image.labels ?? [];
+    const tiles = labelTiles(screen, labels, scaled(view.image.ink ?? 15), scaled(view.image.background ?? 0));
+    return captionTiles(tiles, `${labels.length ? label : tr('imageLabelsNone')}${position}`, smallFont, inkLevel);
+  }
   const tiles = FINE_TILES.map(tile => {
     const out = new Array<number>(tile.width * tile.height);
-    for (let y = 0; y < tile.height; y++) for (let x = 0; x < tile.width; x++) {
-      const i = (tile.yPosition + y) * 576 + tile.xPosition + x;
-      const packed = bytes[i >> 1] ?? 0;
-      let level = i & 1 ? packed & 15 : packed >> 4;
-      if (invert) level = 15 - level;
-      out[y * tile.width + x] = Math.round(level * top / 15);
-    }
+    for (let y = 0; y < tile.height; y++) for (let x = 0; x < tile.width; x++) out[y * tile.width + x] = screen[(tile.yPosition + y) * 576 + tile.xPosition + x];
     return out;
   });
   const section = view.mode === 'zoom' && view.regions > 1 ? ` ${view.region + 1}/${view.regions}` : '';
@@ -784,7 +802,7 @@ function openPageImage(s: Screen | null): boolean {
   const screen: TextScreen = { kind: 'text', title: ' ', text: '', fine: reader.fine ?? smallFont, imageView: view,
     onBack: () => { Object.assign(reader, { reading: false }); void show(reader).catch(e => diag((e as Error).message)); },
     onClick: () => {
-      const modes = IMAGE_VIEWS.filter(mode => mode !== 'read' || imageReadOffered);
+      const modes = imageModes(view);
       view.mode = modes[(modes.indexOf(view.mode) + 1) % modes.length];
       Object.assign(view, { region: 0, textPage: 0, image: undefined, text: undefined, note: '' });
       void repaintImage(screen).then(() => loadImage(screen));
@@ -802,6 +820,8 @@ async function loadImage(s: TextScreen) {
   const view = s.imageView!;
   const { n, mode, region } = view;
   if (mode === 'read') { view.note = tr('imageReading'); await repaintImage(s); view.note = ''; }
+  // The chart's text is read once per picture (about 5 s); a negative toggle after that is quick.
+  if (mode === 'labels' && view.labelled !== n) { view.note = tr('imageLabelling'); await repaintImage(s); view.note = ''; }
   try {
     const answer = await view.load(n, { view: mode, region, ...(view.invert !== undefined && { negative: view.invert ? 'on' : 'off' }) });
     if (current !== s || view.n !== n || view.mode !== mode || view.region !== region) return;
@@ -809,6 +829,9 @@ async function loadImage(s: TextScreen) {
     else {
       view.image = answer;
       view.regions = answer.regions ?? 1;
+      if (answer.style) view.style = answer.style;
+      // AI Labels on a photo (after a swipe from a chart): the bridge answers with Original Picture.
+      if (mode === 'labels') { if (answer.view === 'labels') view.labelled = n; else view.mode = 'fit'; }
     }
   } catch (e) {
     if (current !== s || view.n !== n || view.mode !== mode) return;

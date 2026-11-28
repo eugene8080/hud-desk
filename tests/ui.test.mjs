@@ -3235,6 +3235,106 @@ test('images: views cycle Original Picture, Zoom, Outline, AI Readout; swipe mov
   assert.ok(h.pages.at(-1).textObject.some(c => c.containerName === 'body'), 'back in the mail reader');
 });
 
+// ---- AI Labels (2026-11-27): the AI's reading of a chart drawn back in place, synthetic labels only ----
+test('AI Labels placement: priority, tick thinning that keeps the end date, stacked notes, nothing cut', () => {
+  // Copied into this realm: the module runs in its own VM context, with its own Array.
+  const place = labels => [...fineExports.placeLabels(labels)].map(l => l.text);
+  // A title wins over a tick it would cover; the tick is left out.
+  assert.deepEqual(place([
+    { text: 'Jan', role: 'x-tick', align: 'center', x: 30, y: 12 },
+    { text: 'Quarterly orders', role: 'title', align: 'left', x: 10, y: 12 },
+  ]), ['Quarterly orders']);
+  // Two-digit ticks 8px apart collide: every other one is kept, and the last one (the full end
+  // date) takes the place of the kept tick that blocks it.
+  const ticks = ['10', '11', '12', '13', '14', 'Mar. 15'].map((text, i) => ({ text, role: 'x-tick', align: 'center', x: 100 + 8 * i, y: 270 }));
+  ticks.at(-1).x = 150;
+  assert.deepEqual(place(ticks), ['10', '12', 'Mar. 15']);
+  // Two note lines 10px apart (closer than the 11px cell): the second moves, both stay.
+  const notes = place([
+    { text: 'Highest month', role: 'annotation', align: 'left', x: 300, y: 60 },
+    { text: 'on record', role: 'annotation', align: 'left', x: 300, y: 70 },
+  ]);
+  assert.deepEqual(notes, ['Highest month', 'on record']);
+  // An axis title 8px under the tick row steps down instead of hiding the ticks.
+  const placed = fineExports.placeLabels([
+    { text: '10', role: 'x-tick', align: 'center', x: 200, y: 250 },
+    { text: 'Mar. 2027', role: 'axis-title', align: 'center', x: 200, y: 258 },
+  ]);
+  assert.deepEqual([...placed].map(l => l.text), ['Mar. 2027', '10']);
+  assert.ok(placed[0].top - placed[1].top >= 11);
+  // Wider than the screen: left out, never cut (a number is never shown in part).
+  assert.deepEqual(place([{ text: '9'.repeat(116), role: 'title', align: 'left', x: 2, y: 20 }]), []);
+  // Right-aligned labels end at x; labels stay inside the frame.
+  const [right] = fineExports.placeLabels([{ text: '$120', role: 'y-tick', align: 'right', x: 575, y: 40 }]);
+  assert.ok(right.left + right.width <= 574, JSON.stringify(right));
+});
+
+test('AI Labels drawing: Scientifica letters in the ink level with a 1px background halo over the picture', () => {
+  const picture = new Uint8Array(576 * 288).fill(85);
+  // A gridline under the label.
+  for (let x = 0; x < 576; x++) picture[100 * 576 + x] = 255;
+  const label = { text: 'Launch', role: 'annotation', align: 'left', x: 50, y: 100 };
+  const tiles = fineExports.labelTiles(picture, [label], 255, 0);
+  const at = (x, y) => tilePixel(tiles, x, y);
+  const [placed] = fineExports.placeLabels([label]);
+  let ink = 0, halo = 0;
+  for (let y = placed.top; y < placed.top + 11; y++) for (let x = placed.left - 1; x <= placed.left + placed.width; x++) {
+    if (at(x, y) === 255 && y !== 100) ink++;
+    if (at(x, y) === 0) halo++;
+  }
+  assert.ok(ink > 10 && halo > ink, `letters ${ink}, halo ${halo}`);
+  // Every letter pixel has only letter or halo pixels around it: the gridline never touches a letter.
+  const glyphs = fineExports.labelTiles(new Uint8Array(576 * 288), [label], 255, 0);
+  for (let y = placed.top; y < placed.top + 11; y++) for (let x = placed.left; x < placed.left + placed.width; x++) {
+    if (tilePixel(glyphs, x, y) !== 255) continue;
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) assert.notEqual(at(x + dx, y + dy), 85, `${x + dx},${y + dy}`);
+  }
+  // Far from the label, the picture is unchanged (gridline included).
+  assert.deepEqual([at(400, 100), at(400, 200)], [255, 85]);
+});
+
+test('images: AI Labels follows Original Picture for charts when the bridge offers it; photos and older bridges skip it', async () => {
+  const { fixture, messages } = mailFixture();
+  messages[1].images = [{ part: '2', name: 'chart.png' }, { part: '3', name: 'photo.jpg' }];
+  const asked = [];
+  const labels = [{ text: 'Widget orders', role: 'title', align: 'left', x: 20, y: 12 }, { text: 'Jan', role: 'x-tick', align: 'center', x: 100, y: 270 }];
+  let readNothing = false;
+  fixture.image = async (account, message, ref, request = {}) => {
+    asked.push({ part: ref.part, view: request.view, negative: request.negative });
+    const style = ref.part === '2' ? 'graphic' : 'photo';
+    if (request.view === 'read') return { text: 'Widget orders' };
+    if (request.view === 'labels') return { ...glassImage(5, 0.1), view: 'labels', style, negative: request.negative === 'on', regions: 1, region: 0,
+      labels: readNothing ? [] : labels, background: 0, ink: 15 };
+    return { ...glassImage(5, 0.1), view: request.view, style, negative: false, regions: 1, region: 0 };
+  };
+  const h = await moduleHarness({ capabilities: { modules: ['coding', 'email'], imageLabels: true }, storage: { module: 'email' }, mail: fixture });
+  await h.pickRow(2);
+  for (let i = 0; i < 5 && !/\[Image 1: chart\.png\]/.test(container(h, 'body').content); i++) await h.scroll('down');
+  await h.tap();
+  assert.deepEqual(asked.at(-1), { part: '2', view: 'fit', negative: undefined });
+  // Click: AI Labels, drawn over the picture in Scientifica, captioned "AI Labels".
+  await h.tap();
+  assert.deepEqual(asked.at(-1), { part: '2', view: 'labels', negative: undefined });
+  const screen = new Uint8Array(576 * 288).fill(85);
+  const expected = fineExports.captionTiles(fineExports.labelTiles(screen, labels, 255, 0), 'AI Labels · 1/2', 'terminus', 15);
+  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(expected));
+  // n asks the bridge for the negative of the labelled picture.
+  await h.key('n');
+  assert.deepEqual(asked.at(-1), { part: '2', view: 'labels', negative: 'on' });
+  // Click: Zoom. Swipe past its only section to the photo, still in Zoom.
+  await h.tap();
+  assert.equal(asked.at(-1).view, 'zoom');
+  await h.scroll('down');
+  assert.deepEqual(asked.at(-1), { part: '3', view: 'zoom', negative: undefined });
+  // The photo's cycle: Outline, AI Readout, Original Picture, then Zoom: no AI Labels.
+  for (const view of ['outline', 'read', 'fit', 'zoom']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
+  // Back on the chart, nothing read: the picture as it is and the caption says so.
+  readNothing = true;
+  await h.scroll('up');
+  for (const view of ['outline', 'read', 'fit', 'labels']) { await h.tap(); assert.equal(asked.at(-1).view, view); }
+  assert.equal(JSON.stringify(shownTiles(h)), JSON.stringify(fineExports.captionTiles(fineExports.labelTiles(screen, [], 255, 0), 'AI Labels: no text read · 1/2', 'terminus', 15)));
+});
+
 test('images: Chat photos are numbered rows and open from the page; Coding screenshots open by number', async () => {
   const { chat } = chatFixture();
   const wanted = [];

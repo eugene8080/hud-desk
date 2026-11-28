@@ -1,0 +1,207 @@
+{
+ "name": "right-axis-dark",
+ "width": 1600,
+ "height": 900,
+ "elements": [
+  {
+   "text": "Example Index Since Launch",
+   "role": "title",
+   "box": [
+    20,
+    24,
+    659,
+    67
+   ]
+  },
+  {
+   "text": "Example Index",
+   "role": "legend",
+   "box": [
+    64,
+    90,
+    264,
+    118
+   ]
+  },
+  {
+   "text": "$120",
+   "role": "y-tick",
+   "box": [
+    1521,
+    141,
+    1585,
+    165
+   ]
+  },
+  {
+   "text": "110",
+   "role": "y-tick",
+   "box": [
+    1537,
+    289,
+    1585,
+    309
+   ]
+  },
+  {
+   "text": "100",
+   "role": "y-tick",
+   "box": [
+    1537,
+    437,
+    1585,
+    457
+   ]
+  },
+  {
+   "text": "90",
+   "role": "y-tick",
+   "box": [
+    1553,
+    584,
+    1585,
+    604
+   ]
+  },
+  {
+   "text": "80",
+   "role": "y-tick",
+   "box": [
+    1553,
+    732,
+    1585,
+    752
+   ]
+  },
+  {
+   "text": "Mar. 3",
+   "role": "x-tick",
+   "box": [
+    20,
+    788,
+    100,
+    808
+   ]
+  },
+  {
+   "text": "4",
+   "role": "x-tick",
+   "box": [
+    206,
+    788,
+    222,
+    808
+   ]
+  },
+  {
+   "text": "5",
+   "role": "x-tick",
+   "box": [
+    360,
+    788,
+    376,
+    808
+   ]
+  },
+  {
+   "text": "6",
+   "role": "x-tick",
+   "box": [
+    515,
+    788,
+    531,
+    808
+   ]
+  },
+  {
+   "text": "7",
+   "role": "x-tick",
+   "box": [
+    669,
+    788,
+    685,
+    808
+   ]
+  },
+  {
+   "text": "10",
+   "role": "x-tick",
+   "box": [
+    816,
+    788,
+    848,
+    808
+   ]
+  },
+  {
+   "text": "11",
+   "role": "x-tick",
+   "box": [
+    970,
+    788,
+    1002,
+    808
+   ]
+  },
+  {
+   "text": "12",
+   "role": "x-tick",
+   "box": [
+    1125,
+    788,
+    1157,
+    808
+   ]
+  },
+  {
+   "text": "13",
+   "role": "x-tick",
+   "box": [
+    1279,
+    788,
+    1311,
+    808
+   ]
+  },
+  {
+   "text": "Mar. 14",
+   "role": "x-tick",
+   "box": [
+    1402,
+    788,
+    1498,
+    808
+   ]
+  },
+  {
+   "text": "Launch price",
+   "role": "annotation",
+   "box": [
+    40,
+    431,
+    203,
+    457
+   ]
+  },
+  {
+   "text": "Lowest close",
+   "role": "annotation",
+   "box": [
+    772,
+    702,
+    936,
+    722
+   ]
+  },
+  {
+   "text": "Source: Sample Exchange",
+   "role": "source",
+   "box": [
+    20,
+    856,
+    357,
+    882
+   ]
+  }
+ ]
+}

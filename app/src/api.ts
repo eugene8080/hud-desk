@@ -89,10 +89,14 @@ export type MailConversation = { subject: string; messages: { id: string; from: 
   images?: { part?: string; remote?: number; name: string }[] }[] };
 // A picture for the glasses (2026-11-27): 576x288, two 4-bit panel levels a byte, base64; mean
 // brightness 0..1 (the app shows a mostly white picture in negative by default).
-export type GlassImage = { width: number; height: number; data: string; mean: number; view?: string; regions?: number; region?: number; negative?: boolean };
-// The viewer asks for a view (fit, zoom, outline, read) and, in zoom, a section; read answers with text.
+// style: 'graphic' (charts, screenshots) or 'photo', from the bridge's Original Picture test.
+// AI Labels answers add the chart's labels and the picture's background and ink levels (0..15).
+export type ChartLabelAnswer = { text: string; role: string; align: 'left' | 'center' | 'right'; x: number; y: number };
+export type GlassImage = { width: number; height: number; data: string; mean: number; view?: string; regions?: number; region?: number; negative?: boolean;
+  style?: string; labels?: ChartLabelAnswer[]; background?: number; ink?: number };
+// The viewer asks for a view (fit, labels, zoom, outline, read) and, in zoom, a section; read answers with text.
 // negative: 'on'/'off', or left out for automatic (the bridge decides; 1.0.84).
-export type ImageRequest = { view?: 'fit' | 'zoom' | 'outline' | 'read'; region?: number; negative?: 'on' | 'off' };
+export type ImageRequest = { view?: 'fit' | 'labels' | 'zoom' | 'outline' | 'read'; region?: number; negative?: 'on' | 'off' };
 export type ImageAnswer = GlassImage & { text?: string };
 const viewQuery = (request: ImageRequest) => ({ ...(request.view && { view: request.view }), ...(request.region !== undefined && { region: String(request.region) }),
   ...(request.negative && { negative: request.negative }) });
@@ -116,7 +120,7 @@ export type ChatConversation = { messages: ChatMessage[] };
 export type ChatTranslation = { id: string; text?: string | null; textLines?: (string | null)[] | null; voice?: string | null };
 
 export const api = {
-  capabilities: () => call<{ voice: boolean; modules?: string[]; chatFeatures?: ChatFeatures; imageRead?: boolean; orca?: boolean; localAgents?: Record<string, { resume: boolean }> }>('GET', '/api/capabilities'),
+  capabilities: () => call<{ voice: boolean; modules?: string[]; chatFeatures?: ChatFeatures; imageRead?: boolean; imageLabels?: boolean; orca?: boolean; localAgents?: Record<string, { resume: boolean }> }>('GET', '/api/capabilities'),
   chat: {
     networks: () => call<string[]>('GET', '/api/chat/networks'),
     list: (networks: string[], page: number) => call<ChatPage>('GET', `/api/chat/list?${new URLSearchParams({ networks: networks.join(','), page: String(page) })}`),

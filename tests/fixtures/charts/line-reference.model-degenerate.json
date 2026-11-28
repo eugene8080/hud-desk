@@ -1,0 +1,239 @@
+{
+ "prompt": "LABELS_PROMPT with the role definitions before the box request (2026-11-27): whole-image boxes",
+ "model": "qwen3.8:27b",
+ "answer": {
+  "isChart": true,
+  "texts": [
+   {
+    "text": "Monthly Widget Orders, 2031",
+    "role": "title",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Orders (thousands)",
+    "role": "legend",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "80",
+    "role": "y-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "60",
+    "role": "y-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "40",
+    "role": "y-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "20",
+    "role": "y-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "0",
+    "role": "y-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Jan",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Feb",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Mar",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Apr",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "May",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Jun",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Jul",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Aug",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Sep",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Oct",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Nov",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Dec",
+    "role": "x-tick",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Target 50",
+    "role": "annotation",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Highest month",
+    "role": "annotation",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "on record",
+    "role": "annotation",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   },
+   {
+    "text": "Source: Fictional Data Office",
+    "role": "source",
+    "box": [
+     0,
+     0,
+     1000,
+     1000
+    ]
+   }
+  ]
+ }
+}

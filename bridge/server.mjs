@@ -200,9 +200,14 @@ export function createBridge({
   const beeperSettings = readBeeperConfig(beeperConfig);
   const chat = beeperSettings && createBeeper(beeperSettings, { imaging, ...beeperOptions });
   const privateHostAllowed = allowPrivateHost(privateHosts);
-  const capabilities = async () => ({ voice: voiceAvailable(), images: imaging.available(), imageRead: await imaging.readable(), modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])],
-    orca: await orcaAvailable(), localAgents: agents.capabilities(),
-    ...(chat?.features && { chatFeatures: await chat.features() }) });
+  // imageLabels: the AI Labels view (charts) exists on this bridge and the vision model answers;
+  // bridges before it omit the field, and the app does not offer the view.
+  const capabilities = async () => {
+    const read = await imaging.readable();
+    return { voice: voiceAvailable(), images: imaging.available(), imageRead: read, imageLabels: read, modules: ['coding', ...(mail ? ['email'] : []), ...(chat ? ['chat'] : [])],
+      orca: await orcaAvailable(), localAgents: agents.capabilities(),
+      ...(chat?.features && { chatFeatures: await chat.features() }) };
+  };
   const direct = (req, res) => handle(req, res, token, routes, capabilities, mail, chat, privateHostAllowed);
   const server = createServer(direct);
   const origin = relayOrigin(relayConfig);

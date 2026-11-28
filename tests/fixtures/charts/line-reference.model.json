@@ -1,0 +1,240 @@
+{
+ "prompt": "LABELS_PROMPT",
+ "model": "qwen3.8:27b",
+ "seconds": 4.4,
+ "answer": {
+  "isChart": true,
+  "texts": [
+   {
+    "text": "Monthly Widget Orders, 2031",
+    "role": "title",
+    "box": [
+     20,
+     28,
+     470,
+     92
+    ]
+   },
+   {
+    "text": "Orders (thousands)",
+    "role": "legend",
+    "box": [
+     58,
+     120,
+     240,
+     155
+    ]
+   },
+   {
+    "text": "80",
+    "role": "y-tick",
+    "box": [
+     60,
+     210,
+     78,
+     235
+    ]
+   },
+   {
+    "text": "60",
+    "role": "y-tick",
+    "box": [
+     60,
+     360,
+     78,
+     385
+    ]
+   },
+   {
+    "text": "Target 50",
+    "role": "annotation",
+    "box": [
+     95,
+     405,
+     175,
+     435
+    ]
+   },
+   {
+    "text": "40",
+    "role": "y-tick",
+    "box": [
+     60,
+     485,
+     78,
+     510
+    ]
+   },
+   {
+    "text": "20",
+    "role": "y-tick",
+    "box": [
+     60,
+     660,
+     78,
+     685
+    ]
+   },
+   {
+    "text": "0",
+    "role": "y-tick",
+    "box": [
+     60,
+     835,
+     78,
+     860
+    ]
+   },
+   {
+    "text": "Jan",
+    "role": "x-tick",
+    "box": [
+     95,
+     835,
+     118,
+     860
+    ]
+   },
+   {
+    "text": "Feb",
+    "role": "x-tick",
+    "box": [
+     175,
+     835,
+     198,
+     860
+    ]
+   },
+   {
+    "text": "Mar",
+    "role": "x-tick",
+    "box": [
+     255,
+     835,
+     278,
+     860
+    ]
+   },
+   {
+    "text": "Apr",
+    "role": "x-tick",
+    "box": [
+     335,
+     835,
+     358,
+     860
+    ]
+   },
+   {
+    "text": "May",
+    "role": "x-tick",
+    "box": [
+     415,
+     835,
+     438,
+     860
+    ]
+   },
+   {
+    "text": "Jun",
+    "role": "x-tick",
+    "box": [
+     495,
+     835,
+     518,
+     860
+    ]
+   },
+   {
+    "text": "Jul",
+    "role": "x-tick",
+    "box": [
+     575,
+     835,
+     598,
+     860
+    ]
+   },
+   {
+    "text": "Aug",
+    "role": "x-tick",
+    "box": [
+     655,
+     835,
+     678,
+     860
+    ]
+   },
+   {
+    "text": "Sep",
+    "role": "x-tick",
+    "box": [
+     735,
+     835,
+     758,
+     860
+    ]
+   },
+   {
+    "text": "Oct",
+    "role": "x-tick",
+    "box": [
+     815,
+     835,
+     838,
+     860
+    ]
+   },
+   {
+    "text": "Nov",
+    "role": "x-tick",
+    "box": [
+     895,
+     835,
+     918,
+     860
+    ]
+   },
+   {
+    "text": "Dec",
+    "role": "x-tick",
+    "box": [
+     975,
+     835,
+     998,
+     860
+    ]
+   },
+   {
+    "text": "Highest month",
+    "role": "annotation",
+    "box": [
+     555,
+     210,
+     670,
+     235
+    ]
+   },
+   {
+    "text": "on record",
+    "role": "annotation",
+    "box": [
+     555,
+     245,
+     630,
+     270
+    ]
+   },
+   {
+    "text": "Source: Fictional Data Office",
+    "role": "source",
+    "box": [
+     20,
+     945,
+     240,
+     975
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,270 @@
+{
+ "prompt": "LABELS_PROMPT",
+ "model": "qwen3.8:27b",
+ "seconds": 5.1,
+ "answer": {
+  "isChart": true,
+  "texts": [
+   {
+    "text": "Fictional Fruit Harvest by Region",
+    "role": "title",
+    "box": [
+     28,
+     28,
+     667,
+     74
+    ]
+   },
+   {
+    "text": "Tonnes, 2030 vs 2031",
+    "role": "subtitle",
+    "box": [
+     28,
+     88,
+     285,
+     114
+    ]
+   },
+   {
+    "text": "2030",
+    "role": "legend",
+    "box": [
+     48,
+     148,
+     83,
+     174
+    ]
+   },
+   {
+    "text": "2031",
+    "role": "legend",
+    "box": [
+     158,
+     148,
+     193,
+     174
+    ]
+   },
+   {
+    "text": "400",
+    "role": "y-tick",
+    "box": [
+     100,
+     224,
+     135,
+     250
+    ]
+   },
+   {
+    "text": "300",
+    "role": "y-tick",
+    "box": [
+     100,
+     384,
+     135,
+     410
+    ]
+   },
+   {
+    "text": "200",
+    "role": "y-tick",
+    "box": [
+     100,
+     544,
+     135,
+     570
+    ]
+   },
+   {
+    "text": "100",
+    "role": "y-tick",
+    "box": [
+     100,
+     704,
+     135,
+     730
+    ]
+   },
+   {
+    "text": "0",
+    "role": "y-tick",
+    "box": [
+     100,
+     864,
+     135,
+     890
+    ]
+   },
+   {
+    "text": "Tonnes",
+    "role": "axis-title",
+    "box": [
+     28,
+     544,
+     53,
+     570
+    ]
+   },
+   {
+    "text": "North",
+    "role": "x-tick",
+    "box": [
+     198,
+     884,
+     248,
+     910
+    ]
+   },
+   {
+    "text": "South",
+    "role": "x-tick",
+    "box": [
+     368,
+     884,
+     418,
+     910
+    ]
+   },
+   {
+    "text": "East",
+    "role": "x-tick",
+    "box": [
+     538,
+     884,
+     588,
+     910
+    ]
+   },
+   {
+    "text": "West",
+    "role": "x-tick",
+    "box": [
+     708,
+     884,
+     758,
+     910
+    ]
+   },
+   {
+    "text": "Central",
+    "role": "x-tick",
+    "box": [
+     878,
+     884,
+     948,
+     910
+    ]
+   },
+   {
+    "text": "180",
+    "role": "data-label",
+    "box": [
+     198,
+     544,
+     228,
+     570
+    ]
+   },
+   {
+    "text": "220",
+    "role": "data-label",
+    "box": [
+     233,
+     484,
+     263,
+     510
+    ]
+   },
+   {
+    "text": "310",
+    "role": "data-label",
+    "box": [
+     368,
+     344,
+     398,
+     370
+    ]
+   },
+   {
+    "text": "290",
+    "role": "data-label",
+    "box": [
+     403,
+     374,
+     433,
+     400
+    ]
+   },
+   {
+    "text": "95",
+    "role": "data-label",
+    "box": [
+     538,
+     674,
+     568,
+     700
+    ]
+   },
+   {
+    "text": "140",
+    "role": "data-label",
+    "box": [
+     573,
+     614,
+     603,
+     640
+    ]
+   },
+   {
+    "text": "250",
+    "role": "data-label",
+    "box": [
+     708,
+     454,
+     738,
+     480
+    ]
+   },
+   {
+    "text": "335",
+    "role": "data-label",
+    "box": [
+     743,
+     304,
+     773,
+     330
+    ]
+   },
+   {
+    "text": "160",
+    "role": "data-label",
+    "box": [
+     878,
+     574,
+     908,
+     600
+    ]
+   },
+   {
+    "text": "175",
+    "role": "data-label",
+    "box": [
+     913,
+     544,
+     943,
+     570
+    ]
+   },
+   {
+    "text": "Source: Example Growers Guild",
+    "role": "source",
+    "box": [
+     28,
+     954,
+     315,
+     980
+    ]
+   }
+  ]
+ }
+}
