@@ -96,7 +96,11 @@ Double-click clears an active search or returns to the list from the full picker
 Each page holds up to eight threads, newest first. An asterisk marks an unread
 thread. Dates use the phone's local clock and show the time for today's mail.
 Refresh reloads the list. Open a thread to start at the top of the newest
-message. Swipe up for earlier pages and down for later pages. The reader menu
+message, which starts its own page; a one-message mail opens on page 1.
+Earlier messages page forward from the top. (Betas 1.0.98-1.0.99 gave Email
+Chat's fill-from-the-newest-row paging, so a one-message mail opened on its
+last page; Eugene, 2026-11-28. 1.0.100 restores forward paging for Email only.)
+Swipe up for earlier pages and down for later pages. The reader menu
 offers Font and App Brightness. Double-click returns to the list.
 
 Once the opening page displays, the app requests mark-read for an unread

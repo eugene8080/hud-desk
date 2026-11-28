@@ -278,23 +278,32 @@ function readerLayout(s: TextScreen) {
     const measure = (text: string) => glassTextWidth(text, ch => ctx ? ctx.measureText(ch).width : 21);
     paginate = (text, startLine, fromEnd) => readerPages(text, measure, READER_WRAP_WIDTH, READER_ROWS, undefined, startLine, fromEnd);
   }
-  if (s.openingOffset !== undefined) {
-    // Chat and Email open at the newest message (Eugene, 2026-11-28: "the chat defaults to showing just
+  if (s.openingOffset !== undefined && chatScreen) {
+    // Chat opens at the newest message (Eugene, 2026-11-28: "the chat defaults to showing just
     // one message on the last page"; the page before it could hold one more, the rest full). Pages fill
     // from the newest row back, so the last page is full and the short page is the oldest one. A newest
     // message that fits on one page is whole on that last page; only a longer one starts a fresh page,
     // so it reads from its first line, with the earlier messages filling back from it.
     const start = s.openingOffset;
-    const startLine = chatScreen && start ? s.text.slice(0, start).split('\n').length - 1 : 0;
+    const startLine = start ? s.text.slice(0, start).split('\n').length - 1 : 0;
     const newest = paginate(transform(s.text.slice(start)), startLine);
     if (!start || newest.length <= 1) {
       s.pages = paginate(transform(s.text), 0, true);
       s.responsePage = s.pages.length - 1;
     } else {
-      const before = paginate(transform(s.text.slice(0, start - (chatScreen ? 1 : 2))), 0, true);
+      const before = paginate(transform(s.text.slice(0, start - 1)), 0, true);
       s.pages = [...before, ...newest];
       s.responsePage = before.length;
     }
+  } else if (s.openingOffset !== undefined) {
+    // Email opens on the first page of the newest message, which starts a page of its own; earlier
+    // messages page forward from the top. A one-message mail opens on page 1. (1.0.98 gave Email the
+    // Chat fill-back, so a one-message mail opened on its LAST page; Eugene, 2026-11-28: "emails are
+    // currently opening on the last page, but it should open on the first page".)
+    const start = s.openingOffset;
+    const before = start ? paginate(transform(s.text.slice(0, start - 2))) : [];
+    s.pages = [...before, ...paginate(transform(s.text.slice(start)))];
+    s.responsePage = before.length;
   } else {
     // Start the latest response on a fresh page if it spans more than the last page.
     const text = transform(s.text);
@@ -933,9 +942,10 @@ function keepReaderLine(before: TextScreen, after: TextScreen) {
   const pages = readerLayout(after);
   const first = pages.findIndex(page => page.lastLine >= anchor);
   if (first < 0) return;
-  // Chat and Email fill pages from the newest row back (2026-11-28), so rows added above (a translation)
-  // move every boundary: a reader on the newest message's page stays on it.
-  if (offset === before.responsePage && (before.openingOffset !== undefined || anchor === pages[after.responsePage ?? 0].firstLine)) {
+  // Chat fills pages from the newest row back (2026-11-28), so rows added above (a translation) move
+  // every boundary: a reader on the newest message's page stays on it. Email pages forward again.
+  if (offset === before.responsePage && ((before.reader instanceof ChatReader && before.openingOffset !== undefined) ||
+    anchor === pages[after.responsePage ?? 0].firstLine)) {
     after.offset = after.responsePage;
     return;
   }

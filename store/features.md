@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.99**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.100**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -97,8 +97,8 @@ Rule for every agent: each beta release updates this file in the release commit:
 - Filter by Label on the glasses and the phone page (shared picks): the labels of the mailbox on
   screen with unread counts, several at once. The phone has a type-to-narrow box; on the glasses,
   hold to search by voice (labels containing every spoken word; double-click clears).
-- Threads read oldest to newest and open on the newest message, on a full page (a newest message
-  longer than a page starts its own page); quoted reply history is
+- Threads read oldest to newest and open at the top of the newest message, which starts its own page
+  (a one-message mail opens on page 1); quoted reply history is
   removed and hard-wrapped plain text is reflowed to the glasses' width.
 - Mail routes answer only over the private Tailscale address, never through the public tunnel.
 
@@ -184,5 +184,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.99: Charts open faster. The views now run Original Picture, Zoom, AI Readout, AI Labels, and the PC starts reading a chart as soon as you open it, so after a few seconds on each view both AI views are ready when you click. AI Labels reuses the readout's look at the picture: about 3 s instead of 5 s when you click straight through. Reading stops when you leave the picture.
+1.0.100: Email opens on the first page again: a one-message mail opens on page 1, and a thread opens at the top of its newest message. 1.0.98 had opened mail on its last page. Chat still opens on the newest message with full pages, and Coding at the top of the latest response.
 <!-- whatsnew:end -->

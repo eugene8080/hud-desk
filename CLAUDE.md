@@ -58,6 +58,16 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 beta 1.0.100 (Eugene: 'emails are currently opening on the last page, but it should open on
+the first page'; Chat right (top of the latest message), Coding right (top of the latest response)).
+Cause: 1.0.98 gave Email Chat's fill-from-the-newest-row paging; a one-message mail (openingOffset 0)
+took the whole-text fill-back branch and opened on its last page. Fix: readerLayout's fill-back is
+Chat only; Email is back to the pre-1.0.98 rule (earlier messages page forward, newest starts its own
+page, open there; a one-message mail opens on page 1); keepReaderLine's newest-page hold is Chat only.
+Test 'Email opens on the first page of the newest message' fails on 1.0.99's main.ts, passes now.
+331 tests, build pass; beta 1.0.100 CLI verified 253,102 bytes; prototype build restored. features.md,
+docs/chat.md, docs/email.md updated. App-only, no bridge restart. G2 check pending.
+
 2026-11-28 bridge restarted with Eugene's approval for the network fix (24c2db8): old supervisor
 40216/server 27904/whisper 72216 (ownership checked: pid file, tree, 8787 owner); new supervisor
 55984, server 53304, whisper 49668 --vad; local and tailnet healthz ok. Read-only, counts only:

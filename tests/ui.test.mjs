@@ -1244,6 +1244,24 @@ test('Gmail e, #, Shift+U and z act on the thread under the cursor or in the rea
   assert.equal(actions.length, count);
 });
 
+test('Email opens on the first page of the newest message: page 1 of a one-message mail', async () => {
+  // 1.0.98-1.0.99 gave Email Chat's fill-back and opened a one-message mail on its last page
+  // (Eugene, 2026-11-28: "it should open on the first page").
+  const one = mailFixture();
+  one.messages.splice(0, 1);
+  const h = await emailHarness(one.fixture);
+  await h.pickRow(2);
+  assert.match(container(h, 'hint').content, /Pg1\/[2-9]$/);
+  assert.match(container(h, 'body').content, /^From: Second Desk\nDate: /);
+  // A short newest message after an earlier one starts its own page and opens there, at its header.
+  const two = mailFixture();
+  two.messages[1].text = 'Short reply.';
+  const h2 = await emailHarness(two.fixture);
+  await h2.pickRow(2);
+  assert.match(container(h2, 'hint').content, /Pg2\/2$/);
+  assert.match(container(h2, 'body').content, /^From: Second Desk\nDate: [^\n]+\nSubject: Field survey\n\nShort reply\.$/);
+});
+
 test('Gmail j in a mail reader opens the next thread of the list', async () => {
   const { fixture } = mailFixture();
   const opened = [];
