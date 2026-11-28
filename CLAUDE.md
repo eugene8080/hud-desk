@@ -58,6 +58,22 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 beta 1.0.102 (Eugene: on Compare fonts, line the quick brown fox sentences up on their
+left; measure the native text's dimensions and add them to the menu; 'the 7x14 font looks smaller than
+the 6x13 font. Can you confirm?'). Measured letters from the glyph tables (cap height / x-height / ink
+width): Departure 7x14 8/6/5, Misc Fixed 6x13 9/6/5, Terminus 6x12 8/6/5, GohuFont 6x11 8/5/5,
+Scientifica 5x11 7/5/4: confirmed, Departure's capitals are 1 px shorter than Misc Fixed's (its cell
+adds spacing, not letter size). Native text (official simulator's native renderer, store native
+captures 05 and 18): lines 27 px apart, capitals 16, x-height 11, ascender-descender 21; letters 4-17 px,
+a-z average 9.8 (GLASS_ADVANCE). No font file: the simulator exe embeds no sfnt/woff; its web assets
+are compressed. Label 'Native ~10x27' (NATIVE_SIZE in app/src/fine-text.ts; 'Font: Native ~10x27'
+175 px, 'Font: Native text ~10x27' 213 px > ~210 px menu row; ja '標準 ~10x27', width unverified on
+G2). Compare fonts: pixel rows draw the label, then the sample at one x = where the glasses start
+Native's sentence (FINE_NATIVE_ROW x + measured width of '>Native ~10x27  '; unselected marker is two
+spaces = '>' 10 px). Simulator capture (store fixture, Vite reload): Q at x 151/152 native, 153 (154
+Departure) pixel fonts. Store screenshot 18-compare-fonts replaced with that capture. 334 tests, build
+pass; beta 1.0.102 CLI verified 253,220 bytes; prototype build restored. App-only. G2 check pending.
+
 2026-11-28 bridge restarted with Eugene's approval for 1.0.101 (AI Labels for any picture with
 text): old supervisor 55984/server 53304/whisper 49668 (ownership checked: pid file, tree, 8787
 owner); new supervisor 57432, server 52428, whisper 7452 --vad; healthz ok; modules

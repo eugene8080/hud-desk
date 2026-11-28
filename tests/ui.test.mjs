@@ -827,7 +827,7 @@ test('Email restores its saved filter, skips account headings, and retries faile
   await h.pickRow(2);
   assert.equal(attempts, 1);
   assert.equal(h.upgrades.findLast(update => update.containerName === 'voice').content, 'not marked read');
-  assert.deepEqual(Array.from(h.pages.at(-1).menuObject.menuItems, item => item.itemName), ['Font: Native text', 'Background: Lines 1/3', 'App Brightness: 15']);
+  assert.deepEqual(Array.from(h.pages.at(-1).menuObject.menuItems, item => item.itemName), ['Font: Native ~10x27', 'Background: Lines 1/3', 'App Brightness: 15']);
   h.press(); h.release(); await h.flush();
   assert.equal(h.mic.length, 0);
   await h.scroll('up');
@@ -2056,7 +2056,7 @@ test('contextual actions refresh roster, open workspace picker and display usage
   await h.back(); await h.pick(2);
   // The reader's own menu only switches text size; session-list actions do nothing there.
   assert.equal(JSON.stringify(h.pages.at(-1).menuObject.menuItems.map(i => [i.itemID, i.itemName])),
-    JSON.stringify([[1101, 'Font: Native text'], [1109, 'Background: Lines 1/3'], [1107, 'App Brightness: 15']]));
+    JSON.stringify([[1101, 'Font: Native ~10x27'], [1109, 'Background: Lines 1/3'], [1107, 'App Brightness: 15']]));
   const pages = h.pages.length;
   await h.menu(1002);
   assert.equal(h.pages.length, pages);
@@ -2606,7 +2606,7 @@ test('small text draws the whole screen, status row included, as four tiles and 
   const compare = h.pages.at(-1);
   assert.equal(compare.containerTotalNum, 6);
   const nativeRow = compare.textObject.find(c => c.containerName === 'fine-native');
-  assert.match(nativeRow.content, /^>Native text {2}/);
+  assert.match(nativeRow.content, /^>Native ~10x27 {2}Quick/);
   assert.deepEqual([nativeRow.isEventCapture, nativeRow.zOrderIndex], [0, 5]);
   assert.equal(compare.textObject.find(c => c.containerName === 'fine-input').content, ' ', 'the swipe container has no text to scroll');
   assert.deepEqual([...fineExports.FONTS_BY_SIZE], ['departure', 'fixed', 'terminus', 'gohu', 'scientifica']);
@@ -2692,10 +2692,12 @@ test('small text draws the whole screen, status row included, as four tiles and 
   await h.menu(1101); await h.flush();
   // The comparison opens with '>' on the font in use; a swipe moves it; a double-click returns.
   const terminus = fineExports.FONTS_BY_SIZE.indexOf('terminus');
-  assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison(15, terminus, true)));
+  // Every sample starts where the glasses start Native text's (its row container is at x 4).
+  const sampleX = 4 + textExports.glassTextWidth('>Native ~10x27  ');
+  assert.equal(JSON.stringify(sent().slice(-4).map(i => i.imageData)), JSON.stringify(fineExports.renderFontComparison(15, terminus, true, sampleX)));
   await h.scroll('down'); await h.flush();
   const moved = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
-  const next = fineExports.renderFontComparison(15, terminus + 1, true);
+  const next = fineExports.renderFontComparison(15, terminus + 1, true, sampleX);
   for (const [name, data] of moved) assert.equal(JSON.stringify(data), JSON.stringify(next[Number(name.slice(5))]));
   await h.back(); await h.flush();
   const restored = new Map(sent().slice(-4).map(i => [i.containerName, i.imageData]));
@@ -3126,7 +3128,7 @@ test('switching the phone language to Japanese redraws glasses labels and keeps 
     const hint = page.textObject.find(c => c.containerName === 'hint').content.trim();
     assert.match(hint, /^\[長押しで入力\] P1\/1$/);
     assert.ok(listExports.glassWidth(hint) <= 280 - 6);
-    assert.equal(JSON.stringify(page.menuObject.menuItems.map(i => i.itemName)), JSON.stringify(['フォント: 標準フォント', '背景: 横線 1/3', 'アプリの明るさ: 15']));
+    assert.equal(JSON.stringify(page.menuObject.menuItems.map(i => i.itemName)), JSON.stringify(['フォント: 標準 ~10x27', '背景: 横線 1/3', 'アプリの明るさ: 15']));
     assert.equal(statusExports.readerStatus('waiting'), '/入力待ち');
     assert.match(statusExports.readerStatus('working', 0, 5000), /思考中\.$/);
     // The hint still shrinks step by step when the row is crowded.
@@ -3449,16 +3451,38 @@ test('images: Chat photos are numbered rows and open from the page; Coding scree
   assert.deepEqual(asked, [{ handle: 'terminal-0', n: 1, view: 'fit' }]);
 });
 
+test('Compare fonts: every sample sentence starts at one x, where the glasses start Native text\'s', () => {
+  // Eugene, 2026-11-28: "make the quick brown fox sentence a line on its left side so the quick all
+  // lines up". Each pixel row's first ink right of its label is the Q of "Quick", at the given x.
+  const sampleX = 4 + textExports.glassTextWidth('>Native ~10x27  ');
+  assert.equal(textExports.glassTextWidth('>'), textExports.glassTextWidth('  '), "the '>' marker does not move the native sentence");
+  const tiles = fineExports.renderFontComparison(15, 0, true, sampleX);
+  const screen = new Uint8Array(576 * 288);
+  fineExports.FINE_TILES.forEach((tile, i) => {
+    for (let y = 0; y < tile.height; y++) for (let x = 0; x < tile.width; x++) screen[(tile.yPosition + y) * 576 + tile.xPosition + x] = tiles[i][y * tile.width + x];
+  });
+  let y = 4 + fineExports.NATIVE_COMPARE_ROW;
+  for (const font of fineExports.FONTS_BY_SIZE) {
+    const { line } = fineExports.fineLayout(font);
+    let first = 576;
+    // The labels end well before x 150 in every font; the frame is at x 0 and 575.
+    for (let yy = y; yy < y + line; yy++) for (let x = 150; x < 570; x++) if (screen[yy * 576 + x]) { first = Math.min(first, x); break; }
+    assert.ok(first >= sampleX && first <= sampleX + 1, `${font}: sample starts at ${first}, want ${sampleX}`);
+    y += line + 2;
+  }
+  assert.ok(sampleX > 150 && sampleX < 260, `sample x ${sampleX}`);
+});
+
 test('Compare fonts has Native text as its first row, drawn by the glasses above the tiles', async () => {
   const h = await moduleHarness({ storage: { 'reader-text': 'native' } });
   h.api.thread = async () => ({ text: '/ Check this.\n> Checked.' });
   await h.pick(2);
   await h.menu(1101);
   const row = h.pages.at(-1).textObject.find(c => c.containerName === 'fine-native');
-  assert.match(row.content, /^>Native text {2}/);
+  assert.match(row.content, /^>Native ~10x27 {2}Quick/);
   assert.equal(row.zOrderIndex, 5);
   await h.scroll('down');
-  assert.match(h.upgrades.findLast(u => u.containerName === 'fine-native').content, /^ Native text/);
+  assert.match(h.upgrades.findLast(u => u.containerName === 'fine-native').content, /^ {2}Native ~10x27 {2}Quick/);
   // The swipe container never gets text, so nothing on the page scrolls with a swipe.
   assert.ok(!h.upgrades.some(u => u.containerName === 'fine-input'));
   await h.scroll('up');

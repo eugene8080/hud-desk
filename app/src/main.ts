@@ -25,7 +25,7 @@ import { statusRight } from './footer-hint';
 import { formatReset, RESET_MODES, resetModeLabel, type ResetMode } from './usage-reset';
 import { orcaAgents, workspaceSections, toggleWorkspace, workspaceSummary, type PickerRow } from './filters';
 import { createPhone, type Connection } from './phone';
-import { FINE_FONTS, FINE_TILES, fineLabel, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, labelTiles, renderKeysPage, renderTextPage, renderUsagePage, type UsagePage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
+import { FINE_FONTS, FINE_TILES, fineLabel, NATIVE_SIZE, alignMarkdownTables, SCANNER_WIDTH, fineLayout, fineMeasure, fineCells, renderFineScreen, renderFontComparison, renderBackgroundComparison, fontSample, FONTS_BY_SIZE, captionTiles, labelTiles, renderKeysPage, renderTextPage, renderUsagePage, type UsagePage, inkByte, nativeTextColor, parseInk, DEFAULT_TURN_BACKGROUND, TURN_BACKGROUNDS, parseTurnBackground, turnBackgroundLabel, type FineFont, type FineStatus, type TurnBackground } from './fine-text';
 import { agentLabel, sessionRow, sessionHeading, moduleHeading, moduleButton, moduleLabel, offeredModules, nextModule, MENU_HEAD, MENU_COUNT, MENU_LEFT, MENU_RIGHT, MENU_CURSOR, MENU_DOTS, sessionAgentLabel, menuNativeText, menuCursorText, nativeRight, glassWidth, compactSessionTitle, type GlassModule, type ModulePosition, type SessionColumns } from './session-list';
 import { markSeen, parseSeen, readMarker, withBaseline, type SeenMap } from './coding-read';
 import { Mail, mailColumns, imageNumbers, MAIL_ACCOUNTS_KEY, MAIL_LABELS_KEY, type ReaderContent, type ReaderSource } from './mail';
@@ -610,7 +610,7 @@ async function paintFine(s: TextScreen, page: number, snapshot = s): Promise<boo
   const tiles = s.keysPage ? renderKeysPage(tr('keysAll').split('\n'), s.fine!, inkLevel)
     : s.usagePage ? renderUsagePage(s.usagePage, s.fine!, inkLevel)
     : s.imageView ? imageViewTiles(s.imageView)
-    : s.comparison === 'fonts' ? renderFontComparison(inkLevel, (s.compareSelected ?? 0) - 1, true)
+    : s.comparison === 'fonts' ? renderFontComparison(inkLevel, (s.compareSelected ?? 0) - 1, true, compareSampleX())
     : s.comparison === 'backgrounds' ? renderBackgroundComparison(s.fine!, inkLevel, turnHalo, s.compareSelected)
     : renderFineScreen(readerLayout(snapshot)[page], s.fine!, fineStatus(snapshot, page), inkLevel, backgroundFor(snapshot), turnHalo);
   let sent = 0;
@@ -670,7 +670,7 @@ function requestFineStatus(s: TextScreen) {
 // Reader long-press menu. The Font list includes the Backgrounds menu and the font comparison;
 // a chat reader adds Translate.
 function readerMenu(screen: TextScreen) {
-  const name = readerText === 'native' ? tr('nativeText') : fineLabel(readerText);
+  const name = readerText === 'native' ? nativeLabel() : fineLabel(readerText);
   return [
     // Straight into the comparison pages, where the choice is made (Eugene, 2026-11-27).
     // `up` is set when Ctrl+, or Ctrl+Shift+P opened the page: going back returns to that menu.
@@ -756,10 +756,17 @@ function moveComparison(s: TextScreen, step: number) {
   }).catch(e => diag((e as Error).message));
 }
 
-// The Native text row of Compare fonts, in the glasses' own font: its label and the sample.
+// The native font's name with its measured size, as the pixel fonts show their cells ('Native ~10x27').
+const nativeLabel = () => `${tr('nativeText')} ${NATIVE_SIZE}`;
+// The Native text row of Compare fonts, in the glasses' own font: its label and the sample. '>' and
+// two spaces are both 10 px in that font, so the sentence stays put when the marker moves.
+const nativeComparePrefix = (selected: boolean) => `${selected ? '>' : '  '}${nativeLabel()}  `;
 function nativeCompareRow(s: TextScreen) {
-  return `${s.compareSelected === 0 ? '>' : ' '}${tr('nativeText')}  ${fontSample()}`;
+  return `${nativeComparePrefix(s.compareSelected === 0)}${fontSample()}`;
 }
+// Where the glasses start Native text's sentence: the pixel fonts start theirs there too, so "Quick"
+// lines up on every row (Eugene, 2026-11-28). Measured firmware advances (text.ts GLASS_ADVANCE).
+const compareSampleX = () => FINE_NATIVE_ROW.xPosition + nativeMeasure()(nativeComparePrefix(true));
 
 // ---- Images (2026-11-27): [Image N], [Photo N], [Sticker N] rows open full screen ----
 // A click on a reader page opens the first picture on that page; a swipe goes to the next or

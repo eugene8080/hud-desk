@@ -481,18 +481,30 @@ export const FONT_SAMPLE_JA = 'あいうえお アイウエオ 日本語の表�
 export const NATIVE_COMPARE_ROW = 30;
 // The sample sentence every row of Compare fonts shows.
 export const fontSample = () => getLang() === 'ja' ? FONT_SAMPLE_JA : FONT_SAMPLE;
+// Native text: the glasses' own proportional font, measured on the official simulator's native
+// renderer (2026-11-28, store/screenshots/native/05-coding-native.png and 18-compare-fonts.png):
+// lines 27 px apart, capitals 16 px tall, x-height 11 px, 21 px from ascender to descender; letters
+// 4-17 px wide, 9.8 px on average for a-z (GLASS_ADVANCE in text.ts). Labelled like the pixel fonts'
+// cells: about 10 px per letter, 27 px per line. 'Font: Native ~10x27' is 175 px wide in the glasses
+// menu; 'Font: Native text ~10x27' (213 px) would pass the ~210 px a menu row shows.
+export const NATIVE_SIZE = '~10x27';
 // Largest first, as Compare fonts lists them under Native text (Eugene, 2026-11-27).
 export const FONTS_BY_SIZE: FineFont[] = [...FINE_FONTS].reverse();
-export function renderFontComparison(level = INK_MAX, selected = -1, nativeRow = false): number[][] {
+// sampleX: where every row's sample sentence starts, so "Quick" lines up down the page (Eugene,
+// 2026-11-28); the app passes the x where the glasses draw Native text's sentence. The sentence never
+// starts left of the widest pixel-font label (with its '>' and two spaces).
+export function renderFontComparison(level = INK_MAX, selected = -1, nativeRow = false, sampleX = 0): number[][] {
   const s = new Surface(FINE_FONTS[0], inkByte(level));
   s.frame();
   const nameCells = Math.max(...FINE_FONTS.map(font => fineLabel(font).length)) + 2;
+  const labelEnd = Math.max(...FONTS_BY_SIZE.map(font => fineLayout(font).textX + (1 + nameCells) * TABLES[font].width));
+  const x0 = Math.max(labelEnd, sampleX);
   let y = TOP + (nativeRow ? NATIVE_COMPARE_ROW : 0);
   for (const [i, font] of FONTS_BY_SIZE.entries()) {
     s.font = font;
     const layout = fineLayout(font);
-    const sample = getLang() === 'ja' ? FONT_SAMPLE_JA : FONT_SAMPLE;
-    s.text(`${i === selected ? '>' : ' '}${fineLabel(font).padEnd(nameCells)}${sample}`, layout.textX, y, layout.columns);
+    s.text(`${i === selected ? '>' : ' '}${fineLabel(font)}`, layout.textX, y, layout.columns);
+    s.text(fontSample(), x0, y, Math.max(0, Math.floor((layout.textX + layout.textWidth - x0) / TABLES[font].width)));
     y += TABLES[font].height + 2;
   }
   s.font = FINE_FONTS[0];

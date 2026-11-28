@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.101**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.102**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -29,7 +29,7 @@ Rule for every agent: each beta release updates this file in the release commit:
   refreshes in place.
 - Phone page (in the Even app): the same module switch, linked both ways with row 0.
 - Reader shared by every module: nine text rows, whole-page swipes with `Pg X/Y` in the status row,
-  hanging indents on wrapped lines, one Font list (Native text and pixel fonts: Departure 7x14,
+  hanging indents on wrapped lines, one Font list (Native ~10x27 and pixel fonts: Departure 7x14,
   Misc Fixed 6x13, Terminus 6x12, GohuFont 6x11, Scientifica 5x11; Compare fonts screen), App
   Brightness 15 down to 1. Both lists wrap at the ends.
 - With a pixel font, the user's turns sit on a dim background so they stand out. The reader's
@@ -39,7 +39,9 @@ Rule for every agent: each beta release updates this file in the release commit:
   place of the '/'), Underline, and Dim replies (the other side's text dimmer; Email shows None).
   Halo (on by default, 2 px) keeps the background dark next to every letter. Font and Background open their comparison
   pages directly: swipe moves the '>' mark, click uses it (on the Halo row: toggles it), double-click
-  goes back unchanged. Compare fonts lists Native text first, then the pixel fonts large to small.
+  goes back unchanged. Compare fonts lists Native text first, then the pixel fonts large to small,
+  every sample sentence starting in one column. Native text is labelled with its measured size,
+  ~10x27: letters about 10 px wide on average (proportional, 4-17 px), lines 27 px apart.
 - Images: [Photo N] in Chat; [Image N: name] in a mail where the picture appears, including pictures a
   newsletter links to (fetched from the sender's server only when opened, https and public addresses
   only; tracking pixels, icons and ad servers skipped); [Image N] where a picture was pasted
@@ -185,5 +187,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.101: AI Labels works on any picture with printed text, not only charts: infographics on a gradient background, screenshots, slides. The PC reads each picture you open in the background; a photo it finds no text in skips AI Labels and stays a photo. Needs the bridge on the PC updated.
+1.0.102: Compare fonts lines up: every font's sample sentence starts in the same column, so you can compare letters side by side. Native text now shows its measured size like the pixel fonts: Native ~10x27 (letters about 10 px wide on average, lines 27 px apart).
 <!-- whatsnew:end -->
