@@ -2,29 +2,29 @@
 
 **Read your agent sessions, email and chats on G2. Talk, type on a Bluetooth keyboard, open pictures.**
 
-HUD Desk (formerly Orca Glass, renamed 2026-11-27) connects Even Realities G2 glasses to the agents running in Orca on your Windows PC, to Gmail and to Beeper chats. The top row on the glasses switches between Coding, Email and Chat. Agents, mail, chats, voice transcription and the picture reader all run on your PC; the phone and the glasses only display and send.
+HUD Desk (formerly Orca Glass, renamed 2026-11-27) connects Even Realities G2 glasses to the Claude Code and Codex sessions on your Windows PC or Mac (with or without Orca), to Gmail or any IMAP/SMTP mailbox, and to Beeper chats. The top row on the glasses switches between Coding, Email and Chat. Agents, mail, chats, voice transcription and the picture reader all run on your PC; the phone and the glasses only display and send.
 
 This is Eugene's Windows/Android fork of [2ero20ne's Orca Glass](https://github.com/2ero20ne/orca-glass), licensed under MIT. It is developed and tested with the Even Realities app on Android; the Even Hub app has no Android-specific code, but it has not been tried on an iPhone. The plugin ID stays `com.eugene8080.orcaglass`.
 
 ## Availability
 
-As of 2026-11-27 the Even Hub **public build is 1.0.36** (Coding only) and the **beta is 1.0.93**. Email, Chat, pictures and the keyboard need the beta.
+As of 2026-11-27 the Even Hub **public build is 1.0.36** (Coding only, connects only to the developer's PC) and the **beta is 1.0.94**. 1.0.94 was submitted for public review on 2026-11-27. Email, Chat, pictures, the keyboard and self-hosting need 1.0.94.
 
 See [current work](TODOS.md), [beta setup and release history](docs/beta-install.md) and the [feature list](store/features.md).
 
 ## Set up on your PC
 
-Run the one-command Windows setup, then paste the pairing code into HUD Desk on your phone. The bridge runs on your PC and connects through your private Tailscale network. Use a phone build that supports address-carrying pairing codes. [Self-host setup](docs/self-host.md)
+Run the one-command setup, then paste the pairing code into HUD Desk on your phone. The bridge runs on your computer and connects through your private Tailscale network; the phone needs Tailscale too. Use a phone build that supports address-carrying pairing codes (1.0.94 or later). [Windows setup](docs/self-host.md) · [macOS setup](docs/self-host-macos.md) (not yet run on a real Mac)
 
 ## Features
 
-**Coding (Orca and Hermes agents)**
-- Claude, Codex, Cursor, OpenCode, Pi, OpenClaude and Hermes Agent sessions with model and status. Orca chat sessions are listed read-only (the Orca CLI cannot send to a chat).
+**Coding (Claude Code and Codex, with or without Orca)**
+- [Plain Claude Code and Codex CLI sessions](docs/local-agents.md) without Orca; through Orca also Cursor, OpenCode, Pi, OpenClaude and Hermes Agent, with model and status. Orca chat sessions are listed read-only (the Orca CLI cannot send to a chat).
 - Filter by Agent and by one or more Orca workspaces; rows show `[workspace/Agent]`. Usage for Codex, Claude and Cursor drawn as bars, with reset times.
 - Book-style reader: whole-page swipes, `/` your turns, `>` replies, one status row with model, activity animation, timer and page.
 - Hold to talk: local Whisper on the PC, review, then click to send. Numbered prompts open as choices.
 
-**Email (Gmail)**
+**Email (Gmail, or any IMAP/SMTP account: [setup](docs/email-providers.md))**
 - One mailbox at a time (work or personal), Filter by Label with voice or typed search. Opening a thread marks it read.
 - With a Bluetooth keyboard: compose, reply, reply all, forward, archive, delete, star and undo with Gmail's keys. Drafts show on the glasses; review, then send.
 - Pictures in mail, including newsletter images fetched over HTTPS when you open them (ad and tracking images skipped).

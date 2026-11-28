@@ -58,6 +58,14 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-27 Eugene: 'how do i get people to use my app?', then 'yes draft'. Drafts in
+store/launch-posts.md (Reddit x3, Discord, Show HN, X, note to Even, 45 s video script; images
+from the store fixture only). Found: GitHub default branch `main` is upstream 6315d7f (visitors see
+the old Orca Glass README; main is an ancestor of windows-android-codex) and Issues are disabled;
+both need Eugene's yes, not changed. README corrected (Orca optional, IMAP, macOS link, beta
+1.0.94). Usage bars need Orca (bridge/orca.mjs rateLimits); the submitted store description lists
+them under Coding without saying so (not edited while in review). Nothing posted.
+
 2026-11-27 Eugene: "close the worker worktrees. go ahead and update evenhub and submit the latest
 version for review". Worktrees relay, local-agents, mail-imap, setup-win, setup-mac removed with
 their local branches (worker terminals closed; local-agents' leftover empty folder pruned by hand;

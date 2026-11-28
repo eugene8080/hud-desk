@@ -8,6 +8,13 @@ Completed/superseded release notes: [history](docs/todo-history.md).
 
 ## Open work
 
+- [ ] **Launch posts (2026-11-27):** drafts for r/EvenRealities, Even Discord, r/ClaudeAI,
+  r/beeper, Show HN, X, a note to Even and a 45 s video script in
+  [store/launch-posts.md](store/launch-posts.md). Gate before posting: Even approves 1.0.94;
+  setup run on a second PC; GitHub default branch shows HUD Desk (today `main` = upstream
+  README; Eugene's yes needed); GitHub Issues enabled (disabled today; Eugene's yes needed);
+  demo clip recorded from the store fixture. Eugene posts from his own accounts.
+
 - [ ] **Windows self-host setup (2026-11-27):** one-command setup and eho3 pairing
   implemented. See [docs/self-host.md](docs/self-host.md). Real installation on a
   separate PC and phone pairing with a build that supports eho3 remain to be checked.
