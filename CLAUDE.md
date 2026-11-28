@@ -58,6 +58,13 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 bridge restarted with Eugene's approval for 1.0.99 (shared reading, background reading,
+Outline -> fit mapping) and 1.0.97's RETIRED_VIEWS: old supervisor 53748/server 29976/whisper 64852
+(ownership checked: pid file, tree, 8787 owner); new supervisor 40216, server 27904, whisper 72216
+--vad; local and tailnet healthz ok; capabilities images, imageRead, imageLabels true, modules
+coding+email+chat, orca true; POST /api/image/idle answers 200 {ok:true} (new route live). G2 check
+of the faster AI Labels pending (Eugene).
+
 2026-11-28 beta 1.0.99: worker chart-labels follow-ups merged (77e4361, fast-forward; dispatch
 ctx_2411c2acaf2f). Measured (3 runs per chart, image new, real bridge path; report private at
 .local/chart-test/report-shared-reading.md): labels as the 2nd turn of the readout conversation with
