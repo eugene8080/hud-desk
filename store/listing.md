@@ -188,6 +188,7 @@ spinner on its L frame, and the GitHub README.
 | `18-compare-fonts.png` | Compare fonts: Native text and the pixel fonts, large to small; choose in place. |
 | `19-chart-picture.png` | Chart on the G2: a news-style line chart (invented data, `scripts/make-store-chart.py`) as Original Picture. |
 | `20-chart-readout.png` | Chart: AI Readout: the local vision model's real reading of that chart (cached in `.local/store-assets/markets-chart-readout.txt`). |
+| `21-chart-labels.png` | Chart: AI Labels: the chart's printed lines redrawn in place in Scientifica 5x11 (answer cached in `.local/store-assets/markets-chart-labels.json`). |
 
 - Picture: `.local/store-assets/fractal.png` (gitignored, ffmpeg mandelbrot source); the AI Readout
   text is the local model's answer, cached in `.local/store-assets/fractal-readout.txt`.

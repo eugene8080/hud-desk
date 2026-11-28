@@ -122,6 +122,13 @@ try { chartReadout = readFileSync(chartReadoutFile, 'utf8'); } catch {
   chartReadout = (await imaging.render('chart', chartLoad, { view: 'read' })).text;
   writeFileSync(chartReadoutFile, chartReadout);
 }
+// AI Labels (1.0.96): the chart's words drawn back on it in Scientifica. The answer (picture plus
+// labels) is cached next to the chart like the readout, so later starts skip the model call.
+const chartLabelsFile = new URL('../.local/store-assets/markets-chart-labels.json', import.meta.url);
+try { chart.labels = JSON.parse(readFileSync(chartLabelsFile, 'utf8')); } catch {
+  chart.labels = await imaging.render('chart', chartLoad, { view: 'labels' });
+  writeFileSync(chartLabelsFile, JSON.stringify(chart.labels));
+}
 let readout;
 try { readout = readFileSync(readoutFile, 'utf8'); } catch {
   readout = (await imaging.render('picture', load, { view: 'read' })).text;
@@ -170,7 +177,7 @@ const fractal=${JSON.stringify(fractal)};
 const readout=${JSON.stringify(readout)};
 const chart=${JSON.stringify(chart)};
 const chartReadout=${JSON.stringify(chartReadout)};
-const chartView=(request)=>request.view==='read'?{text:chartReadout}:request.view==='zoom'?chart.zoom[Math.min(request.region||0,chart.zoom.length-1)]:request.view==='outline'?chart.outline:chart.fit;
+const chartView=(request)=>request.view==='read'?{text:chartReadout}:request.view==='labels'?chart.labels:request.view==='zoom'?chart.zoom[Math.min(request.region||0,chart.zoom.length-1)]:request.view==='outline'?chart.outline:chart.fit;
 const pick=(v,request)=>request.view==='zoom'?v.zoom[Math.min(request.region||0,v.zoom.length-1)]:request.view==='outline'?v.outline:request.view==='read'?{text:'A Mandelbrot set: a black cardioid with a round bulb on its left and smaller bulbs around it, on a lighter background.'}:v.fit;
 const view=(request)=>request.view==='read'?{text:readout}:request.view==='zoom'?views.zoom[Math.min(request.region||0,views.zoom.length-1)]:request.view==='outline'?views.outline:views.fit;
 export const currentBase=()=> 'store preview (sample data)';
@@ -180,7 +187,7 @@ export const api={
   history:async(handle)=>{const row=byHandle[handle]||defaultThread;return {text:row.text,source:'codex-transcript',model:row.model};},
   activity:async(handle)=>({state:working.has(handle)?'working':'waiting',elapsedSeconds:working.has(handle)?83:null}),
   health:async()=>({ok:true}),
-  capabilities:async()=>({voice:true,images:true,imageRead:true,modules:['coding','email','chat'],chatFeatures:{transcribe:true,translate:true}}),
+  capabilities:async()=>({voice:true,images:true,imageRead:true,imageLabels:true,modules:['coding','email','chat'],chatFeatures:{transcribe:true,translate:true}}),
   historyImage:async(handle,n,request={})=>view(request),
   mail:{
     accounts:async()=>[{id:'work',short:'W',address:'me@example.com',ok:true}],

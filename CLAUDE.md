@@ -58,6 +58,20 @@ do not fall back to pscapital.com.hk because it has an existing logged-in tab.
 
 ## Current work
 
+2026-11-28 beta 1.0.96: AI Labels merged (worker chart-labels, claude, ctx_eaabec0ab8af, 55ca73d,
+fast-forward). Charts only, cycle Original Picture, AI Labels, Zoom, Outline, AI Readout; capability
+imageLabels. bridge/chart-labels.mjs: one cached Ollama JSON call for the words; positions from the
+picture's own ink (model boxes were 1-14 px off median, up to 24); app draws Scientifica 5x11 with a
+1 px halo, priority and tick thinning. Worker evidence (private, .local/chart-test/report.md and
+previews/): 3 synthetic charts all lines on their words, anchors within 1.9 px; Bloomberg 27/27 lines
+matched, 26 drawn ('23' thinned against '21'); 4-5.5 s warm, 10.8 s cold. Coordinator saw on the
+previews: Bloomberg 'IPO price' lands on the dashed line; invented chart drops the '36' tick.
+322 tests pass here (the worker's skipped ffmpeg test runs here), build pass; beta 1.0.96 CLI verified
+252,912 bytes; prototype build restored. Store fixture serves AI Labels for the invented chart (answer
+cached .local/store-assets/markets-chart-labels.json); screenshot 21-chart-labels in README, gallery,
+listing. NOT done: bridge restart (AI Labels and 1.0.95's Orca bell need it; asked Eugene), G2 check.
+Worker worktree chart-labels left open (kept-open worker).
+
 2026-11-27 Eugene: his 'Anthropic takes the win' Bloomberg newsletter chart renders well on G2 and its
 AI Readout is great; add such renders to the GitHub images, and build a view that puts the AI's
 reading back on the chart in Scientifica ('use worker session'). (1) README images: Eugene chose a

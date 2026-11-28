@@ -2,7 +2,7 @@
 
 Formerly Orca Glass (renamed 2026-11-27; the plugin ID stays com.eugene8080.orcaglass).
 
-Updated: 2026-11-27. Current beta: **1.0.95**. Public: **1.0.36**.
+Updated: 2026-11-27. Current beta: **1.0.96**. Public: **1.0.36**.
 
 Open this file when you update a release in Even Hub:
 
@@ -181,5 +181,5 @@ Original: https://github.com/2ero20ne/orca-glass
 ## Paste: what's new
 
 <!-- whatsnew:start -->
-1.0.95: Coding rows show read marks like Email and Chat: '/' for a session with something you have not read, '-' for one you have. Orca sessions follow Orca's own unread bell; plain Claude Code, Codex and Hermes sessions turn '/' when they have new output since you last opened them. Opening a session on the glasses marks it read. A working session keeps the moving dot.
+1.0.96: AI Labels for charts. Open a chart in mail or chat and click once after Original Picture: the PC's local AI reads every printed line (title, legend, axis ticks, notes, source) and HUD Desk draws it back where it was printed, in the sharp Scientifica pixel font. Positions come from the picture itself; lines the AI misread are left as printed. Needs a vision model in Ollama on the PC.
 <!-- whatsnew:end -->
